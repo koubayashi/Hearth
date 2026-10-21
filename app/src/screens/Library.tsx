@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import type { Game, InstallFilter, NowPlaying, StoreId } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { formatHoursShort, formatLastPlayed, formatPlaytime } from "../lib/format";
-import { setPrefs, usePrefs } from "../lib/prefs";
+import { usePrefs } from "../lib/prefs";
 import { Art } from "../components/Art";
 import { CoverGrid } from "../components/CoverGrid";
 import { Icon } from "../components/Icon";
@@ -130,11 +130,11 @@ export function Library({
       />
     <div className="scroll" ref={scrollRef}>
       <div className="top" role="toolbar" aria-label="Library filters">
-        <label className="search">
+        <label className={`search ${search ? "has-value" : ""}`} title="Search">
           <Icon name="search" size={16} />
           <input
             data-nav
-            placeholder={`Search ${hiddenView ? "hidden games" : `${all.length} games`}`}
+            placeholder={hiddenView ? "Search hidden" : "Search"}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Escape" && setSearch("")}
@@ -163,8 +163,6 @@ export function Library({
           </button>
         ))}
         </div>
-        <span className="spacer" />
-        <CoverSize />
       </div>
 
       <div className="page">
@@ -254,49 +252,6 @@ export function Library({
         </div>
       </div>
     </div>
-    </div>
-  );
-}
-
-/** A quiet button on the toolbar that opens the cover-size slider. */
-function CoverSize() {
-  const { coverSize } = usePrefs();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, [open]);
-  return (
-    <div className="size" ref={ref}>
-      <button
-        className="size-btn"
-        data-nav
-        aria-label="Cover size"
-        aria-expanded={open}
-        title="Cover size"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Icon name="sliders" size={16} />
-      </button>
-      {open && (
-        <div className="size-pop" onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
-          <span>Smaller</span>
-          <input
-            type="range"
-            min={110}
-            max={260}
-            step={10}
-            value={coverSize}
-            autoFocus
-            onChange={(e) => setPrefs({ coverSize: Number(e.target.value) })}
-            aria-label="Cover size"
-          />
-          <span>Larger</span>
-        </div>
-      )}
     </div>
   );
 }

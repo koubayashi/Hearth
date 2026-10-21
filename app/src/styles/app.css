@@ -92,20 +92,6 @@ input { font: inherit; color: inherit; }
 .top .chip { height: 30px; border-color: transparent; flex: none; }
 .top .seg { flex: none; }
 .top .chip[aria-pressed="true"] { border-color: var(--line-strong); }
-.size { position: relative; flex: none; }
-.size-btn {
-  all: unset; width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer;
-  border-radius: var(--radius-control); color: var(--ink-3); transition: color var(--dur-fast), background var(--dur-fast);
-}
-.size-btn:hover, .size-btn[aria-expanded="true"] { color: var(--ink); background: var(--line); }
-.size-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
-.size-pop {
-  position: absolute; right: 0; top: 38px; z-index: 8; display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: var(--radius-panel); white-space: nowrap;
-  background: var(--glass-strong); backdrop-filter: blur(30px); border: 1px solid var(--line-strong); box-shadow: var(--shadow);
-  font-size: var(--text-xs); color: var(--ink-3); animation: pop var(--dur-med) var(--ease-out);
-}
-.size-pop input { width: 140px; accent-color: var(--accent); }
 .search {
   display: flex; align-items: center; gap: 10px; width: 260px; height: 36px; padding: 0 12px;
   border-radius: var(--radius-control); color: var(--ink-3);
@@ -382,8 +368,6 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .install-row:hover { background: var(--line-strong); color: var(--ink); }
 .install-row:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .install-row svg { flex: none; }
-/* Long paths keep their end (the game folder) visible. */
-.install-row .path { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; direction: rtl; text-align: left; }
 .install-row .size { flex: none; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
 
 @container (max-width: 780px) {
@@ -398,3 +382,37 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .top .chips::-webkit-scrollbar { display: none; }
 .top .search { flex-shrink: 4; }
 .top .chips { min-width: min(100%, 124px); flex-shrink: 1; }
+
+/* ---------- toolbar at narrow widths ---------- */
+.top .search input { min-width: 0; }
+/* Not enough room: the search box becomes a search icon until it's used. */
+@container (max-width: 860px) {
+  .top .search:not(:focus-within):not(.has-value) {
+    flex: 0 0 34px; min-width: 34px; padding: 0; justify-content: center; cursor: pointer;
+  }
+  .top .search:not(:focus-within):not(.has-value) input { width: 0; flex: 0; opacity: 0; }
+}
+/* Too narrow to share the top edge with the window buttons: drop below them. */
+@container (max-width: 640px) {
+  .top { margin-right: 0; top: 44px; }
+  .library .scroll > .top:first-child { margin-top: 32px; }
+}
+
+/* ---------- install folder ---------- */
+.install-row { align-items: flex-start; }
+.install-row svg { margin-top: 1px; }
+.install-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.install-name { display: flex; gap: 8px; align-items: baseline; }
+.install-name .folder { flex: 1; min-width: 0; color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.install-row .install-text .path { direction: ltr; white-space: normal; overflow-wrap: anywhere; color: var(--ink-3); flex: none; }
+
+/* ---------- settings: cover size preview ---------- */
+.size-setting { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+.size-setting input[type="range"] { width: 100%; accent-color: var(--accent); }
+.size-scale { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--ink-3); }
+.size-preview {
+  display: flex; gap: 22px; overflow: hidden; padding: var(--space-4); border-radius: var(--radius-panel);
+  background: var(--base); border: 1px solid var(--line);
+  mask-image: linear-gradient(90deg, #000 80%, transparent);
+}
+.size-preview .cover { flex: none; pointer-events: none; }

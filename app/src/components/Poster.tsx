@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import type { Game, GameDetails, InstallInfo } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { formatBytes, formatLastPlayed, formatPlaytime, releaseYear } from "../lib/format";
+import { usePrefs } from "../lib/prefs";
 import { Art } from "./Art";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
@@ -33,6 +34,11 @@ function useGameInfo(game: Game | null) {
   return { details, install };
 }
 
+/** The last part of a path, e.g. "HITMAN 3". */
+function folderName(path: string) {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
 function scoreTone(score: number) {
   return score >= 75 ? "good" : score >= 50 ? "mixed" : "bad";
 }
@@ -53,6 +59,7 @@ export const Poster = forwardRef<
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { details, install } = useGameInfo(game);
+  const { showScores } = usePrefs();
 
   useEffect(() => setMenu(false), [game?.id]);
   useEffect(() => {
@@ -104,9 +111,9 @@ export const Poster = forwardRef<
           {byline && <span className="byline">{byline}</span>}
         </div>
 
-        {details && (details.metacritic || details.genres.length > 0) && (
+        {details && ((showScores && details.metacritic != null) || details.genres.length > 0) && (
           <div className="facts">
-            {details.metacritic != null && (
+            {showScores && details.metacritic != null && (
               <span className={`score ${scoreTone(details.metacritic)}`} title="Metacritic score">
                 {details.metacritic}
               </span>
@@ -162,8 +169,13 @@ export const Poster = forwardRef<
             onClick={() => api.openInstallFolder(game.id)}
           >
             <Icon name="folder" size={15} />
-            <span className="path">{install.path}</span>
-            {install.bytes != null && <span className="size">{formatBytes(install.bytes)}</span>}
+            <span className="install-text">
+              <span className="install-name">
+                <span className="folder">{folderName(install.path)}</span>
+                {install.bytes != null && <span className="size">{formatBytes(install.bytes)}</span>}
+              </span>
+              <span className="path">{install.path}</span>
+            </span>
           </button>
         )}
 

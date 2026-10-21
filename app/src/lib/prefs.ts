@@ -13,6 +13,8 @@ export interface Prefs {
   showStoreIcons: boolean;
   /** Smallest cover width in the library grid, in px. */
   coverSize: number;
+  /** Metacritic badge in the game panel. */
+  showScores: boolean;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -23,7 +25,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150 };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false };
 
 function load(): Prefs {
   try {

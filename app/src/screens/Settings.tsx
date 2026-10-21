@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import * as autostart from "@tauri-apps/plugin-autostart";
 import { api } from "../lib/api";
-import type { Accounts } from "../lib/types";
+import type { Accounts, Game } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
-import { StoreIcon } from "../components/StoreIcon";
+import { StoreBadges, StoreIcon } from "../components/StoreIcon";
+import { Art } from "../components/Art";
+import { formatPlaytime } from "../lib/format";
 
 type Note = { ok: boolean; text: string } | null;
 
@@ -210,6 +212,51 @@ function StoreAccounts() {
   );
 }
 
+/** Cover size, previewed with real covers from the library at true size. */
+function CoverSizeSetting() {
+  const { coverSize, showStoreIcons } = usePrefs();
+  const [games, setGames] = useState<Game[]>([]);
+  useEffect(() => {
+    api.listGames({ install: "all", stores: [], search: null, hidden_only: false }).then((g) =>
+      setGames([...g].sort((a, b) => (b.last_played ?? 0) - (a.last_played ?? 0)).slice(0, 8)),
+    );
+  }, []);
+  return (
+    <div className="setting size-setting">
+      <div className="text">
+        <b>Cover size</b>
+        <span>How big game covers are in the library. The preview below is the real size.</span>
+      </div>
+      <input
+        type="range"
+        min={110}
+        max={260}
+        step={10}
+        value={coverSize}
+        data-nav
+        aria-label="Cover size"
+        onChange={(e) => setPrefs({ coverSize: Number(e.target.value) })}
+      />
+      <div className="size-scale">
+        <span>Smaller, more games</span>
+        <span>Larger</span>
+      </div>
+      <div className="size-preview" aria-hidden>
+        {games.map((g) => (
+          <span key={g.id} className={`cover ${g.installed ? "" : "out"}`} style={{ width: coverSize }}>
+            <span className="cover-art">
+              <Art src={g.cover} title={g.title} />
+              {showStoreIcons && <StoreBadges stores={g.entries.map((e) => e.store)} />}
+            </span>
+            <span className="cover-title">{g.title}</span>
+            <span className="cover-meta">{g.playtime_secs > 0 ? formatPlaytime(g.playtime_secs) : "Never played"}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Startup() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   useEffect(() => {
@@ -318,6 +365,21 @@ export function Settings() {
 
         <h2>Library</h2>
         <div className="setting-group glass">
+          <CoverSizeSetting />
+          <div className="setting">
+            <div className="text">
+              <b>Show Metacritic scores</b>
+              <span>A critics' score badge next to the genres in the game panel.</span>
+            </div>
+            <button
+              className="switch"
+              role="switch"
+              data-nav
+              aria-label="Show Metacritic scores"
+              aria-checked={p.showScores}
+              onClick={() => setPrefs({ showScores: !p.showScores })}
+            />
+          </div>
           <div className="setting">
             <div className="text">
               <b>Show store icons</b>
