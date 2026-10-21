@@ -43,13 +43,19 @@ export function Library({
   const [stores, setStores] = useState<StoreId[]>([]);
   const [search, setSearch] = useState("");
   const [games, setGames] = useState<Game[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [all, setAll] = useState<Game[]>([]);
 
   useEffect(() => {
     let live = true;
     api
       .listGames({ install, stores, search: search || null, hidden_only: hiddenView })
-      .then((g) => live && setGames(g));
+      .then((g) => {
+        if (!live) return;
+        setGames(g);
+        setLoadError(null);
+      })
+      .catch((e) => live && setLoadError(String(e)));
     return () => {
       live = false;
     };
@@ -186,7 +192,12 @@ export function Library({
             </>
           )}
 
-          {games && games.length === 0 ? (
+          {loadError ? (
+            <div className="empty" role="alert">
+              <h3>Couldn't load your library</h3>
+              {loadError}
+            </div>
+          ) : games && games.length === 0 ? (
             <>
             <h2>{hiddenView ? "Hidden games" : "Library"}</h2>
             <div className="empty">

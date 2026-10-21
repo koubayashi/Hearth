@@ -297,3 +297,18 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .plaque b svg { flex: none; color: var(--ink-2); }
 .section-grid { margin-bottom: var(--space-6); }
 .plaque b .plaque-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: inherit; font-size: inherit; }
+
+/* ---------- settings: stacked rows and text fields ---------- */
+.setting-stack { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+.setting-row { display: flex; align-items: center; gap: var(--space-4); }
+.setting-row .text { flex: 1; }
+.key-row { display: flex; gap: var(--space-2); }
+.text-input {
+  flex: 1; height: 32px; padding: 0 10px; border-radius: var(--radius-control);
+  border: 1px solid var(--line-strong); background: var(--base); color: var(--ink);
+  font-family: var(--font-text); letter-spacing: 0.02em;
+}
+.text-input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.note { font-size: var(--text-sm); color: var(--ink-2); }
+.note.error { color: #ff8a80; }
+[data-mode="light"] .note.error { color: #b3261e; }

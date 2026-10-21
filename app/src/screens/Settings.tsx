@@ -5,6 +5,69 @@ import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
 
+function SteamRow({ accounts }: { accounts: Accounts | null }) {
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const count = await api.steamSetApiKey(key);
+      setKey("");
+      setMessage({ ok: true, text: `Connected. Steam shared ${count} games; your library is refreshing.` });
+    } catch (e) {
+      setMessage({ ok: false, text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-row">
+        <div className="text">
+          <b>Steam</b>
+          <span>
+            {accounts?.steam ? `Signed in on this PC as ${accounts.steam}. ` : ""}
+            Installed games and playtime are read automatically.
+            {accounts?.steam_api_key
+              ? " Your Steam Web API key is saved, so games you own but haven't installed are included too."
+              : " To also see games you own but haven't installed, and playtime from every PC, add your Steam Web API key."}
+          </span>
+        </div>
+        {accounts?.steam_api_key && (
+          <button className="chip" data-nav onClick={() => api.steamClearApiKey()}>
+            Remove key
+          </button>
+        )}
+      </div>
+      {!accounts?.steam_api_key && (
+        <div className="key-row">
+          <input
+            className="text-input"
+            type="password"
+            data-nav
+            placeholder="Paste your 32-character key"
+            aria-label="Steam Web API key"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && key && !busy && save()}
+          />
+          <button className="chip" data-nav disabled={!key || busy} onClick={save}>
+            {busy ? "Checking…" : "Save key"}
+          </button>
+          <button className="chip" data-nav onClick={() => api.openSteamKeyPage()}>
+            Get a key
+          </button>
+        </div>
+      )}
+      {message && <p className={message.ok ? "note" : "note error"} role="status">{message.text}</p>}
+    </div>
+  );
+}
+
 function StoreAccounts() {
   const [accounts, setAccounts] = useState<Accounts | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -24,12 +87,7 @@ function StoreAccounts() {
     <>
       <h2>Stores</h2>
       <div className="setting-group glass">
-        <div className="setting">
-          <div className="text">
-            <b>Steam</b>
-            <span>Installed games are found automatically on every Steam library drive.</span>
-          </div>
-        </div>
+        <SteamRow accounts={accounts} />
         <div className="setting">
           <div className="text">
             <b>Epic Games</b>

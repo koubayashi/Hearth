@@ -9,7 +9,7 @@ use hub_tracker::{Event, ProcessScanner, Tracker};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{now, AppState};
+use crate::{lock, now, AppState};
 
 const POLL: Duration = Duration::from_secs(5);
 
@@ -28,14 +28,14 @@ pub struct NowPlaying {
 /// Point the tracker at the current install folders (after every sync).
 pub fn refresh_dirs(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let dirs = state.db.lock().unwrap().install_dirs().unwrap_or_default();
-    app.state::<Tracking>().tracker.lock().unwrap().set_install_dirs(dirs);
+    let dirs = lock(&state.db).install_dirs().unwrap_or_default();
+    lock(&app.state::<Tracking>().tracker).set_install_dirs(dirs);
 }
 
 pub fn now_playing(app: &AppHandle) -> Vec<NowPlaying> {
-    let running = app.state::<Tracking>().tracker.lock().unwrap().running();
+    let running = lock(&app.state::<Tracking>().tracker).running();
     let state = app.state::<AppState>();
-    let db = state.db.lock().unwrap();
+    let db = lock(&state.db);
     running
         .into_iter()
         .filter_map(|(id, started_at)| {
@@ -52,11 +52,7 @@ pub fn start(app: AppHandle) {
             let mut scanner = ProcessScanner::new();
             loop {
                 let exes = scanner.exes();
-                let events = app
-                    .state::<Tracking>()
-                    .tracker
-                    .lock()
-                    .unwrap()
+                let events = lock(&app.state::<Tracking>().tracker)
                     .observe(exes.iter().map(|p| p.as_path()), now());
                 if !events.is_empty() {
                     handle(&app, events);
@@ -69,7 +65,7 @@ pub fn start(app: AppHandle) {
 
 /// Close open sessions so quitting mid-game still counts the time played.
 pub fn flush(app: &AppHandle) {
-    let events = app.state::<Tracking>().tracker.lock().unwrap().flush();
+    let events = lock(&app.state::<Tracking>().tracker).flush();
     handle(app, events);
 }
 
@@ -78,7 +74,7 @@ fn handle(app: &AppHandle, events: Vec<Event>) {
     for e in events {
         if let Event::Ended(s) = e {
             let state = app.state::<AppState>();
-            let db = state.db.lock().unwrap();
+            let db = lock(&state.db);
             if db.record_session(s.game_id, s.started_at, s.ended_at, SessionSource::Tracker).is_ok() {
                 changed = true;
             }

@@ -52,6 +52,9 @@ export const STORE_LABEL: Record<StoreId, string> = {
 export interface Accounts {
   /** Display name when signed in to Epic. */
   epic: string | null;
+  /** Steam account signed in on this PC. */
+  steam: string | null;
+  steam_api_key: boolean;
 }
 
 export interface NowPlaying {

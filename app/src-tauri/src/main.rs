@@ -15,6 +15,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 pub(crate) struct AppState {
     pub(crate) db: Mutex<Db>,
     epic: Arc<Epic>,
+    steam: Arc<Steam>,
     providers: Vec<Arc<dyn LibraryProvider>>,
     syncing: Mutex<bool>,
 }
@@ -23,6 +24,12 @@ type CmdResult<T> = Result<T, String>;
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
+}
+
+/// Locks a mutex even if an earlier panic poisoned it: one failed task must
+/// never leave the whole library unreadable.
+pub(crate) fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 pub(crate) fn now() -> i64 {
@@ -34,31 +41,28 @@ pub(crate) fn now() -> i64 {
 
 #[tauri::command]
 fn list_games(state: State<AppState>, query: LibraryQuery) -> CmdResult<Vec<Game>> {
-    state.db.lock().unwrap().list_games(&query).map_err(err)
+    lock(&state.db).list_games(&query).map_err(err)
 }
 
 #[tauri::command]
 fn get_game(state: State<AppState>, id: i64) -> CmdResult<Option<Game>> {
-    state.db.lock().unwrap().game(id).map_err(err)
+    lock(&state.db).game(id).map_err(err)
 }
 
 #[tauri::command]
 fn set_hidden(state: State<AppState>, id: i64, hidden: bool) -> CmdResult<()> {
-    state.db.lock().unwrap().set_game_hidden(id, hidden).map_err(err)
+    lock(&state.db).set_game_hidden(id, hidden).map_err(err)
 }
 
 #[tauri::command]
 fn set_favorite(state: State<AppState>, id: i64, favorite: bool) -> CmdResult<()> {
-    state.db.lock().unwrap().set_favorite(id, favorite).map_err(err)
+    lock(&state.db).set_favorite(id, favorite).map_err(err)
 }
 
 /// Plays the game if any store has it installed, otherwise starts its install.
 #[tauri::command]
 fn launch_game(state: State<AppState>, id: i64) -> CmdResult<()> {
-    let game = state
-        .db
-        .lock()
-        .unwrap()
+    let game = lock(&state.db)
         .game(id)
         .map_err(err)?
         .ok_or("That game is no longer in your library")?;
@@ -91,11 +95,48 @@ fn now_playing(app: AppHandle) -> Vec<tracking::NowPlaying> {
 #[derive(Serialize)]
 struct Accounts {
     epic: Option<String>,
+    /// The Steam account signed in on this PC, if any.
+    steam: Option<String>,
+    steam_api_key: bool,
 }
 
 #[tauri::command]
 fn accounts(state: State<AppState>) -> Accounts {
-    Accounts { epic: state.epic.account_name() }
+    Accounts {
+        epic: state.epic.account_name(),
+        steam: state.steam.account().map(|a| a.name),
+        steam_api_key: state.steam.has_api_key(),
+    }
+}
+
+/// Validates the key against Steam before keeping it, so a typo never
+/// silently empties the library.
+#[tauri::command]
+async fn steam_set_api_key(app: AppHandle, key: String) -> CmdResult<usize> {
+    let key = key.trim().to_string();
+    if key.len() != 32 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("A Steam Web API key is 32 letters and numbers. Copy it from steamcommunity.com/dev/apikey.".into());
+    }
+    let steam = app.state::<AppState>().steam.clone();
+    let count = steam.check_api_key(&key).await.map_err(|e| format!("{e:#}"))?;
+    secrets::save("steam-api-key", Some(&key));
+    steam.set_api_key(Some(key));
+    let _ = app.emit("accounts-changed", ());
+    sync_all(app);
+    Ok(count)
+}
+
+#[tauri::command]
+fn steam_clear_api_key(app: AppHandle) {
+    secrets::save("steam-api-key", None);
+    app.state::<AppState>().steam.set_api_key(None);
+    let _ = app.emit("accounts-changed", ());
+}
+
+/// Opens Steam's API key page in the default browser. Only this fixed URL.
+#[tauri::command]
+fn open_steam_key_page() -> CmdResult<()> {
+    hub_launch::run(&hub_launch::LaunchAction::Uri { uri: "https://steamcommunity.com/dev/apikey".into() }).map_err(err)
 }
 
 #[tauri::command]
@@ -113,8 +154,10 @@ async fn epic_sign_out(app: AppHandle) -> CmdResult<()> {
 
 /// Opens Epic's own sign-in page in a separate window with no access to the
 /// app. When Epic shows the one-time code, it's caught here and exchanged.
+// Async on purpose: on Windows, building a window inside a synchronous
+// command deadlocks the main thread (the app freezes on an empty window).
 #[tauri::command]
-fn epic_sign_in(app: AppHandle) -> CmdResult<()> {
+async fn epic_sign_in(app: AppHandle) -> CmdResult<()> {
     if let Some(w) = app.get_webview_window("epic-login") {
         let _ = w.set_focus();
         return Ok(());
@@ -177,7 +220,7 @@ fn finish_epic_sign_in(app: AppHandle, code: String) {
 fn sync_all(app: AppHandle) {
     {
         let state = app.state::<AppState>();
-        let mut busy = state.syncing.lock().unwrap();
+        let mut busy = lock(&state.syncing);
         if *busy {
             return;
         }
@@ -201,7 +244,7 @@ fn sync_all(app: AppHandle) {
             };
             let games = merge_entries(installed, owned);
 
-            let mut db = state.db.lock().unwrap();
+            let mut db = lock(&state.db);
             let _ = db.remove_entries(store, provider.excluded_ids());
             if let Err(e) = db.sync_store(store, &games, now()) {
                 eprintln!("sync {}: {e}", store.as_str());
@@ -218,7 +261,7 @@ fn sync_all(app: AppHandle) {
                 );
             }
         }
-        *state.syncing.lock().unwrap() = false;
+        *lock(&state.syncing) = false;
         tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
     });
@@ -247,9 +290,11 @@ fn main() {
                 }),
             ));
 
+            let steam = Arc::new(Steam::detect(secrets::load("steam-api-key")));
             app.manage(AppState {
                 db: Mutex::new(db),
-                providers: vec![Arc::new(Steam::detect()), epic.clone()],
+                providers: vec![steam.clone(), epic.clone()],
+                steam,
                 epic,
                 syncing: Mutex::new(false),
             });
@@ -290,7 +335,10 @@ fn main() {
             sync_now,
             epic_sign_in,
             epic_sign_out,
-            now_playing
+            now_playing,
+            steam_set_api_key,
+            steam_clear_api_key,
+            open_steam_key_page
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hearth");
