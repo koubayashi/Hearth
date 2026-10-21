@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import type { Game, InstallFilter, NowPlaying, StoreId } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { formatHoursShort, formatLastPlayed, formatPlaytime } from "../lib/format";
-import { usePrefs } from "../lib/prefs";
+import { setPrefs, usePrefs } from "../lib/prefs";
 import { Art } from "../components/Art";
 import { CoverGrid } from "../components/CoverGrid";
 import { Icon } from "../components/Icon";
@@ -129,8 +129,8 @@ export function Library({
         onBack={backToFocused}
       />
     <div className="scroll" ref={scrollRef}>
-      <div className="top">
-        <label className="search glass">
+      <div className="top" role="toolbar" aria-label="Library filters">
+        <label className="search">
           <Icon name="search" size={16} />
           <input
             data-nav
@@ -141,7 +141,7 @@ export function Library({
             aria-label="Search games"
           />
         </label>
-        <div className="seg glass" role="group" aria-label="Install state">
+        <div className="seg" role="group" aria-label="Install state">
           {FILTERS.map((f) => (
             <button key={f.id} data-nav aria-pressed={install === f.id} onClick={() => setInstall(f.id)}>
               {f.label}
@@ -149,11 +149,24 @@ export function Library({
           ))}
         </div>
         {ownedStores.map((s) => (
-          <button key={s} className="chip glass" data-nav aria-pressed={stores.includes(s)} onClick={() => toggleStore(s)}>
+          <button key={s} className="chip" data-nav aria-pressed={stores.includes(s)} onClick={() => toggleStore(s)}>
             <StoreIcon store={s} size={15} />
             {STORE_LABEL[s]}
           </button>
         ))}
+        <span className="spacer" />
+        <label className="size" title="Cover size">
+          <Icon name="library" size={14} />
+          <input
+            type="range"
+            min={110}
+            max={260}
+            step={10}
+            value={prefs.coverSize}
+            onChange={(e) => setPrefs({ coverSize: Number(e.target.value) })}
+            aria-label="Cover size"
+          />
+        </label>
       </div>
 
       <div className="page">

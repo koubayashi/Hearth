@@ -3,13 +3,13 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Game } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { usePrefs } from "../lib/prefs";
+import { formatPlaytime } from "../lib/format";
 import { Art } from "./Art";
 import { StoreBadges } from "./StoreIcon";
 
-const MIN = 150;
 const GAP = 22;
-/** Title line under each cover, plus the space above the next row. */
-const CAPTION = 26;
+/** Title and playtime lines under each cover, plus the space above the next row. */
+const CAPTION = 44;
 const ROW_GAP = 26;
 
 /** Virtualized cover grid: only the rows on screen exist, so 2,000+ games scroll at 60fps. */
@@ -26,7 +26,7 @@ export function CoverGrid({
   onFocusGame: (g: Game) => void;
   onActivate: (g: Game) => void;
 }) {
-  const { showStoreIcons } = usePrefs();
+  const { showStoreIcons, coverSize: MIN } = usePrefs();
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -92,6 +92,9 @@ export function CoverGrid({
                 {showStoreIcons && <StoreBadges stores={g.entries.map((e) => e.store)} />}
               </span>
               <span className="cover-title">{g.title}</span>
+              <span className="cover-meta">
+                {g.playtime_secs > 0 ? formatPlaytime(g.playtime_secs) : "Never played"}
+              </span>
             </button>
           ))}
         </div>

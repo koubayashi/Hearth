@@ -11,6 +11,8 @@ export interface Prefs {
   showRecent: boolean;
   /** Small store marks on covers. */
   showStoreIcons: boolean;
+  /** Smallest cover width in the library grid, in px. */
+  coverSize: number;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -21,7 +23,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150 };
 
 function load(): Prefs {
   try {
