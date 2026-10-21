@@ -83,6 +83,11 @@ impl Tracker {
         self.dirs.iter().find(|(d, _)| path.starts_with(d.as_str())).map(|(_, id)| *id)
     }
 
+    /// Running sessions as (game id, started, last seen), for checkpoints.
+    pub fn active(&self) -> Vec<(i64, i64, i64)> {
+        self.active.iter().map(|(id, a)| (*id, a.started_at, a.last_seen)).collect()
+    }
+
     pub fn running(&self) -> Vec<(i64, i64)> {
         self.active.iter().map(|(id, a)| (*id, a.started_at)).collect()
     }

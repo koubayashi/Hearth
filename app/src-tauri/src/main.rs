@@ -477,6 +477,7 @@ fn main() {
 
             tray::install(app.handle())?;
             tracking::refresh_dirs(app.handle());
+            tracking::recover(app.handle());
             tracking::start(app.handle().clone());
             sync_all(app.handle().clone());
 
@@ -522,6 +523,12 @@ fn main() {
             details::search_store,
             details::set_store_match
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Hearth");
+        .build(tauri::generate_context!())
+        .expect("error while building Hearth")
+        .run(|app, event| {
+            // Windows shutdown, sign-out or Quit: save what is being played.
+            if let tauri::RunEvent::Exit = event {
+                tracking::flush(app);
+            }
+        });
 }

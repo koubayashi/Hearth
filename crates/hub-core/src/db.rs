@@ -20,6 +20,7 @@ pub type Result<T> = std::result::Result<T, DbError>;
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/001_init.sql"),
     include_str!("../migrations/002_details.sql"),
+    include_str!("../migrations/003_active_sessions.sql"),
 ];
 
 pub struct Db {
@@ -64,8 +65,13 @@ impl Db {
             match existing {
                 Some(id) => {
                     tx.execute(
+                        // Stores like Epic report a total but no date: when the
+                        // total grows between syncs, the game was played since.
                         "UPDATE store_entries SET installed = ?2, install_dir = ?3,
-                            store_playtime_secs = ?4, store_last_played = ?5,
+                            store_last_played = COALESCE(?5,
+                                CASE WHEN store_playtime_secs IS NOT NULL AND ?4 > store_playtime_secs
+                                     THEN ?6 ELSE store_last_played END),
+                            store_playtime_secs = ?4,
                             store_baseline_secs = COALESCE(store_baseline_secs, ?4)
                          WHERE id = ?1",
                         params![
@@ -73,7 +79,8 @@ impl Db {
                             e.installed,
                             e.install_dir,
                             e.store_playtime_secs,
-                            e.store_last_played
+                            e.store_last_played,
+                            now
                         ],
                     )?;
                 }
@@ -140,6 +147,33 @@ impl Db {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    /// Replace the saved running sessions: (game id, started, last seen).
+    pub fn checkpoint_active(&mut self, active: &[(i64, i64, i64)]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM active_sessions", [])?;
+        for (game, started, seen) in active {
+            tx.execute(
+                "INSERT OR REPLACE INTO active_sessions (game_id, started_at, last_seen) VALUES (?1, ?2, ?3)",
+                params![game, started, seen],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Sessions that were running when Hearth last stopped; reading removes them.
+    pub fn take_active(&mut self) -> Result<Vec<(i64, i64, i64)>> {
+        let tx = self.conn.transaction()?;
+        let rows: Vec<(i64, i64, i64)> = {
+            let mut stmt = tx.prepare("SELECT game_id, started_at, last_seen FROM active_sessions")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        tx.execute("DELETE FROM active_sessions", [])?;
+        tx.commit()?;
+        Ok(rows)
     }
 
     /// Install folders of installed games from every store except `except`.
@@ -543,6 +577,33 @@ mod tests {
         assert_eq!(db.install_size(id).unwrap(), None);
         db.set_install_size(id, 1234).unwrap();
         assert_eq!(db.install_size(id).unwrap(), Some(1234));
+    }
+
+    #[test]
+    fn growing_store_playtime_marks_the_game_as_played() {
+        let mut db = Db::open_in_memory().unwrap();
+        let mut e = entry(StoreId::Epic, "rdr2", "Red Dead Redemption 2", true);
+        e.store_playtime_secs = Some(228_183);
+        db.sync_store(StoreId::Epic, &[e.clone()], 100).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        assert_eq!(db.game(id).unwrap().unwrap().last_played, None, "first sync says nothing about when");
+
+        db.sync_store(StoreId::Epic, &[e.clone()], 200).unwrap();
+        assert_eq!(db.game(id).unwrap().unwrap().last_played, None, "no change, no date");
+
+        e.store_playtime_secs = Some(232_000);
+        db.sync_store(StoreId::Epic, &[e], 300).unwrap();
+        assert_eq!(db.game(id).unwrap().unwrap().last_played, Some(300));
+    }
+
+    #[test]
+    fn running_sessions_survive_a_restart() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "x", "Blackwood", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        db.checkpoint_active(&[(id, 1000, 1600)]).unwrap();
+        assert_eq!(db.take_active().unwrap(), [(id, 1000, 1600)]);
+        assert!(db.take_active().unwrap().is_empty(), "taken once");
     }
 
     #[test]
