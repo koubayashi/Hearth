@@ -83,6 +83,10 @@ impl LibraryProvider for Steam {
         Ok(games)
     }
 
+    fn excluded_ids(&self) -> &[&str] {
+        NOT_GAMES
+    }
+
     fn artwork(&self, store_game_id: &str) -> Artwork {
         Self::art_urls(store_game_id)
     }

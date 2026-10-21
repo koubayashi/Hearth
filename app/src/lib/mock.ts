@@ -1,4 +1,6 @@
-import type { Game, LibraryQuery, StoreId } from "./types";
+import type { Accounts, Game, LibraryQuery, StoreId } from "./types";
+
+const noop = async (_cb: (payload: unknown) => void) => () => {};
 
 // Synthetic demo library for designing in a plain browser. Artwork comes from
 // Steam's public CDN; replace with the metadata service once it exists.
@@ -79,9 +81,14 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 export const mockBackend = {
   demo: true,
   async launch(_id: number) {},
-  async onLibraryChanged(_cb: () => void) {
-    return () => {};
-  },
+  accounts: async (): Promise<Accounts> => ({ epic: null }),
+  async syncNow() {},
+  async epicSignIn() {},
+  async epicSignOut() {},
+  onLibraryChanged: noop,
+  onAccountsChanged: noop,
+  onSyncStarted: noop,
+  onSyncError: noop,
   async listGames(q: LibraryQuery): Promise<Game[]> {
     const search = q.search ? norm(q.search) : "";
     return games

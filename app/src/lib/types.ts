@@ -48,3 +48,8 @@ export const STORE_LABEL: Record<StoreId, string> = {
   ubisoft: "Ubisoft",
   manual: "Manual",
 };
+
+export interface Accounts {
+  /** Display name when signed in to Epic. */
+  epic: string | null;
+}

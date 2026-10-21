@@ -139,6 +139,23 @@ impl Db {
         Ok(())
     }
 
+    /// Drop store entries that turned out not to be games, and any game left with no entries.
+    pub fn remove_entries(&mut self, store: StoreId, store_game_ids: &[&str]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        for id in store_game_ids {
+            tx.execute(
+                "DELETE FROM store_entries WHERE store = ?1 AND store_game_id = ?2",
+                params![store.as_str(), id],
+            )?;
+        }
+        tx.execute(
+            "DELETE FROM games WHERE id NOT IN (SELECT game_id FROM store_entries)",
+            [],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Fill artwork the store supplies, without overwriting anything already chosen.
     pub fn set_art_if_missing(
         &self,

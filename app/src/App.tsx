@@ -57,8 +57,11 @@ export function App() {
   };
 
   useEffect(() => {
-    const off = api.onLibraryChanged(refresh);
-    return () => void off.then((f) => f());
+    const offs = [
+      api.onLibraryChanged(refresh),
+      api.onSyncError((msg) => say(String(msg))),
+    ];
+    return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
 
   const libraryLike = route === "library" || route === "hidden";

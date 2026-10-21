@@ -3,12 +3,17 @@
 use std::sync::{Arc, Mutex};
 
 use hub_core::{Db, Game, LibraryQuery};
-use hub_providers::{steam::Steam, LibraryProvider};
-use tauri::{AppHandle, Emitter, Manager, State};
+use hub_providers::epic::{self, Epic};
+use hub_providers::{merge_entries, secrets, steam::Steam, LibraryProvider};
+use serde::Serialize;
+use tauri::webview::PageLoadEvent;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 struct AppState {
     db: Mutex<Db>,
+    epic: Arc<Epic>,
     providers: Vec<Arc<dyn LibraryProvider>>,
+    syncing: Mutex<bool>,
 }
 
 type CmdResult<T> = Result<T, String>;
@@ -75,27 +80,129 @@ fn launch_game(state: State<AppState>, id: i64) -> CmdResult<()> {
     hub_launch::run(&action).map_err(err)
 }
 
+#[derive(Serialize)]
+struct Accounts {
+    epic: Option<String>,
+}
+
+#[tauri::command]
+fn accounts(state: State<AppState>) -> Accounts {
+    Accounts { epic: state.epic.account_name() }
+}
+
+#[tauri::command]
+fn sync_now(app: AppHandle) {
+    sync_all(app);
+}
+
+#[tauri::command]
+async fn epic_sign_out(app: AppHandle) -> CmdResult<()> {
+    let epic = app.state::<AppState>().epic.clone();
+    epic.sign_out().await;
+    let _ = app.emit("accounts-changed", ());
+    Ok(())
+}
+
+/// Opens Epic's own sign-in page in a separate window with no access to the
+/// app. When Epic shows the one-time code, it's caught here and exchanged.
+#[tauri::command]
+fn epic_sign_in(app: AppHandle) -> CmdResult<()> {
+    if let Some(w) = app.get_webview_window("epic-login") {
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let url = epic::login_url().parse().map_err(err)?;
+    let on_nav = app.clone();
+    WebviewWindowBuilder::new(&app, "epic-login", WebviewUrl::External(url))
+        .title("Sign in to Epic Games")
+        .inner_size(520.0, 760.0)
+        .center()
+        .on_navigation(move |url| {
+            // The redirect page hands its JSON to this made-up host; never load it.
+            if url.host_str() == Some("hearth.invalid") {
+                let body = url
+                    .query_pairs()
+                    .find(|(k, _)| k == "body")
+                    .map(|(_, v)| v.into_owned())
+                    .unwrap_or_default();
+                if let Some(code) = epic::code_from_redirect_body(&body) {
+                    finish_epic_sign_in(on_nav.clone(), code);
+                }
+                return false;
+            }
+            true
+        })
+        .on_page_load(|window, payload| {
+            if payload.event() == PageLoadEvent::Finished
+                && payload.url().as_str().starts_with("https://www.epicgames.com/id/api/redirect")
+            {
+                let _ = window.eval(
+                    "location.replace('https://hearth.invalid/?body=' + encodeURIComponent(document.body.innerText))",
+                );
+            }
+        })
+        .build()
+        .map_err(err)?;
+    Ok(())
+}
+
+fn finish_epic_sign_in(app: AppHandle, code: String) {
+    tauri::async_runtime::spawn(async move {
+        let epic = app.state::<AppState>().epic.clone();
+        let result = epic.sign_in(&code).await;
+        if let Some(w) = app.get_webview_window("epic-login") {
+            let _ = w.close();
+        }
+        match result {
+            Ok(()) => {
+                let _ = app.emit("accounts-changed", ());
+                sync_all(app);
+            }
+            Err(e) => {
+                let _ = app.emit("sync-error", e.to_string());
+            }
+        }
+    });
+}
+
 /// Re-reads every store in the background and tells the UI when anything changed.
 fn sync_all(app: AppHandle) {
+    {
+        let state = app.state::<AppState>();
+        let mut busy = state.syncing.lock().unwrap();
+        if *busy {
+            return;
+        }
+        *busy = true;
+    }
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
+        let _ = app.emit("sync-started", ());
         for provider in state.providers.clone() {
-            let games = match provider.installed().await {
+            let store = provider.id();
+            let installed = provider.installed().await.unwrap_or_else(|e| {
+                eprintln!("sync {}: {e}", store.as_str());
+                Vec::new()
+            });
+            let owned = match provider.owned().await {
                 Ok(g) => g,
                 Err(e) => {
-                    eprintln!("sync {}: {e}", provider.id().as_str());
-                    continue;
+                    let _ = app.emit("sync-error", format!("{e:#}"));
+                    Vec::new()
                 }
             };
+            let games = merge_entries(installed, owned);
+
             let mut db = state.db.lock().unwrap();
-            if let Err(e) = db.sync_store(provider.id(), &games, now()) {
-                eprintln!("sync {}: {e}", provider.id().as_str());
+            let _ = db.remove_entries(store, provider.excluded_ids());
+            if let Err(e) = db.sync_store(store, &games, now()) {
+                eprintln!("sync {}: {e}", store.as_str());
                 continue;
             }
             for g in &games {
                 let art = provider.artwork(&g.store_game_id);
                 let _ = db.set_art_if_missing(
-                    provider.id(),
+                    store,
                     &g.store_game_id,
                     art.cover.as_deref(),
                     art.hero.as_deref(),
@@ -103,6 +210,7 @@ fn sync_all(app: AppHandle) {
                 );
             }
         }
+        *state.syncing.lock().unwrap() = false;
         let _ = app.emit("library-changed", ());
     });
 }
@@ -113,9 +221,22 @@ fn main() {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let db = Db::open(&dir.join("library.db"))?;
+
+            let session = secrets::load("epic").and_then(|s| serde_json::from_str(&s).ok());
+            let epic = Arc::new(Epic::new(
+                &dir,
+                session,
+                Box::new(|s| {
+                    let json = s.and_then(|s| serde_json::to_string(s).ok());
+                    secrets::save("epic", json.as_deref());
+                }),
+            ));
+
             app.manage(AppState {
                 db: Mutex::new(db),
-                providers: vec![Arc::new(Steam::detect())],
+                providers: vec![Arc::new(Steam::detect()), epic.clone()],
+                epic,
+                syncing: Mutex::new(false),
             });
 
             #[cfg(target_os = "windows")]
@@ -132,7 +253,11 @@ fn main() {
             get_game,
             set_hidden,
             set_favorite,
-            launch_game
+            launch_game,
+            accounts,
+            sync_now,
+            epic_sign_in,
+            epic_sign_out
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hearth");

@@ -267,3 +267,5 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   *, *::before, *::after { transition-duration: 0ms !important; animation: none !important; }
   .lit { transform: none; }
 }
+
+.chip:disabled { opacity: 0.5; cursor: default; }
