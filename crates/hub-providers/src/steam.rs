@@ -1,6 +1,7 @@
 //! Steam: installed games from local library manifests. Owned games and
 //! playtime (Web API key + SteamID) come later.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
@@ -55,6 +56,53 @@ impl Steam {
     }
 }
 
+impl Steam {
+    /// Playtime the Steam client records for every account that has signed in
+    /// on this PC, read from `userdata/<account>/config/localconfig.vdf`.
+    /// When several accounts played the same game, the highest total wins.
+    fn local_playtime(&self) -> HashMap<String, Played> {
+        let mut out: HashMap<String, Played> = HashMap::new();
+        let Some(root) = &self.root else { return out };
+        let Ok(users) = std::fs::read_dir(root.join("userdata")) else { return out };
+        for user in users.flatten() {
+            let Ok(text) = std::fs::read_to_string(user.path().join("config").join("localconfig.vdf")) else {
+                continue;
+            };
+            for (id, p) in parse_local_playtime(&text) {
+                let cur = out.entry(id).or_insert(Played { secs: 0, last_played: None });
+                cur.secs = cur.secs.max(p.secs);
+                cur.last_played = cur.last_played.max(p.last_played);
+            }
+        }
+        out
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Played {
+    secs: i64,
+    last_played: Option<i64>,
+}
+
+fn parse_local_playtime(text: &str) -> HashMap<String, Played> {
+    let doc = vdf::parse(text);
+    let apps = doc
+        .get("UserLocalConfigStore")
+        .and_then(|d| d.get("Software"))
+        .and_then(|d| d.get("Valve"))
+        .and_then(|d| d.get("Steam"))
+        .and_then(|d| d.get("apps"));
+    let Some(apps) = apps else { return HashMap::new() };
+    apps.entries()
+        .filter_map(|(id, app)| {
+            // Steam stores minutes.
+            let minutes: i64 = app.str("Playtime")?.parse().ok()?;
+            let last_played = app.str("LastPlayed").and_then(|s| s.parse().ok()).filter(|&t: &i64| t > 0);
+            Some((id.clone(), Played { secs: minutes * 60, last_played }))
+        })
+        .collect()
+}
+
 #[async_trait]
 impl LibraryProvider for Steam {
     fn id(&self) -> StoreId {
@@ -78,6 +126,13 @@ impl LibraryProvider for Steam {
                 {
                     games.push(g);
                 }
+            }
+        }
+        let played = self.local_playtime();
+        for g in &mut games {
+            if let Some(p) = played.get(&g.store_game_id) {
+                g.store_playtime_secs = Some(p.secs);
+                g.store_last_played = g.store_last_played.max(p.last_played);
             }
         }
         Ok(games)
@@ -177,6 +232,17 @@ mod tests {
     fn updating_game_is_not_ready() {
         let m = MANIFEST.replace(r#""StateFlags"		"4""#, r#""StateFlags"		"1026""#);
         assert!(!parse_manifest(&m, Path::new("x")).unwrap().installed);
+    }
+
+    #[test]
+    fn reads_playtime_from_local_config() {
+        let text = r#""UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" {
+            "2488620" { "LastPlayed" "1792200761" "Playtime" "8237" "Playtime2wks" "103" }
+            "241100" { "autocloud" { "lastlaunch" "1792194722" } }
+        } } } } }"#;
+        let p = parse_local_playtime(text);
+        assert_eq!(p["2488620"], Played { secs: 8237 * 60, last_played: Some(1792200761) });
+        assert!(!p.contains_key("241100"), "apps without a Playtime value are skipped");
     }
 
     #[test]
