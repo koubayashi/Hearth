@@ -83,3 +83,8 @@ export interface InstallInfo {
   /** Folder size; null while unknown. */
   bytes: number | null;
 }
+
+export interface StoreHit {
+  steam_app_id: number;
+  name: string;
+}

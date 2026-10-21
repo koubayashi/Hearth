@@ -1,4 +1,4 @@
-import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreId } from "./types";
+import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit, StoreId } from "./types";
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
@@ -120,6 +120,23 @@ export const mockBackend = {
   },
   async openInstallFolder(_id: number) {},
   async openStorePage(_id: number) {},
+  async searchStore(term: string): Promise<StoreHit[]> {
+    return games
+      .filter((g) => g.title.toLowerCase().includes(term.toLowerCase().slice(0, 4)))
+      .map((g) => ({ steam_app_id: Number(g.entries[0]?.store_game_id ?? 0), name: g.title }));
+  },
+  async setStoreMatch(_id: number, _steamAppId: number): Promise<GameDetails | null> {
+    return null;
+  },
+  async gameFolders(): Promise<string[]> {
+    return ["D:\\Games"];
+  },
+  async addGameFolder(path: string): Promise<string[]> {
+    return ["D:\\Games", path];
+  },
+  async removeGameFolder(_path: string): Promise<string[]> {
+    return [];
+  },
   onNowPlaying: noop,
   onLibraryChanged: noop,
   onAccountsChanged: noop,

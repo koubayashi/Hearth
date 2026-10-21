@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import * as autostart from "@tauri-apps/plugin-autostart";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import type { Accounts, Game } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
 import { StoreBadges, StoreIcon } from "../components/StoreIcon";
 import { Art } from "../components/Art";
+import { Icon } from "../components/Icon";
 import { formatPlaytime } from "../lib/format";
 
 type Note = { ok: boolean; text: string } | null;
@@ -177,6 +179,64 @@ function EpicRow({ accounts }: { accounts: Accounts | null }) {
   );
 }
 
+/** Plain folders of games (DRM-free, copies, other launchers). */
+function GameFolders() {
+  const [folders, setFolders] = useState<string[]>([]);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    api.gameFolders().then(setFolders);
+  }, []);
+
+  const add = async () => {
+    setNote(null);
+    try {
+      const picked = isTauri() ? await openDialog({ directory: true, title: "Choose a folder with games" }) : null;
+      if (typeof picked === "string") setFolders(await api.addGameFolder(picked));
+    } catch (e) {
+      setNote(String(e));
+    }
+  };
+
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-row">
+        <div className="text">
+          <b>
+            <StoreIcon store="manual" size={15} /> Game folders
+          </b>
+          <span>
+            Games installed outside a store. Each game is found whether it sits directly in the folder or in a
+            sub-folder; Steam and Epic libraries inside are left to those stores.
+          </span>
+        </div>
+        <button className="chip" data-nav onClick={add} disabled={api.demo}>
+          Add folder
+        </button>
+      </div>
+      {folders.length > 0 && (
+        <ul className="folder-list">
+          {folders.map((f) => (
+            <li key={f}>
+              <Icon name="folder" size={15} />
+              <span>{f}</span>
+              <button
+                className="icon-btn small"
+                data-nav
+                aria-label={`Stop scanning ${f}`}
+                title="Remove"
+                onClick={async () => setFolders(await api.removeGameFolder(f))}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {note && <p className="note error" role="status">{note}</p>}
+    </div>
+  );
+}
+
 function StoreAccounts() {
   const [accounts, setAccounts] = useState<Accounts | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -198,6 +258,7 @@ function StoreAccounts() {
       <div className="setting-group glass">
         <SteamRow accounts={accounts} />
         <EpicRow accounts={accounts} />
+        <GameFolders />
         <div className="setting">
           <div className="text">
             <b>Refresh library</b>

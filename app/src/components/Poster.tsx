@@ -7,9 +7,10 @@ import { usePrefs } from "../lib/prefs";
 import { Art } from "./Art";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
+import { StoreMatch } from "./StoreMatch";
 
 /** Store-page details and install info for a game, loaded when it's selected. */
-function useGameInfo(game: Game | null) {
+function useGameInfo(game: Game | null, nonce: number) {
   const [details, setDetails] = useState<GameDetails | null>(null);
   const [install, setInstall] = useState<InstallInfo | null>(null);
   const id = game?.id ?? null;
@@ -29,14 +30,9 @@ function useGameInfo(game: Game | null) {
       live = false;
       clearTimeout(t);
     };
-  }, [id, installed]);
+  }, [id, installed, nonce]);
 
   return { details, install };
-}
-
-/** The last part of a path, e.g. "HITMAN 3". */
-function folderName(path: string) {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
 function scoreTone(score: number) {
@@ -58,10 +54,15 @@ export const Poster = forwardRef<
 >(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack }, primaryRef) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { details, install } = useGameInfo(game);
+  const [matching, setMatching] = useState(false);
+  const [nonce, setNonce] = useState(0);
+  const { details, install } = useGameInfo(game, nonce);
   const { showScores } = usePrefs();
 
-  useEffect(() => setMenu(false), [game?.id]);
+  useEffect(() => {
+    setMenu(false);
+    setMatching(false);
+  }, [game?.id]);
   useEffect(() => {
     if (!menu) return;
     menuRef.current?.querySelector("button")?.focus();
@@ -95,6 +96,16 @@ export const Poster = forwardRef<
         }
       }}
     >
+      {matching && (
+        <StoreMatch
+          game={game}
+          onClose={() => setMatching(false)}
+          onDone={() => {
+            setMatching(false);
+            setNonce((n) => n + 1);
+          }}
+        />
+      )}
       <div className="poster-art" key={game.id}>
         <Art src={game.cover ?? game.hero} title="" />
       </div>
@@ -169,13 +180,8 @@ export const Poster = forwardRef<
             onClick={() => api.openInstallFolder(game.id)}
           >
             <Icon name="folder" size={15} />
-            <span className="install-text">
-              <span className="install-name">
-                <span className="folder">{folderName(install.path)}</span>
-                {install.bytes != null && <span className="size">{formatBytes(install.bytes)}</span>}
-              </span>
-              <span className="path">{install.path}</span>
-            </span>
+            <span className="path">{install.path}</span>
+            {install.bytes != null && <span className="size">{formatBytes(install.bytes)}</span>}
           </button>
         )}
 
@@ -215,6 +221,10 @@ export const Poster = forwardRef<
                   Open install folder
                 </button>
               )}
+              <button role="menuitem" onClick={() => (setMenu(false), setMatching(true))}>
+                <Icon name="search" />
+                Find on Steam store…
+              </button>
               <button role="menuitem" onClick={() => onToggleHidden(game)}>
                 <Icon name={game.hidden ? "eye" : "hidden"} />
                 {game.hidden ? "Show in library" : "Hide from library"}

@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying } from "./types";
+import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit } from "./types";
 import { mockBackend } from "./mock";
 
 const on = (event: string) => (cb: (payload: unknown) => void) => listen(event, (e) => cb(e.payload));
@@ -31,6 +31,12 @@ const backend = isTauri()
       installInfo: (id: number, refresh: boolean) => invoke<InstallInfo | null>("install_info", { id, refresh }),
       openInstallFolder: (id: number) => invoke<void>("open_install_folder", { id }),
       openStorePage: (id: number) => invoke<void>("open_store_page", { id }),
+      gameFolders: () => invoke<string[]>("game_folders"),
+      searchStore: (term: string) => invoke<StoreHit[]>("search_store", { term }),
+      setStoreMatch: (id: number, steamAppId: number) =>
+        invoke<GameDetails | null>("set_store_match", { id, steamAppId }),
+      addGameFolder: (path: string) => invoke<string[]>("add_game_folder", { path }),
+      removeGameFolder: (path: string) => invoke<string[]>("remove_game_folder", { path }),
       onNowPlaying: on("now-playing"),
       onLibraryChanged: on("library-changed"),
       onAccountsChanged: on("accounts-changed"),

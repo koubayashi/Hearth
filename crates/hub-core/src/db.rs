@@ -142,6 +142,52 @@ impl Db {
         Ok(())
     }
 
+    /// Install folders of installed games from every store except `except`.
+    pub fn store_install_dirs(&self, except: StoreId) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT install_dir FROM store_entries
+             WHERE installed = 1 AND install_dir IS NOT NULL AND store != ?1",
+        )?;
+        let rows = stmt.query_map([except.as_str()], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Games with no cover yet, with one of their store entries.
+    pub fn games_missing_cover(&self) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare("SELECT id FROM games WHERE cover IS NULL")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Forget lookups that found nothing, so they're tried again (after the
+    /// matcher improves, or at startup).
+    pub fn clear_detail_misses(&self) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET details_checked_at = NULL WHERE details_json IS NULL",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Replace a game's artwork (the user picked its store page).
+    pub fn set_game_art(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET cover = ?2, hero = ?3, logo = ?4 WHERE id = ?1",
+            params![game_id, cover, hero, logo],
+        )?;
+        Ok(())
+    }
+
+    /// Set artwork on a game directly (from matched store-page details).
+    pub fn set_game_art_if_missing(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET cover = COALESCE(cover, ?2), hero = COALESCE(hero, ?3), logo = COALESCE(logo, ?4)
+             WHERE id = ?1",
+            params![game_id, cover, hero, logo],
+        )?;
+        Ok(())
+    }
+
     /// Cached store-page details: `(json, checked_at)`. `json` is `None` when
     /// a lookup found nothing, so it isn't retried on every click.
     pub fn details(&self, game_id: i64) -> Result<Option<(Option<String>, i64)>> {

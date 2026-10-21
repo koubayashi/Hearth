@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod details;
+mod folders;
 mod tracking;
 mod tray;
 
@@ -19,6 +20,7 @@ pub(crate) struct AppState {
     epic: Arc<Epic>,
     steam: Arc<Steam>,
     pub(crate) metadata: hub_providers::metadata::Metadata,
+    pub(crate) folders: Arc<folders::FolderProvider>,
     providers: Vec<Arc<dyn LibraryProvider>>,
     syncing: Mutex<bool>,
 }
@@ -333,8 +335,26 @@ fn finish_epic_sign_in(app: AppHandle, code: String) {
     });
 }
 
+/// Games without artwork (folder games, Epic games while signed out) borrow
+/// it from their Steam store page when the title matches exactly.
+async fn fill_missing_art(app: &AppHandle) {
+    let ids = lock(&app.state::<AppState>().db).games_missing_cover().unwrap_or_default();
+    let mut changed = false;
+    for id in ids {
+        if let Ok(Some(d)) = details::game_details(app.clone(), id).await {
+            let art = Steam::art_urls(&d.steam_app_id.to_string());
+            if let (Some(c), Some(h), Some(l)) = (art.cover, art.hero, art.logo) {
+                changed |= lock(&app.state::<AppState>().db).set_game_art_if_missing(id, &c, &h, &l).is_ok();
+            }
+        }
+    }
+    if changed {
+        let _ = app.emit("library-changed", ());
+    }
+}
+
 /// Re-reads every store in the background and tells the UI when anything changed.
-fn sync_all(app: AppHandle) {
+pub(crate) fn sync_all(app: AppHandle) {
     {
         let state = app.state::<AppState>();
         let mut busy = lock(&state.syncing);
@@ -348,6 +368,11 @@ fn sync_all(app: AppHandle) {
         let _ = app.emit("sync-started", ());
         for provider in state.providers.clone() {
             let store = provider.id();
+            if store == hub_core::StoreId::Manual {
+                // Folders other stores own are theirs, even inside a game folder.
+                let owned = lock(&state.db).store_install_dirs(hub_core::StoreId::Manual).unwrap_or_default();
+                lock(&state.folders).set_skip(owned.into_iter().map(Into::into).collect());
+            }
             let installed = provider.installed().await.unwrap_or_else(|e| {
                 eprintln!("sync {}: {e}", store.as_str());
                 Vec::new()
@@ -385,11 +410,14 @@ fn sync_all(app: AppHandle) {
         *lock(&state.syncing) = false;
         tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
+        fill_missing_art(&app).await;
+        let _ = app.emit("library-changed", ());
     });
 }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -400,6 +428,8 @@ fn main() {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let db = Db::open(&dir.join("library.db"))?;
+            // Re-check games that had no store match last time.
+            let _ = db.clear_detail_misses();
 
             let session = secrets::load("epic").and_then(|s| serde_json::from_str(&s).ok());
             let epic = Arc::new(Epic::new(
@@ -416,9 +446,12 @@ fn main() {
                 .and_then(|s| serde_json::from_str::<SteamAuth>(&s).ok())
                 .or_else(|| secrets::load("steam-api-key").map(|key| SteamAuth::ApiKey { key }));
             let steam = Arc::new(Steam::detect(steam_auth));
+            let folders = Arc::new(Mutex::new(hub_providers::folders::Folders::new(folders::load(&dir))));
             app.manage(AppState {
                 db: Mutex::new(db),
-                providers: vec![steam.clone(), epic.clone()],
+                // Stores first, so the folder scan knows which folders they already own.
+                providers: vec![steam.clone(), epic.clone(), folders.clone()],
+                folders,
                 steam,
                 metadata: Default::default(),
                 epic,
@@ -471,7 +504,12 @@ fn main() {
             details::game_details,
             details::install_info,
             details::open_install_folder,
-            details::open_store_page
+            details::open_store_page,
+            folders::game_folders,
+            folders::add_game_folder,
+            folders::remove_game_folder,
+            details::search_store,
+            details::set_store_match
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hearth");

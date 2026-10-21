@@ -160,7 +160,7 @@ impl Steam {
         dirs
     }
 
-    fn art_urls(app_id: &str) -> Artwork {
+    pub fn art_urls(app_id: &str) -> Artwork {
         let base = format!("https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}");
         Artwork {
             cover: Some(format!("{base}/library_600x900.jpg")),

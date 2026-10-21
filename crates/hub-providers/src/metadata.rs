@@ -57,18 +57,39 @@ impl Metadata {
     }
 
     /// Finds the Steam store page for a game from another store, by title.
+    /// If the plain title finds nothing, the common edition names are tried,
+    /// since Steam often lists older games as e.g. "… Director's Cut Edition".
     pub async fn find_on_steam(&self, title: &str) -> anyhow::Result<Option<u64>> {
+        let items = self.search(title).await?;
+        if let Some(id) = best_match(title, &items) {
+            return Ok(Some(id));
+        }
+        for suffix in ["Director's Cut", "Game of the Year", "Definitive Edition", "Remastered"] {
+            let more = self.search(&format!("{title} {suffix}")).await?;
+            if let Some(id) = best_match(title, &more) {
+                return Ok(Some(id));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Steam store search results: (app id, name).
+    pub async fn search_store(&self, term: &str) -> anyhow::Result<Vec<(u64, String)>> {
+        Ok(self.search(term).await?.into_iter().map(|i| (i.id, i.name)).collect())
+    }
+
+    async fn search(&self, term: &str) -> anyhow::Result<Vec<SearchItem>> {
         let body: SearchResponse = self
             .http
             .get(SEARCH_URL)
-            .query(&[("term", title), ("l", "english"), ("cc", "us")])
+            .query(&[("term", term), ("l", "english"), ("cc", "us")])
             .send()
             .await?
             .error_for_status()?
             .json()
             .await
             .context("searching the Steam store")?;
-        Ok(best_match(title, &body.items))
+        Ok(body.items)
     }
 }
 
@@ -84,11 +105,48 @@ struct SearchItem {
     name: String,
 }
 
-/// Only an exact title match (ignoring case, punctuation and ™/®) counts, so a
-/// similar-sounding game never lends its details.
+/// Only the same game counts: titles must match exactly once case,
+/// punctuation, ™/® and edition names are set aside. "Assassin's Creed"
+/// matches "Assassin's Creed™: Director's Cut Edition" but never
+/// "Assassin's Creed II", so a similar-sounding game never lends its details.
 fn best_match(title: &str, items: &[SearchItem]) -> Option<u64> {
-    let want = normalize_title(title);
-    items.iter().find(|i| normalize_title(&i.name) == want).map(|i| i.id)
+    let want = base_title(title);
+    if want.is_empty() {
+        return None;
+    }
+    items.iter().find(|i| base_title(&i.name) == want).map(|i| i.id)
+}
+
+/// Words that name an edition rather than a different game.
+const EDITION_WORDS: &[&str] = &[
+    "director", "directors", "cut", "edition", "goty", "game", "of", "the", "year", "definitive",
+    "complete", "enhanced", "remastered", "deluxe", "gold", "ultimate", "standard", "special",
+    "collectors", "anniversary", "hd", "classic", "premium",
+];
+
+fn base_title(title: &str) -> String {
+    let lower = title.to_lowercase().replace(['’', '\''], "");
+    // "Name: Something Edition" or "Name - Something Edition".
+    let main = match lower.find(':').or_else(|| lower.find(" - ")) {
+        Some(i) if is_edition(&lower[i..]) => &lower[..i],
+        _ => lower.as_str(),
+    };
+    // Trailing edition words without a separator: "Name Definitive Edition".
+    let mut words: Vec<&str> = main.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    if words.len() > 1 {
+        if let Some(cut) = words.iter().rposition(|w| !EDITION_WORDS.contains(w)) {
+            let tail = &words[cut + 1..];
+            if tail.iter().any(|w| ["edition", "cut", "goty", "remastered", "definitive", "enhanced"].contains(w)) {
+                words.truncate(cut + 1);
+            }
+        }
+    }
+    normalize_title(&words.join(" "))
+}
+
+fn is_edition(rest: &str) -> bool {
+    let words: Vec<&str> = rest.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    !words.is_empty() && words.iter().all(|w| EDITION_WORDS.contains(w))
 }
 
 /// Steam categories worth showing, in display order, with friendlier names.
@@ -219,5 +277,22 @@ mod tests {
         assert_eq!(best_match("Red Dead Redemption 2", &items), Some(1174180));
         assert_eq!(best_match("RED DEAD REDEMPTION 2™", &items), Some(1174180));
         assert_eq!(best_match("Red Dead Redemption", &items), None);
+    }
+
+    #[test]
+    fn editions_match_but_sequels_do_not() {
+        let items = vec![
+            SearchItem { id: 33230, name: "Assassin's Creed 2".into() },
+            SearchItem { id: 15100, name: "Assassin's Creed™: Director's Cut Edition".into() },
+        ];
+        assert_eq!(best_match("Assassin's Creed", &items), Some(15100));
+        assert_eq!(best_match("Assassin's Creed II", &items[..1]), None);
+        let more = vec![
+            SearchItem { id: 1, name: "Death Stranding Director's Cut".into() },
+            SearchItem { id: 2, name: "The Witcher 3: Wild Hunt".into() },
+        ];
+        assert_eq!(best_match("DEATH STRANDING", &more), Some(1));
+        // A subtitle that isn't an edition is part of the name.
+        assert_eq!(best_match("The Witcher 3", &more), None);
     }
 }

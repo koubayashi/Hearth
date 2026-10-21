@@ -51,6 +51,40 @@ pub async fn game_details(app: AppHandle, id: i64) -> CmdResult<Option<GameDetai
 }
 
 #[derive(serde::Serialize)]
+pub struct StoreHit {
+    pub steam_app_id: u64,
+    pub name: String,
+}
+
+/// Steam store search, for picking a game's page by hand.
+#[tauri::command]
+pub async fn search_store(app: AppHandle, term: String) -> CmdResult<Vec<StoreHit>> {
+    let hits = app.state::<AppState>().metadata.search_store(term.trim()).await.map_err(err)?;
+    Ok(hits.into_iter().map(|(steam_app_id, name)| StoreHit { steam_app_id, name }).collect())
+}
+
+/// The user chose this game's store page: take its details and artwork.
+#[tauri::command]
+pub async fn set_store_match(app: AppHandle, id: i64, steam_app_id: u64) -> CmdResult<Option<GameDetails>> {
+    let state = app.state::<AppState>();
+    let details = state.metadata.steam_app(steam_app_id).await.map_err(err)?;
+    let Some(d) = details else {
+        return Err("That store page has no game details".into());
+    };
+    let json = serde_json::to_string(&d).map_err(err)?;
+    let art = hub_providers::steam::Steam::art_urls(&steam_app_id.to_string());
+    {
+        let db = lock(&state.db);
+        db.set_details(id, Some(&json), now()).map_err(err)?;
+        if let (Some(c), Some(h), Some(l)) = (art.cover, art.hero, art.logo) {
+            db.set_game_art(id, &c, &h, &l).map_err(err)?;
+        }
+    }
+    let _ = tauri::Emitter::emit(&app, "library-changed", ());
+    Ok(Some(d))
+}
+
+#[derive(serde::Serialize)]
 pub struct InstallInfo {
     pub path: String,
     pub bytes: Option<i64>,
