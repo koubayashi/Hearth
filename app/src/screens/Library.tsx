@@ -148,25 +148,23 @@ export function Library({
             </button>
           ))}
         </div>
+        <div className="chips">
         {ownedStores.map((s) => (
-          <button key={s} className="chip" data-nav aria-pressed={stores.includes(s)} onClick={() => toggleStore(s)}>
+          <button
+            key={s}
+            className="chip"
+            data-nav
+            title={STORE_LABEL[s]}
+            aria-pressed={stores.includes(s)}
+            onClick={() => toggleStore(s)}
+          >
             <StoreIcon store={s} size={15} />
-            {STORE_LABEL[s]}
+            <span className="label">{STORE_LABEL[s]}</span>
           </button>
         ))}
+        </div>
         <span className="spacer" />
-        <label className="size" title="Cover size">
-          <Icon name="library" size={14} />
-          <input
-            type="range"
-            min={110}
-            max={260}
-            step={10}
-            value={prefs.coverSize}
-            onChange={(e) => setPrefs({ coverSize: Number(e.target.value) })}
-            aria-label="Cover size"
-          />
-        </label>
+        <CoverSize />
       </div>
 
       <div className="page">
@@ -256,6 +254,49 @@ export function Library({
         </div>
       </div>
     </div>
+    </div>
+  );
+}
+
+/** A quiet button on the toolbar that opens the cover-size slider. */
+function CoverSize() {
+  const { coverSize } = usePrefs();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+  return (
+    <div className="size" ref={ref}>
+      <button
+        className="size-btn"
+        data-nav
+        aria-label="Cover size"
+        aria-expanded={open}
+        title="Cover size"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Icon name="sliders" size={16} />
+      </button>
+      {open && (
+        <div className="size-pop" onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
+          <span>Smaller</span>
+          <input
+            type="range"
+            min={110}
+            max={260}
+            step={10}
+            value={coverSize}
+            autoFocus
+            onChange={(e) => setPrefs({ coverSize: Number(e.target.value) })}
+            aria-label="Cover size"
+          />
+          <span>Larger</span>
+        </div>
+      )}
     </div>
   );
 }

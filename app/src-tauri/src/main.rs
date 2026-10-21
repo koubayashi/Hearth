@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod details;
 mod tracking;
 mod tray;
 
@@ -17,13 +18,14 @@ pub(crate) struct AppState {
     pub(crate) db: Mutex<Db>,
     epic: Arc<Epic>,
     steam: Arc<Steam>,
+    pub(crate) metadata: hub_providers::metadata::Metadata,
     providers: Vec<Arc<dyn LibraryProvider>>,
     syncing: Mutex<bool>,
 }
 
-type CmdResult<T> = Result<T, String>;
+pub(crate) type CmdResult<T> = Result<T, String>;
 
-fn err(e: impl std::fmt::Display) -> String {
+pub(crate) fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
@@ -418,6 +420,7 @@ fn main() {
                 db: Mutex::new(db),
                 providers: vec![steam.clone(), epic.clone()],
                 steam,
+                metadata: Default::default(),
                 epic,
                 syncing: Mutex::new(false),
             });
@@ -464,7 +467,11 @@ fn main() {
             steam_sign_out,
             open_steam_key_page,
             epic_open_browser,
-            epic_submit_code
+            epic_submit_code,
+            details::game_details,
+            details::install_info,
+            details::open_install_folder,
+            details::open_store_page
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hearth");

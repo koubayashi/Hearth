@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Accounts, Game, LibraryQuery, NowPlaying } from "./types";
+import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying } from "./types";
 import { mockBackend } from "./mock";
 
 const on = (event: string) => (cb: (payload: unknown) => void) => listen(event, (e) => cb(e.payload));
@@ -27,6 +27,10 @@ const backend = isTauri()
       epicSubmitCode: (code: string) => invoke<void>("epic_submit_code", { code }),
       openSteamKeyPage: () => invoke<void>("open_steam_key_page"),
       nowPlaying: () => invoke<NowPlaying[]>("now_playing"),
+      gameDetails: (id: number) => invoke<GameDetails | null>("game_details", { id }),
+      installInfo: (id: number, refresh: boolean) => invoke<InstallInfo | null>("install_info", { id, refresh }),
+      openInstallFolder: (id: number) => invoke<void>("open_install_folder", { id }),
+      openStorePage: (id: number) => invoke<void>("open_store_page", { id }),
       onNowPlaying: on("now-playing"),
       onLibraryChanged: on("library-changed"),
       onAccountsChanged: on("accounts-changed"),

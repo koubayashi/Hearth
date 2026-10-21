@@ -1,4 +1,4 @@
-import type { Accounts, Game, LibraryQuery, NowPlaying, StoreId } from "./types";
+import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreId } from "./types";
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
@@ -97,6 +97,29 @@ export const mockBackend = {
   async epicSignIn() {},
   async epicSignOut() {},
   nowPlaying: async (): Promise<NowPlaying[]> => [],
+  // Synthetic details so the panel can be designed without the store API.
+  async gameDetails(id: number): Promise<GameDetails | null> {
+    const g = games.find((g) => g.id === id);
+    if (!g) return null;
+    return {
+      steam_app_id: Number(g.entries[0]?.store_game_id ?? 0),
+      release_date: "Sep 25, 2025",
+      developers: ["Supergiant Games"],
+      publishers: ["Supergiant Games"],
+      genres: ["Action", "Indie", "RPG"],
+      features: ["Single-player", "Full controller support", "Cloud saves", "Achievements"],
+      metacritic: 70 + (id % 25),
+      metacritic_url: null,
+      recommendations: 120000,
+    };
+  },
+  async installInfo(id: number, _refresh: boolean): Promise<InstallInfo | null> {
+    const g = games.find((g) => g.id === id);
+    const dir = g?.entries.find((e) => e.installed)?.install_dir;
+    return dir ? { path: dir, bytes: 1_000_000_000 * (8 + (id % 90)) } : null;
+  },
+  async openInstallFolder(_id: number) {},
+  async openStorePage(_id: number) {},
   onNowPlaying: noop,
   onLibraryChanged: noop,
   onAccountsChanged: noop,

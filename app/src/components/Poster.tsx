@@ -1,10 +1,41 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
-import type { Game } from "../lib/types";
+import { api } from "../lib/api";
+import type { Game, GameDetails, InstallInfo } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
-import { formatLastPlayed, formatPlaytime } from "../lib/format";
+import { formatBytes, formatLastPlayed, formatPlaytime, releaseYear } from "../lib/format";
 import { Art } from "./Art";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
+
+/** Store-page details and install info for a game, loaded when it's selected. */
+function useGameInfo(game: Game | null) {
+  const [details, setDetails] = useState<GameDetails | null>(null);
+  const [install, setInstall] = useState<InstallInfo | null>(null);
+  const id = game?.id ?? null;
+  const installed = game?.installed ?? false;
+
+  useEffect(() => {
+    setDetails(null);
+    setInstall(null);
+    if (id === null) return;
+    let live = true;
+    // A short pause so scrolling through covers doesn't fire a lookup per cover.
+    const t = setTimeout(() => {
+      api.gameDetails(id).then((d) => live && setDetails(d)).catch(() => {});
+      if (installed) api.installInfo(id, false).then((i) => live && setInstall(i)).catch(() => {});
+    }, 180);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [id, installed]);
+
+  return { details, install };
+}
+
+function scoreTone(score: number) {
+  return score >= 75 ? "good" : score >= 50 ? "mixed" : "bad";
+}
 
 /** The selected game as a tall framed poster beside the library. */
 export const Poster = forwardRef<
@@ -21,6 +52,7 @@ export const Poster = forwardRef<
 >(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack }, primaryRef) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { details, install } = useGameInfo(game);
 
   useEffect(() => setMenu(false), [game?.id]);
   useEffect(() => {
@@ -40,6 +72,9 @@ export const Poster = forwardRef<
   }
 
   const installStore = STORE_LABEL[game.entries[0]?.store ?? "manual"];
+  const year = releaseYear(details?.release_date ?? null);
+  const studio = details?.developers[0];
+  const byline = [year, studio].filter(Boolean).join(" · ");
 
   return (
     <aside
@@ -66,7 +101,24 @@ export const Poster = forwardRef<
               {STORE_LABEL[s]}
             </span>
           ))}
+          {byline && <span className="byline">{byline}</span>}
         </div>
+
+        {details && (details.metacritic || details.genres.length > 0) && (
+          <div className="facts">
+            {details.metacritic != null && (
+              <span className={`score ${scoreTone(details.metacritic)}`} title="Metacritic score">
+                {details.metacritic}
+              </span>
+            )}
+            {details.genres.slice(0, 3).map((g) => (
+              <span key={g} className="tag">
+                {g}
+              </span>
+            ))}
+          </div>
+        )}
+
         <dl>
           <dt>Played</dt>
           <dd>{formatPlaytime(game.playtime_secs)}</dd>
@@ -80,7 +132,41 @@ export const Poster = forwardRef<
                 ? "Ready to play"
                 : "Not installed"}
           </dd>
+          {details?.release_date && (
+            <>
+              <dt>Released</dt>
+              <dd>{details.release_date}</dd>
+            </>
+          )}
+          {details && details.publishers.length > 0 && details.publishers[0] !== studio && (
+            <>
+              <dt>Publisher</dt>
+              <dd>{details.publishers[0]}</dd>
+            </>
+          )}
         </dl>
+
+        {details && details.features.length > 0 && (
+          <ul className="features" aria-label="Features">
+            {details.features.slice(0, 6).map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
+        )}
+
+        {install && (
+          <button
+            className="install-row"
+            data-nav
+            title={`Open ${install.path}`}
+            onClick={() => api.openInstallFolder(game.id)}
+          >
+            <Icon name="folder" size={15} />
+            <span className="path">{install.path}</span>
+            {install.bytes != null && <span className="size">{formatBytes(install.bytes)}</span>}
+          </button>
+        )}
+
         <div className="actions">
           <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>
             <Icon name={game.installed ? "play" : "download"} size={16} />
@@ -107,6 +193,16 @@ export const Poster = forwardRef<
           </button>
           {menu && (
             <div className="menu" role="menu" ref={menuRef}>
+              <button role="menuitem" onClick={() => (setMenu(false), api.openStorePage(game.id))}>
+                <Icon name="external" />
+                Open store page
+              </button>
+              {game.installed && (
+                <button role="menuitem" onClick={() => (setMenu(false), api.openInstallFolder(game.id))}>
+                  <Icon name="folder" />
+                  Open install folder
+                </button>
+              )}
               <button role="menuitem" onClick={() => onToggleHidden(game)}>
                 <Icon name={game.hidden ? "eye" : "hidden"} />
                 {game.hidden ? "Show in library" : "Hide from library"}

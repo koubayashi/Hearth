@@ -35,3 +35,20 @@ export function formatLastPlayed(unix: number | null, nowMs = Date.now()): strin
     year: "numeric",
   });
 }
+
+/** "86.4 GB", "512 MB". */
+export function formatBytes(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1000 && i < units.length - 1) {
+    v /= 1000;
+    i++;
+  }
+  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
+
+/** The year from a store date like "May 31, 2024" or "2024". */
+export function releaseYear(date: string | null): string | null {
+  return date?.match(/\b(19|20)\d{2}\b/)?.[0] ?? null;
+}

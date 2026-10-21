@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatHoursShort, formatLastPlayed, formatPlaytime } from "./format";
+import { formatBytes, formatHoursShort, formatLastPlayed, formatPlaytime, releaseYear } from "./format";
 
 describe("formatPlaytime", () => {
   it("formats hours and minutes", () => {
@@ -25,5 +25,18 @@ describe("formatLastPlayed", () => {
     expect(formatLastPlayed(ago(30 * 3600), now)).toBe("Yesterday");
     expect(formatLastPlayed(ago(3 * 86400), now)).toBe("3 days ago");
     expect(formatLastPlayed(ago(15 * 86400), now)).toBe("2 weeks ago");
+  });
+});
+
+describe("formatBytes and releaseYear", () => {
+  it("formats sizes", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(86_412_000_000)).toBe("86.4 GB");
+    expect(formatBytes(150_000_000_000)).toBe("150 GB");
+  });
+  it("pulls the year out of store dates", () => {
+    expect(releaseYear("May 31, 2024")).toBe("2024");
+    expect(releaseYear("Coming soon")).toBeNull();
+    expect(releaseYear(null)).toBeNull();
   });
 });

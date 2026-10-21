@@ -64,3 +64,22 @@ export interface NowPlaying {
   /** Unix seconds. */
   started_at: number;
 }
+
+/** Store-page details, from Steam's public store API. */
+export interface GameDetails {
+  steam_app_id: number;
+  release_date: string | null;
+  developers: string[];
+  publishers: string[];
+  genres: string[];
+  features: string[];
+  metacritic: number | null;
+  metacritic_url: string | null;
+  recommendations: number | null;
+}
+
+export interface InstallInfo {
+  path: string;
+  /** Folder size; null while unknown. */
+  bytes: number | null;
+}

@@ -17,7 +17,10 @@ pub enum DbError {
 pub type Result<T> = std::result::Result<T, DbError>;
 
 /// Ordered schema migrations; index + 1 is the `user_version` it produces.
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/001_init.sql"),
+    include_str!("../migrations/002_details.sql"),
+];
 
 pub struct Db {
     conn: Connection,
@@ -136,6 +139,41 @@ impl Db {
             }
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    /// Cached store-page details: `(json, checked_at)`. `json` is `None` when
+    /// a lookup found nothing, so it isn't retried on every click.
+    pub fn details(&self, game_id: i64) -> Result<Option<(Option<String>, i64)>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT details_json, details_checked_at FROM games WHERE id = ?1 AND details_checked_at IS NOT NULL",
+                [game_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?)
+    }
+
+    pub fn set_details(&self, game_id: i64, json: Option<&str>, now: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET details_json = ?2, details_checked_at = ?3 WHERE id = ?1",
+            params![game_id, json, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn install_size(&self, game_id: i64) -> Result<Option<i64>> {
+        Ok(self
+            .conn
+            .query_row("SELECT install_size FROM games WHERE id = ?1", [game_id], |r| r.get(0))
+            .optional()?
+            .flatten())
+    }
+
+    pub fn set_install_size(&self, game_id: i64, bytes: i64) -> Result<()> {
+        self.conn
+            .execute("UPDATE games SET install_size = ?2 WHERE id = ?1", params![game_id, bytes])?;
         Ok(())
     }
 
@@ -442,6 +480,23 @@ mod tests {
         e.store_playtime_secs = Some(5400);
         db.sync_store(StoreId::Steam, &[e], 3000).unwrap();
         assert_eq!(db.game(id).unwrap().unwrap().playtime_secs, 5400);
+    }
+
+    #[test]
+    fn caches_details_and_install_size() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "1", "Hades", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+
+        assert_eq!(db.details(id).unwrap(), None, "never looked up yet");
+        db.set_details(id, None, 10).unwrap();
+        assert_eq!(db.details(id).unwrap(), Some((None, 10)), "a miss is remembered");
+        db.set_details(id, Some(r#"{"genres":["Action"]}"#), 20).unwrap();
+        assert_eq!(db.details(id).unwrap().unwrap().0.as_deref(), Some(r#"{"genres":["Action"]}"#));
+
+        assert_eq!(db.install_size(id).unwrap(), None);
+        db.set_install_size(id, 1234).unwrap();
+        assert_eq!(db.install_size(id).unwrap(), Some(1234));
     }
 
     #[test]
