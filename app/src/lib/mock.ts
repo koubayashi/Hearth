@@ -41,9 +41,9 @@ const seeds: Seed[] = [
   ["Dave the Diver", 1868140, "steam", true, 11.0, 50],
   ["Balatro", 2379780, "steam", true, 72.9, 5],
   ["Lies of P", 1627720, "xbox", false, 0, null],
-  ["Returnal", 1649240, "epic", false, 2.0, 250],
-  ["Dead Cells", 588650, "steam", false, 15.7, 600],
-  ["Slay the Spire", 646570, "epic", false, 0, null],
+  ["Returnal", 1649240, "ubisoft", false, 2.0, 250],
+  ["Dead Cells", 588650, "manual", false, 15.7, 600],
+  ["Slay the Spire", 646570, "ea", false, 0, null],
   ["Ori and the Will of the Wisps", 1057090, "xbox", true, 13.3, 150],
   ["Hi-Fi Rush", 1817230, "xbox", false, 0, null],
 ];
@@ -62,6 +62,9 @@ const games: Game[] = seeds.map(([title, appid, store, installed, hours, daysAgo
   logo: art(appid, "logo"),
   description: null,
   entries: [
+    ...(title === "Hollow Knight"
+      ? [{ id: 1000, game_id: i + 1, store: "gog" as StoreId, store_game_id: "hk", installed: false, install_dir: null, hidden: false, store_playtime_secs: null, store_baseline_secs: null }]
+      : []),
     {
       id: i + 1,
       game_id: i + 1,

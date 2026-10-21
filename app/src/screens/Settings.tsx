@@ -173,6 +173,20 @@ export function Settings() {
         <div className="setting-group glass">
           <div className="setting">
             <div className="text">
+              <b>Show store icons</b>
+              <span>A small Steam, Epic, Xbox or other mark on each game, showing where it comes from.</span>
+            </div>
+            <button
+              className="switch"
+              role="switch"
+              data-nav
+              aria-label="Show store icons"
+              aria-checked={p.showStoreIcons}
+              onClick={() => setPrefs({ showStoreIcons: !p.showStoreIcons })}
+            />
+          </div>
+          <div className="setting">
+            <div className="text">
               <b>Show “Jump back in”</b>
               <span>Your recently played games above the library.</span>
             </div>

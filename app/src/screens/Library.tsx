@@ -8,6 +8,7 @@ import { Art } from "../components/Art";
 import { CoverGrid } from "../components/CoverGrid";
 import { Icon } from "../components/Icon";
 import { Poster } from "../components/Poster";
+import { StoreIcon } from "../components/StoreIcon";
 
 const FILTERS: { id: InstallFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -81,7 +82,7 @@ export function Library({
     }
     if (!games) return;
     const showRecent = prefs.showRecent && !hiddenView;
-    onFocusGame((showRecent ? recent[0] : undefined) ?? games[0] ?? null);
+    onFocusGame((showRecent ? recent[0] : undefined) ?? games.find((g) => g.installed) ?? games[0] ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games, recent]);
 
@@ -99,6 +100,16 @@ export function Library({
 
   const showRecent = prefs.showRecent && !hiddenView && recent.length > 0;
   const filtered = install !== "all" || stores.length > 0 || search !== "";
+
+  // Installed games first, then everything you own but haven't installed.
+  const sections = useMemo(() => {
+    const list = games ?? [];
+    if (hiddenView) return [{ title: "Hidden games", games: list }];
+    return [
+      { title: "Library", games: list.filter((g) => g.installed) },
+      { title: "Not installed", games: list.filter((g) => !g.installed) },
+    ].filter((s) => s.games.length > 0);
+  }, [games, hiddenView]);
 
   return (
     <div className="library">
@@ -133,6 +144,7 @@ export function Library({
         </div>
         {ownedStores.map((s) => (
           <button key={s} className="chip glass" data-nav aria-pressed={stores.includes(s)} onClick={() => toggleStore(s)}>
+            <StoreIcon store={s} size={15} />
             {STORE_LABEL[s]}
           </button>
         ))}
@@ -160,7 +172,10 @@ export function Library({
                       <Art src={g.hero} title={g.title} />
                     </span>
                     <span className="plaque">
-                      <b>{g.title}</b>
+                      <b>
+                        {prefs.showStoreIcons && <StoreIcon store={g.entries[0]?.store ?? "manual"} size={13} />}
+                        <span className="plaque-title">{g.title}</span>
+                      </b>
                       <span>
                         {formatPlaytime(g.playtime_secs)} · {formatLastPlayed(g.last_played)}
                       </span>
@@ -171,11 +186,9 @@ export function Library({
             </>
           )}
 
-          <h2>
-            {hiddenView ? "Hidden games" : "Library"}
-            <small>{games ? `${games.length} ${games.length === 1 ? "game" : "games"} · A to Z` : ""}</small>
-          </h2>
           {games && games.length === 0 ? (
+            <>
+            <h2>{hiddenView ? "Hidden games" : "Library"}</h2>
             <div className="empty">
               {hiddenView ? (
                 <>
@@ -194,14 +207,27 @@ export function Library({
                 </>
               )}
             </div>
+            </>
           ) : (
-            <CoverGrid
-              games={games ?? []}
-              focusedId={focused?.id ?? null}
-              scrollRef={scrollRef}
-              onFocusGame={onFocusGame}
-              onActivate={activate}
-            />
+            sections.map((s) => (
+              <section key={s.title} aria-label={s.title}>
+                <h2>
+                  {s.title}
+                  <small>
+                    {s.games.length} {s.games.length === 1 ? "game" : "games"} · A to Z
+                  </small>
+                </h2>
+                <div className="section-grid">
+                  <CoverGrid
+                    games={s.games}
+                    focusedId={focused?.id ?? null}
+                    scrollRef={scrollRef}
+                    onFocusGame={onFocusGame}
+                    onActivate={activate}
+                  />
+                </div>
+              </section>
+            ))
           )}
         </div>
       </div>

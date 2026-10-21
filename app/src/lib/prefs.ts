@@ -9,6 +9,8 @@ export interface Prefs {
   /** Overrides the tone's accent when set, e.g. "#ff7a59". */
   customAccent: string | null;
   showRecent: boolean;
+  /** Small store marks on covers. */
+  showStoreIcons: boolean;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -19,7 +21,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true };
 
 function load(): Prefs {
   try {

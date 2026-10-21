@@ -72,13 +72,13 @@ input { font: inherit; color: inherit; }
 .rail .spacer { flex: 1; }
 
 .scroll {
-  overflow-y: auto; height: 100%;
+  overflow-y: auto; overflow-x: hidden; height: 100%;
   padding: var(--space-3) var(--space-6) 80px var(--space-3);
 }
 .page { padding-top: var(--space-2); }
 
 /* ---------- top bar ---------- */
-.top { display: flex; align-items: center; gap: var(--space-2); height: 48px; margin-right: 140px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: 48px; padding: 6px 0; margin-right: 140px; }
 .search {
   display: flex; align-items: center; gap: 10px; width: 260px; height: 36px; padding: 0 12px;
   border-radius: var(--radius-control); color: var(--ink-3);
@@ -283,3 +283,17 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   .recent > :nth-child(n + 3) { display: none; }
   .search { width: 220px; }
 }
+
+/* ---------- store marks ---------- */
+.store-badges {
+  position: absolute; left: 6px; top: 6px; display: flex; gap: 4px; padding: 4px;
+  border-radius: var(--radius-control); background: var(--glass-strong); backdrop-filter: blur(12px);
+  color: var(--ink); border: 1px solid var(--line);
+}
+.chip svg { margin-right: 7px; flex: none; }
+.poster .where { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.poster .where span { display: inline-flex; align-items: center; gap: 6px; }
+.plaque b { display: flex; align-items: center; gap: 6px; }
+.plaque b svg { flex: none; color: var(--ink-2); }
+.section-grid { margin-bottom: var(--space-6); }
+.plaque b .plaque-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: inherit; font-size: inherit; }

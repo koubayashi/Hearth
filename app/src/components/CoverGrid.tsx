@@ -2,7 +2,9 @@ import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Game } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
+import { usePrefs } from "../lib/prefs";
 import { Art } from "./Art";
+import { StoreBadges } from "./StoreIcon";
 
 const MIN = 150;
 const GAP = 22;
@@ -24,20 +26,28 @@ export function CoverGrid({
   onFocusGame: (g: Game) => void;
   onActivate: (g: Game) => void;
 }) {
+  const { showStoreIcons } = usePrefs();
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [offset, setOffset] = useState(0);
 
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const scroller = scrollRef.current;
+    if (!el || !scroller) return;
+    // Distance from the top of the scroll content; changes whenever a section
+    // above this grid (Jump back in, another grid) grows or shrinks.
+    const measure = () => {
       setWidth(el.clientWidth);
-      setOffset(el.offsetTop);
-    });
+      setOffset(el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop);
+    };
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
+    const page = el.closest(".page");
+    if (page) ro.observe(page);
+    measure();
     return () => ro.disconnect();
-  }, []);
+  }, [scrollRef]);
 
   const cols = Math.max(1, Math.floor((width + GAP) / (MIN + GAP)));
   const cell = width > 0 ? (width - GAP * (cols - 1)) / cols : MIN;
@@ -71,7 +81,7 @@ export function CoverGrid({
               data-nav
               data-game={g.id}
               className={`cover ${g.installed ? "" : "out"} ${g.id === focusedId ? "lit" : ""}`}
-              aria-label={`${g.title}, ${STORE_LABEL[g.entries[0]?.store ?? "manual"]}${g.installed ? "" : ", not installed"}`}
+              aria-label={`${g.title}, ${g.entries.map((e) => STORE_LABEL[e.store]).join(" and ")}${g.installed ? "" : ", not installed"}`}
               onFocus={() => onFocusGame(g)}
               onClick={() => onFocusGame(g)}
               onDoubleClick={() => onActivate(g)}
@@ -79,7 +89,7 @@ export function CoverGrid({
             >
               <span className="cover-art">
                 <Art src={g.cover} title={g.title} />
-                {!g.installed && <span className="badge">Not installed</span>}
+                {showStoreIcons && <StoreBadges stores={g.entries.map((e) => e.store)} />}
               </span>
               <span className="cover-title">{g.title}</span>
             </button>

@@ -4,6 +4,7 @@ import { STORE_LABEL } from "../lib/types";
 import { formatLastPlayed, formatPlaytime } from "../lib/format";
 import { Art } from "./Art";
 import { Icon } from "./Icon";
+import { StoreIcon } from "./StoreIcon";
 
 /** The selected game as a tall framed poster beside the library. */
 export const Poster = forwardRef<
@@ -38,7 +39,6 @@ export const Poster = forwardRef<
     );
   }
 
-  const stores = game.entries.map((e) => STORE_LABEL[e.store]).join(" · ");
   const installStore = STORE_LABEL[game.entries[0]?.store ?? "manual"];
 
   return (
@@ -59,7 +59,14 @@ export const Poster = forwardRef<
       <div className="poster-body">
         {/* Cover art already carries the game's logo, so the title stays plain text. */}
         <h1 className="poster-title">{game.title}</h1>
-        <div className="where">{stores}</div>
+        <div className="where">
+          {[...new Set(game.entries.map((e) => e.store))].map((s) => (
+            <span key={s}>
+              <StoreIcon store={s} size={15} />
+              {STORE_LABEL[s]}
+            </span>
+          ))}
+        </div>
         <dl>
           <dt>Played</dt>
           <dd>{formatPlaytime(game.playtime_secs)}</dd>
