@@ -477,6 +477,16 @@ fn main() {
 
             tray::install(app.handle())?;
             tracking::refresh_dirs(app.handle());
+            // Start with Windows is on by default so the tracker always runs.
+            // Done once; after that the Settings switch is the user's choice.
+            let marker = dir.join("autostart-set");
+            if !marker.exists() {
+                use tauri_plugin_autostart::ManagerExt;
+                if app.autolaunch().enable().is_ok() {
+                    let _ = std::fs::write(&marker, "");
+                }
+            }
+
             tracking::recover(app.handle());
             tracking::start(app.handle().clone());
             sync_all(app.handle().clone());
