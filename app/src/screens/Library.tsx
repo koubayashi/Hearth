@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { Game, InstallFilter, NowPlaying, StoreId } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
-import { formatHoursShort } from "../lib/format";
+import { formatHoursShort, formatLastPlayed, formatPlaytime } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
-import { Art, legacy } from "../components/Art";
+import { Art } from "../components/Art";
 import { CoverGrid } from "../components/CoverGrid";
 import { Icon } from "../components/Icon";
-import { WallLabel } from "../components/WallLabel";
+import { Poster } from "../components/Poster";
 
 const FILTERS: { id: InstallFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -101,6 +101,16 @@ export function Library({
   const filtered = install !== "all" || stores.length > 0 || search !== "";
 
   return (
+    <div className="library">
+      <Poster
+        ref={primaryRef}
+        game={focused}
+        playingSince={playing.find((p) => p.game_id === focused?.id)?.started_at ?? null}
+        onPrimary={onPrimary}
+        onToggleHidden={onToggleHidden}
+        onToggleFavorite={onToggleFavorite}
+        onBack={backToFocused}
+      />
     <div className="scroll" ref={scrollRef}>
       <div className="top">
         <label className="search glass">
@@ -130,15 +140,6 @@ export function Library({
 
       <div className="page">
         <div>
-          <section className="feature" aria-hidden>
-            {focused &&
-              (focused.logo ? (
-                <FeatureLogo key={focused.id} src={focused.logo} title={focused.title} />
-              ) : (
-                <div className="wordmark">{focused.title}</div>
-              ))}
-          </section>
-
           {showRecent && (
             <>
               <h2>Jump back in</h2>
@@ -148,17 +149,21 @@ export function Library({
                     key={g.id}
                     data-nav
                     data-game={g.id}
-                    className={`tile ${focused?.id === g.id ? "lit" : ""}`}
+                    className={`piece ${focused?.id === g.id ? "lit" : ""}`}
                     aria-label={`${g.title}, played ${formatHoursShort(g.playtime_secs) || "never"}`}
                     onFocus={() => onFocusGame(g)}
                     onClick={() => onFocusGame(g)}
                     onDoubleClick={() => onPrimary(g)}
                     onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), activate(g))}
                   >
-                    <Art src={g.hero} title={g.title} />
-                    <span className="cap">
-                      {g.title}
-                      <span>{formatHoursShort(g.playtime_secs) || "New"}</span>
+                    <span className="frame">
+                      <Art src={g.hero} title={g.title} />
+                    </span>
+                    <span className="plaque">
+                      <b>{g.title}</b>
+                      <span>
+                        {formatPlaytime(g.playtime_secs)} · {formatLastPlayed(g.last_played)}
+                      </span>
                     </span>
                   </button>
                 ))}
@@ -199,24 +204,8 @@ export function Library({
             />
           )}
         </div>
-
-        <WallLabel
-          ref={primaryRef}
-          game={focused}
-          playingSince={playing.find((p) => p.game_id === focused?.id)?.started_at ?? null}
-          onPrimary={onPrimary}
-          onToggleHidden={onToggleHidden}
-          onToggleFavorite={onToggleFavorite}
-          onBack={backToFocused}
-        />
       </div>
     </div>
+    </div>
   );
-}
-
-function FeatureLogo({ src, title }: { src: string; title: string }) {
-  const urls = [...new Set([src, legacy(src)])];
-  const [attempt, setAttempt] = useState(0);
-  if (attempt >= urls.length) return <div className="wordmark">{title}</div>;
-  return <img className="logo" src={urls[attempt]} alt="" onError={() => setAttempt((a) => a + 1)} />;
 }

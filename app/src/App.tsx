@@ -124,7 +124,7 @@ function Backdrop({ src }: { src: string | null }) {
           key={l.src + i}
           src={l.src}
           alt=""
-          style={{ opacity: l.shown ? 1 : 0 }}
+          style={l.shown ? undefined : { opacity: 0 }}
           onLoad={() => setLayers((cur) => cur.map((x) => (x === l ? { ...x, shown: true } : x)))}
           onError={(e) => {
             const img = e.currentTarget;

@@ -5,7 +5,10 @@ import { STORE_LABEL } from "../lib/types";
 import { Art } from "./Art";
 
 const MIN = 150;
-const GAP = 18;
+const GAP = 22;
+/** Title line under each cover, plus the space above the next row. */
+const CAPTION = 26;
+const ROW_GAP = 26;
 
 /** Virtualized cover grid: only the rows on screen exist, so 2,000+ games scroll at 60fps. */
 export function CoverGrid({
@@ -38,7 +41,7 @@ export function CoverGrid({
 
   const cols = Math.max(1, Math.floor((width + GAP) / (MIN + GAP)));
   const cell = width > 0 ? (width - GAP * (cols - 1)) / cols : MIN;
-  const rowH = cell * 1.5 + GAP;
+  const rowH = cell * 1.5 + CAPTION + ROW_GAP;
   const rows = Math.ceil(games.length / cols);
 
   const v = useVirtualizer({
@@ -74,8 +77,11 @@ export function CoverGrid({
               onDoubleClick={() => onActivate(g)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onActivate(g))}
             >
-              <Art src={g.cover} title={g.title} />
-              {!g.installed && <span className="badge">Not installed</span>}
+              <span className="cover-art">
+                <Art src={g.cover} title={g.title} />
+                {!g.installed && <span className="badge">Not installed</span>}
+              </span>
+              <span className="cover-title">{g.title}</span>
             </button>
           ))}
         </div>
