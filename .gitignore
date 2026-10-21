@@ -1,0 +1,8 @@
+/target
+node_modules/
+app/dist/
+app/src-tauri/gen/
+*.log
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/build/

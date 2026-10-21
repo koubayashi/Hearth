@@ -1,0 +1,11 @@
+[package]
+name = "hub-providers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hub-core.workspace = true
+hub-launch.workspace = true
+async-trait.workspace = true
+anyhow.workspace = true
