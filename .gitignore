@@ -6,3 +6,4 @@ app/src-tauri/gen/
 .impeccable/mocks/
 .impeccable/review/
 .impeccable/build/
+.impeccable/questions/

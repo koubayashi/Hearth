@@ -139,6 +139,24 @@ impl Db {
         Ok(())
     }
 
+    /// Fill artwork the store supplies, without overwriting anything already chosen.
+    pub fn set_art_if_missing(
+        &self,
+        store: StoreId,
+        store_game_id: &str,
+        cover: Option<&str>,
+        hero: Option<&str>,
+        logo: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET cover = COALESCE(cover, ?3), hero = COALESCE(hero, ?4),
+                logo = COALESCE(logo, ?5)
+             WHERE id = (SELECT game_id FROM store_entries WHERE store = ?1 AND store_game_id = ?2)",
+            params![store.as_str(), store_game_id, cover, hero, logo],
+        )?;
+        Ok(())
+    }
+
     pub fn set_favorite(&self, game_id: i64, favorite: bool) -> Result<()> {
         self.conn.execute(
             "UPDATE games SET favorite = ?2 WHERE id = ?1",
