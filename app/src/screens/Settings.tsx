@@ -53,7 +53,7 @@ function SteamRow({ accounts }: { accounts: Accounts | null }) {
           </button>
         ) : (
           <button className="chip primary-chip" data-nav disabled={api.demo} onClick={() => api.steamSignIn()}>
-            Sign in with Steam
+            Sign in
           </button>
         )}
       </div>

@@ -185,6 +185,17 @@ fn open_auth_window(
         .resizable(true)
         .center()
         .visible(visible)
+        // "Sign in with Google / Steam / Xbox…" opens the provider in a popup
+        // that reports back to the page that opened it. Tauri blocks popups by
+        // default, which made those buttons do nothing. Allow them as normal
+        // browser popups, for secure pages only.
+        .on_new_window(|url, _features| {
+            if url.scheme() == "https" {
+                tauri::webview::NewWindowResponse::Allow
+            } else {
+                tauri::webview::NewWindowResponse::Deny
+            }
+        })
         .on_navigation(move |url| {
             if url.host_str() == Some("hearth.invalid") {
                 let body = url
