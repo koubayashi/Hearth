@@ -1,4 +1,4 @@
-import type { Accounts, Game, LibraryQuery, StoreId } from "./types";
+import type { Accounts, Game, LibraryQuery, NowPlaying, StoreId } from "./types";
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
@@ -85,6 +85,8 @@ export const mockBackend = {
   async syncNow() {},
   async epicSignIn() {},
   async epicSignOut() {},
+  nowPlaying: async (): Promise<NowPlaying[]> => [],
+  onNowPlaying: noop,
   onLibraryChanged: noop,
   onAccountsChanged: noop,
   onSyncStarted: noop,

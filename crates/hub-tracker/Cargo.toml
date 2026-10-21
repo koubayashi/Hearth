@@ -1,0 +1,8 @@
+[package]
+name = "hub-tracker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }

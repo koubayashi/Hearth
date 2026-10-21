@@ -19,6 +19,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 hub-core = { path = "crates/hub-core" }
 hub-providers = { path = "crates/hub-providers" }
 hub-launch = { path = "crates/hub-launch" }
+hub-tracker = { path = "crates/hub-tracker" }
 
 [profile.release]
 lto = true

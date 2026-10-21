@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import * as autostart from "@tauri-apps/plugin-autostart";
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
@@ -61,6 +63,43 @@ function StoreAccounts() {
   );
 }
 
+function Startup() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    autostart.isEnabled().then(setEnabled).catch(() => setEnabled(null));
+  }, []);
+  const toggle = async () => {
+    await (enabled ? autostart.disable() : autostart.enable());
+    setEnabled(await autostart.isEnabled());
+  };
+  return (
+    <>
+      <h2>Playtime</h2>
+      <div className="setting-group glass">
+        <div className="setting">
+          <div className="text">
+            <b>Start with Windows</b>
+            <span>
+              Hearth starts quietly in the tray, so games you launch from their folder or another
+              launcher are timed too. Closing the window keeps it running there.
+            </span>
+          </div>
+          <button
+            className="switch"
+            role="switch"
+            data-nav
+            aria-label="Start with Windows"
+            aria-checked={!!enabled}
+            disabled={enabled === null}
+            onClick={toggle}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function Settings() {
   const p = usePrefs();
   return (
@@ -69,6 +108,7 @@ export function Settings() {
         <h1>Settings</h1>
 
         <StoreAccounts />
+        <Startup />
 
         <h2>Appearance</h2>
         <div className="setting-group glass">

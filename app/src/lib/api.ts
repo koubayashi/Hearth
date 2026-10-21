@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Accounts, Game, LibraryQuery } from "./types";
+import type { Accounts, Game, LibraryQuery, NowPlaying } from "./types";
 import { mockBackend } from "./mock";
 
 const on = (event: string) => (cb: (payload: unknown) => void) => listen(event, (e) => cb(e.payload));
@@ -20,6 +20,8 @@ const backend = isTauri()
       syncNow: () => invoke<void>("sync_now"),
       epicSignIn: () => invoke<void>("epic_sign_in"),
       epicSignOut: () => invoke<void>("epic_sign_out"),
+      nowPlaying: () => invoke<NowPlaying[]>("now_playing"),
+      onNowPlaying: on("now-playing"),
       onLibraryChanged: on("library-changed"),
       onAccountsChanged: on("accounts-changed"),
       onSyncStarted: on("sync-started"),

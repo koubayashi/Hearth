@@ -269,3 +269,5 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 }
 
 .chip:disabled { opacity: 0.5; cursor: default; }
+.wall-label dd.playing { color: var(--accent); font-weight: 600; }
+.switch:disabled { opacity: 0.4; cursor: default; }

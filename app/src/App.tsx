@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./lib/api";
-import type { Game } from "./lib/types";
+import type { Game, NowPlaying } from "./lib/types";
 import { STORE_LABEL } from "./lib/types";
 import { Rail, type Route } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
@@ -15,6 +15,7 @@ export function App() {
   const [focused, setFocused] = useState<Game | null>(null);
   const [version, setVersion] = useState(0);
   const [toast, setToast] = useState<ToastMsg | null>(null);
+  const [playing, setPlaying] = useState<NowPlaying[]>([]);
   const [counts, setCounts] = useState<Partial<Record<Route, number>>>({});
 
   const refresh = () => setVersion((v) => v + 1);
@@ -60,7 +61,16 @@ export function App() {
     const offs = [
       api.onLibraryChanged(refresh),
       api.onSyncError((msg) => say(String(msg))),
+      api.onNowPlaying((p) => {
+        const next = p as NowPlaying[];
+        setPlaying((prev) => {
+          const started = next.find((n) => !prev.some((x) => x.game_id === n.game_id));
+          if (started) say(`Timing ${started.title}`);
+          return next;
+        });
+      }),
     ];
+    api.nowPlaying().then(setPlaying);
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
 
@@ -79,6 +89,7 @@ export function App() {
               hiddenView={route === "hidden"}
               version={version}
               focused={focused}
+              playing={playing}
               onFocusGame={setFocused}
               onPrimary={primary}
               onToggleHidden={toggleHidden}

@@ -10,12 +10,14 @@ export const WallLabel = forwardRef<
   HTMLButtonElement,
   {
     game: Game | null;
+    /** Unix seconds when the tracker saw this game start, if it is running now. */
+    playingSince: number | null;
     onPrimary: (g: Game) => void;
     onToggleHidden: (g: Game) => void;
     onToggleFavorite: (g: Game) => void;
     onBack: () => void;
   }
->(function WallLabel({ game, onPrimary, onToggleHidden, onToggleFavorite, onBack }, primaryRef) {
+>(function WallLabel({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack }, primaryRef) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -60,7 +62,13 @@ export const WallLabel = forwardRef<
         <dt>Last played</dt>
         <dd>{formatLastPlayed(game.last_played)}</dd>
         <dt>Status</dt>
-        <dd>{game.installed ? "Ready to play" : "Not installed"}</dd>
+        <dd className={playingSince ? "playing" : undefined}>
+          {playingSince
+            ? `Playing now · ${formatPlaytime(Math.max(60, Math.floor(Date.now() / 1000) - playingSince))}`
+            : game.installed
+              ? "Ready to play"
+              : "Not installed"}
+        </dd>
       </dl>
       <div className="actions">
         <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>

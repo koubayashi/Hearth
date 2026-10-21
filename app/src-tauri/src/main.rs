@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod tracking;
+mod tray;
+
 use std::sync::{Arc, Mutex};
 
 use hub_core::{Db, Game, LibraryQuery};
@@ -9,8 +12,8 @@ use serde::Serialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
-struct AppState {
-    db: Mutex<Db>,
+pub(crate) struct AppState {
+    pub(crate) db: Mutex<Db>,
     epic: Arc<Epic>,
     providers: Vec<Arc<dyn LibraryProvider>>,
     syncing: Mutex<bool>,
@@ -22,7 +25,7 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
-fn now() -> i64 {
+pub(crate) fn now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -78,6 +81,11 @@ fn launch_game(state: State<AppState>, id: i64) -> CmdResult<()> {
             .ok_or("This store can't install games from Hearth yet")?
     };
     hub_launch::run(&action).map_err(err)
+}
+
+#[tauri::command]
+fn now_playing(app: AppHandle) -> Vec<tracking::NowPlaying> {
+    tracking::now_playing(&app)
 }
 
 #[derive(Serialize)]
@@ -211,12 +219,19 @@ fn sync_all(app: AppHandle) {
             }
         }
         *state.syncing.lock().unwrap() = false;
+        tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
     });
 }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
+        .manage(tracking::Tracking::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -245,8 +260,25 @@ fn main() {
                 let _ = window_vibrancy::apply_mica(&window, None);
             }
 
+            tray::install(app.handle())?;
+            tracking::refresh_dirs(app.handle());
+            tracking::start(app.handle().clone());
             sync_all(app.handle().clone());
+
+            // Started with Windows: stay in the tray until the user opens Hearth.
+            if !std::env::args().any(|a| a == "--minimized") {
+                tray::show_main(app.handle());
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing the window keeps Hearth in the tray so playtime keeps counting.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             list_games,
@@ -257,7 +289,8 @@ fn main() {
             accounts,
             sync_now,
             epic_sign_in,
-            epic_sign_out
+            epic_sign_out,
+            now_playing
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hearth");

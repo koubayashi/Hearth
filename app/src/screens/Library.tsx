@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Game, InstallFilter, StoreId } from "../lib/types";
+import type { Game, InstallFilter, NowPlaying, StoreId } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { formatHoursShort } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
@@ -19,6 +19,7 @@ export function Library({
   hiddenView,
   version,
   focused,
+  playing,
   onFocusGame,
   onPrimary,
   onToggleHidden,
@@ -28,6 +29,7 @@ export function Library({
   /** Bumped by the parent whenever library data changes. */
   version: number;
   focused: Game | null;
+  playing: NowPlaying[];
   onFocusGame: (g: Game | null) => void;
   onPrimary: (g: Game) => void;
   onToggleHidden: (g: Game) => void;
@@ -201,6 +203,7 @@ export function Library({
         <WallLabel
           ref={primaryRef}
           game={focused}
+          playingSince={playing.find((p) => p.game_id === focused?.id)?.started_at ?? null}
           onPrimary={onPrimary}
           onToggleHidden={onToggleHidden}
           onToggleFavorite={onToggleFavorite}

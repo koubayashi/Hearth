@@ -53,3 +53,10 @@ export interface Accounts {
   /** Display name when signed in to Epic. */
   epic: string | null;
 }
+
+export interface NowPlaying {
+  game_id: number;
+  title: string;
+  /** Unix seconds. */
+  started_at: number;
+}
