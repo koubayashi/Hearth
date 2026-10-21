@@ -4,21 +4,27 @@ import * as autostart from "@tauri-apps/plugin-autostart";
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
+import { StoreIcon } from "../components/StoreIcon";
+
+type Note = { ok: boolean; text: string } | null;
 
 function SteamRow({ accounts }: { accounts: Accounts | null }) {
+  const [useKey, setUseKey] = useState(false);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [note, setNote] = useState<Note>(null);
+  const connected = accounts?.steam_auth != null;
 
-  const save = async () => {
+  const saveKey = async () => {
     setBusy(true);
-    setMessage(null);
+    setNote(null);
     try {
       const count = await api.steamSetApiKey(key);
       setKey("");
-      setMessage({ ok: true, text: `Connected. Steam shared ${count} games; your library is refreshing.` });
+      setUseKey(false);
+      setNote({ ok: true, text: `Connected. Steam shared ${count} games; your library is refreshing.` });
     } catch (e) {
-      setMessage({ ok: false, text: String(e) });
+      setNote({ ok: false, text: String(e) });
     } finally {
       setBusy(false);
     }
@@ -28,22 +34,31 @@ function SteamRow({ accounts }: { accounts: Accounts | null }) {
     <div className="setting setting-stack">
       <div className="setting-row">
         <div className="text">
-          <b>Steam</b>
+          <b>
+            <StoreIcon store="steam" size={15} /> Steam
+          </b>
           <span>
-            {accounts?.steam ? `Signed in on this PC as ${accounts.steam}. ` : ""}
-            Installed games and playtime are read automatically.
-            {accounts?.steam_api_key
-              ? " Your Steam Web API key is saved, so games you own but haven't installed are included too."
-              : " To also see games you own but haven't installed, and playtime from every PC, add your Steam Web API key."}
+            {connected
+              ? `Connected to ${accounts?.steam ?? "your account"}. Every game you own and Steam's playtime from all your PCs are included.`
+              : "Installed games and this PC's playtime are read automatically. Sign in to add games you own but haven't installed, and playtime from every PC."}
           </span>
         </div>
-        {accounts?.steam_api_key && (
-          <button className="chip" data-nav onClick={() => api.steamClearApiKey()}>
-            Remove key
+        {connected ? (
+          <button className="chip" data-nav onClick={() => api.steamSignOut()}>
+            Disconnect
+          </button>
+        ) : (
+          <button className="chip primary-chip" data-nav disabled={api.demo} onClick={() => api.steamSignIn()}>
+            Sign in with Steam
           </button>
         )}
       </div>
-      {!accounts?.steam_api_key && (
+      {!connected && !useKey && (
+        <button className="link" data-nav onClick={() => setUseKey(true)}>
+          Use a Steam Web API key instead
+        </button>
+      )}
+      {!connected && useKey && (
         <div className="key-row">
           <input
             className="text-input"
@@ -53,9 +68,9 @@ function SteamRow({ accounts }: { accounts: Accounts | null }) {
             aria-label="Steam Web API key"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && key && !busy && save()}
+            onKeyDown={(e) => e.key === "Enter" && key && !busy && saveKey()}
           />
-          <button className="chip" data-nav disabled={!key || busy} onClick={save}>
+          <button className="chip" data-nav disabled={!key || busy} onClick={saveKey}>
             {busy ? "Checking…" : "Save key"}
           </button>
           <button className="chip" data-nav onClick={() => api.openSteamKeyPage()}>
@@ -63,7 +78,99 @@ function SteamRow({ accounts }: { accounts: Accounts | null }) {
           </button>
         </div>
       )}
-      {message && <p className={message.ok ? "note" : "note error"} role="status">{message.text}</p>}
+      {note && (
+        <p className={note.ok ? "note" : "note error"} role="status">
+          {note.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EpicRow({ accounts }: { accounts: Accounts | null }) {
+  const [browserFlow, setBrowserFlow] = useState(false);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<Note>(null);
+  const signedIn = !!accounts?.epic;
+
+  const openBrowser = async () => {
+    setBrowserFlow(true);
+    setNote(null);
+    await api.epicOpenBrowser();
+  };
+  const submit = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await api.epicSubmitCode(code);
+      setCode("");
+      setBrowserFlow(false);
+    } catch (e) {
+      setNote({ ok: false, text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-row">
+        <div className="text">
+          <b>
+            <StoreIcon store="epic" size={15} /> Epic Games
+          </b>
+          <span>
+            {signedIn
+              ? `Signed in as ${accounts?.epic}. Your full library and Epic playtime are included.`
+              : "Installed games show up without signing in. Sign in to add games you own but haven't installed, and your Epic playtime."}
+          </span>
+        </div>
+        {signedIn ? (
+          <button className="chip" data-nav onClick={() => api.epicSignOut()}>
+            Sign out
+          </button>
+        ) : (
+          <button className="chip primary-chip" data-nav disabled={api.demo} onClick={() => api.epicSignIn()}>
+            Sign in
+          </button>
+        )}
+      </div>
+      {!signedIn && !browserFlow && (
+        <button className="link" data-nav disabled={api.demo} onClick={openBrowser}>
+          Sign in with your browser instead (Google, Apple, Steam, Xbox, PlayStation…)
+        </button>
+      )}
+      {!signedIn && browserFlow && (
+        <>
+          <p className="note">
+            Sign in to Epic in the browser window that opened. Epic then shows a short page with an{" "}
+            <b>authorizationCode</b>. Copy that code, or the whole page, and paste it here.
+          </p>
+          <div className="key-row">
+            <input
+              className="text-input"
+              data-nav
+              placeholder="Paste the authorization code"
+              aria-label="Epic authorization code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && code && !busy && submit()}
+            />
+            <button className="chip" data-nav disabled={!code || busy} onClick={submit}>
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
+            <button className="chip" data-nav onClick={() => api.epicOpenBrowser()}>
+              Open again
+            </button>
+          </div>
+        </>
+      )}
+      {note && (
+        <p className={note.ok ? "note" : "note error"} role="status">
+          {note.text}
+        </p>
+      )}
     </div>
   );
 }
@@ -88,25 +195,7 @@ function StoreAccounts() {
       <h2>Stores</h2>
       <div className="setting-group glass">
         <SteamRow accounts={accounts} />
-        <div className="setting">
-          <div className="text">
-            <b>Epic Games</b>
-            <span>
-              {accounts?.epic
-                ? `Signed in as ${accounts.epic}. Your full library and Epic playtime are included.`
-                : "Installed games show up without signing in. Sign in on epicgames.com to add games you own but haven't installed, and your Epic playtime."}
-            </span>
-          </div>
-          {accounts?.epic ? (
-            <button className="chip" data-nav onClick={() => api.epicSignOut()}>
-              Sign out
-            </button>
-          ) : (
-            <button className="chip" data-nav onClick={() => api.epicSignIn()} disabled={api.demo}>
-              Sign in
-            </button>
-          )}
-        </div>
+        <EpicRow accounts={accounts} />
         <div className="setting">
           <div className="text">
             <b>Refresh library</b>

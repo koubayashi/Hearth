@@ -11,7 +11,7 @@ use hub_core::{GameEntry, StoreId};
 use hub_launch::LaunchAction;
 
 use anyhow::{bail, Context};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{vdf, Artwork, LibraryProvider};
 
@@ -20,9 +20,29 @@ const OWNED_URL: &str = "https://api.steampowered.com/IPlayerService/GetOwnedGam
 /// Not games: runtimes and tools Steam installs alongside them.
 const NOT_GAMES: &[&str] = &["228980", "480", "1070560", "1391110", "1628350", "1493710", "1826330"];
 
+/// How Hearth is allowed to read the account's owned games.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SteamAuth {
+    /// A web session token from signing in on Steam's own login page.
+    Session { token: String },
+    /// A personal Web API key (advanced alternative).
+    ApiKey { key: String },
+}
+
+impl SteamAuth {
+    /// The account a session token belongs to (the JWT's `sub` claim).
+    fn steam_id(&self) -> Option<String> {
+        match self {
+            SteamAuth::Session { token } => jwt_subject(token),
+            SteamAuth::ApiKey { .. } => None,
+        }
+    }
+}
+
 pub struct Steam {
     root: Option<PathBuf>,
-    api_key: Mutex<Option<String>>,
+    auth: Mutex<Option<SteamAuth>>,
     http: reqwest::Client,
 }
 
@@ -33,50 +53,75 @@ pub struct SteamAccount {
     pub name: String,
 }
 
+/// For a signed-in browser session, returns a Web API token. Steam's own
+/// store pages use it the same way.
+pub const TOKEN_URL: &str = "https://store.steampowered.com/pointssummary/ajaxgetasyncconfig";
+/// Steam's login page, returning to [`TOKEN_URL`] once signed in.
+pub const LOGIN_URL: &str = "https://store.steampowered.com/login/?redir=pointssummary%2Fajaxgetasyncconfig";
+
 impl Steam {
     /// Locates Steam via the registry, falling back to the default install path.
-    pub fn detect(api_key: Option<String>) -> Self {
-        Self::new(steam_root(), api_key)
+    pub fn detect(auth: Option<SteamAuth>) -> Self {
+        Self::new(steam_root(), auth)
     }
 
     pub fn with_root(root: impl Into<PathBuf>) -> Self {
         Self::new(Some(root.into()), None)
     }
 
-    fn new(root: Option<PathBuf>, api_key: Option<String>) -> Self {
+    fn new(root: Option<PathBuf>, auth: Option<SteamAuth>) -> Self {
         Self {
             root,
-            api_key: Mutex::new(api_key.filter(|k| !k.is_empty())),
+            auth: Mutex::new(auth),
             http: reqwest::Client::builder().user_agent("Hearth/0.1").build().expect("http client"),
         }
     }
 
-    pub fn has_api_key(&self) -> bool {
-        self.api_key.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+    pub fn auth(&self) -> Option<SteamAuth> {
+        self.auth.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
-    pub fn set_api_key(&self, key: Option<String>) {
-        *self.api_key.lock().unwrap_or_else(|e| e.into_inner()) = key;
+    pub fn set_auth(&self, auth: Option<SteamAuth>) {
+        *self.auth.lock().unwrap_or_else(|e| e.into_inner()) = auth;
     }
 
-    /// The most recently signed-in account, from `config/loginusers.vdf`.
+    /// The account to read: the signed-in session's, else the Steam client's.
     pub fn account(&self) -> Option<SteamAccount> {
-        let text = std::fs::read_to_string(self.root.as_ref()?.join("config").join("loginusers.vdf")).ok()?;
-        parse_login_users(&text)
+        let local = self
+            .root
+            .as_ref()
+            .and_then(|r| std::fs::read_to_string(r.join("config").join("loginusers.vdf")).ok());
+        let users = local.as_deref().map(parse_login_users).unwrap_or_default();
+        match self.auth().and_then(|a| a.steam_id()) {
+            Some(id) => Some(
+                users
+                    .into_iter()
+                    .find(|u| u.steam_id == id)
+                    .unwrap_or(SteamAccount { name: "your Steam account".into(), steam_id: id }),
+            ),
+            None => most_recent(users),
+        }
     }
 
-    /// Checks a key against the Web API and returns how many games it can see.
-    pub async fn check_api_key(&self, key: &str) -> anyhow::Result<usize> {
-        let account = self.account().context("Sign in to the Steam app on this PC first")?;
-        Ok(self.fetch_owned(key, &account.steam_id).await?.len())
+    /// Tries an auth method against the Web API; returns how many games it sees.
+    pub async fn check_auth(&self, auth: &SteamAuth) -> anyhow::Result<usize> {
+        let steam_id = match auth.steam_id() {
+            Some(id) => id,
+            None => self.account().context("Sign in to the Steam app on this PC first")?.steam_id,
+        };
+        Ok(self.fetch_owned(auth, &steam_id).await?.len())
     }
 
-    async fn fetch_owned(&self, key: &str, steam_id: &str) -> anyhow::Result<Vec<OwnedGame>> {
+    async fn fetch_owned(&self, auth: &SteamAuth, steam_id: &str) -> anyhow::Result<Vec<OwnedGame>> {
+        let cred = match auth {
+            SteamAuth::Session { token } => ("access_token", token.as_str()),
+            SteamAuth::ApiKey { key } => ("key", key.as_str()),
+        };
         let res = self
             .http
             .get(OWNED_URL)
             .query(&[
-                ("key", key),
+                cred,
                 ("steamid", steam_id),
                 ("include_appinfo", "1"),
                 ("include_played_free_games", "1"),
@@ -84,10 +129,13 @@ impl Steam {
             ])
             .send()
             .await?;
-        match res.status().as_u16() {
-            200 => {}
-            401 | 403 => bail!("Steam rejected the API key. Check it at steamcommunity.com/dev/apikey."),
-            code => bail!("Steam's Web API returned {code}. Try again later."),
+        match (res.status().as_u16(), auth) {
+            (200, _) => {}
+            (401 | 403, SteamAuth::Session { .. }) => bail!(SESSION_EXPIRED),
+            (401 | 403, SteamAuth::ApiKey { .. }) => {
+                bail!("Steam rejected the API key. Check it at steamcommunity.com/dev/apikey.")
+            }
+            (code, _) => bail!("Steam's Web API returned {code}. Try again later."),
         }
         let body: OwnedResponse = res.json().await.context("reading Steam's owned games")?;
         Ok(body.response.games)
@@ -205,11 +253,9 @@ impl LibraryProvider for Steam {
     }
 
     async fn owned(&self) -> anyhow::Result<Vec<GameEntry>> {
-        let Some(key) = self.api_key.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
-            return Ok(Vec::new());
-        };
+        let Some(auth) = self.auth() else { return Ok(Vec::new()) };
         let Some(account) = self.account() else { return Ok(Vec::new()) };
-        let games = self.fetch_owned(&key, &account.steam_id).await?;
+        let games = self.fetch_owned(&auth, &account.steam_id).await?;
         Ok(games
             .into_iter()
             .filter(|g| !NOT_GAMES.contains(&g.appid.to_string().as_str()))
@@ -292,17 +338,43 @@ struct OwnedGame {
     rtime_last_played: Option<i64>,
 }
 
-fn parse_login_users(text: &str) -> Option<SteamAccount> {
+/// Shown when a session token stops working; the app offers to sign in again.
+pub const SESSION_EXPIRED: &str = "Your Steam sign-in expired. Sign in again in Settings.";
+
+/// Accounts from `loginusers.vdf`, most recent first.
+fn parse_login_users(text: &str) -> Vec<SteamAccount> {
     let doc = vdf::parse(text);
-    let users: Vec<_> = doc.get("users")?.entries().collect();
-    let (id, user) = users
-        .iter()
-        .find(|(_, u)| u.str("MostRecent") == Some("1"))
-        .or(users.first())?;
-    Some(SteamAccount {
-        steam_id: id.to_string(),
-        name: user.str("PersonaName").or(user.str("AccountName")).unwrap_or(id).to_string(),
-    })
+    let Some(users) = doc.get("users") else { return Vec::new() };
+    let mut out: Vec<(bool, SteamAccount)> = users
+        .entries()
+        .map(|(id, u)| {
+            let name = u.str("PersonaName").or(u.str("AccountName")).unwrap_or(id).to_string();
+            (u.str("MostRecent") == Some("1"), SteamAccount { steam_id: id.clone(), name })
+        })
+        .collect();
+    out.sort_by_key(|(recent, _)| !recent);
+    out.into_iter().map(|(_, a)| a).collect()
+}
+
+fn most_recent(users: Vec<SteamAccount>) -> Option<SteamAccount> {
+    users.into_iter().next()
+}
+
+/// The `sub` claim of a JWT, without verifying it (Steam verifies it).
+fn jwt_subject(token: &str) -> Option<String> {
+    use base64::Engine;
+    let payload = token.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload.trim_end_matches('=')).ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("sub")?.as_str().map(str::to_string)
+}
+
+/// Pulls the token out of the JSON that [`TOKEN_URL`] returns. None when
+/// the browser session isn't signed in.
+pub fn token_from_body(body: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(body.trim()).ok()?;
+    let t = v.get("data")?.get("webapi_token")?.as_str()?;
+    (!t.is_empty()).then(|| t.to_string())
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
@@ -374,7 +446,7 @@ mod tests {
             "76561190000000042" { "AccountName" "player_one" "PersonaName" "ExamplePersona" "MostRecent" "1" }
         }"#;
         assert_eq!(
-            parse_login_users(users),
+            most_recent(parse_login_users(users)),
             Some(SteamAccount { steam_id: "76561190000000042".into(), name: "ExamplePersona".into() })
         );
 
@@ -387,6 +459,16 @@ mod tests {
         // A private profile answers with an empty response object.
         let empty: OwnedResponse = serde_json::from_str(r#"{"response":{}}"#).unwrap();
         assert!(empty.response.games.is_empty());
+    }
+
+    #[test]
+    fn reads_session_token_and_its_account() {
+        // header.payload.signature with payload {"sub":"76561190000000042","aud":["web"]}
+        let token = "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiI3NjU2MTE5MDAwMDAwMDA0MiIsImF1ZCI6WyJ3ZWIiXX0.sig";
+        let body = format!(r#"{{"success":1,"data":{{"webapi_token":"{token}"}}}}"#);
+        assert_eq!(token_from_body(&body).as_deref(), Some(token));
+        assert_eq!(SteamAuth::Session { token: token.into() }.steam_id().as_deref(), Some("76561190000000042"));
+        assert_eq!(token_from_body(r#"{"success":1,"data":{"webapi_token":""}}"#), None);
     }
 
     #[test]

@@ -84,11 +84,14 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 export const mockBackend = {
   demo: true,
   async launch(_id: number) {},
-  accounts: async (): Promise<Accounts> => ({ epic: null, steam: "Demo player", steam_api_key: false }),
+  accounts: async (): Promise<Accounts> => ({ epic: null, steam: "Demo player", steam_auth: null }),
   async steamSetApiKey(_key: string): Promise<number> {
     throw new Error("Demo library: add your key in the desktop app");
   },
-  async steamClearApiKey() {},
+  async steamSignIn() {},
+  async steamSignOut() {},
+  async epicOpenBrowser() {},
+  async epicSubmitCode(_code: string) {},
   async openSteamKeyPage() {},
   async syncNow() {},
   async epicSignIn() {},

@@ -54,7 +54,8 @@ export interface Accounts {
   epic: string | null;
   /** Steam account signed in on this PC. */
   steam: string | null;
-  steam_api_key: boolean;
+  /** How Hearth reads the Steam library, or null for installed games only. */
+  steam_auth: "session" | "api_key" | null;
 }
 
 export interface NowPlaying {

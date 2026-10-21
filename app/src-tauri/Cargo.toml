@@ -18,3 +18,4 @@ tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 hub-tracker.workspace = true
 window-vibrancy = "0.6"
+tokio = { workspace = true }

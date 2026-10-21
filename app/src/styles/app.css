@@ -312,3 +312,13 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .note { font-size: var(--text-sm); color: var(--ink-2); }
 .note.error { color: #ff8a80; }
 [data-mode="light"] .note.error { color: #b3261e; }
+.setting .text b svg { vertical-align: -2px; margin-right: 4px; }
+.primary-chip { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.primary-chip:hover { background: var(--accent); filter: brightness(1.07); color: var(--accent-ink); }
+.link {
+  all: unset; align-self: flex-start; cursor: pointer; color: var(--ink-2); font-size: var(--text-sm);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong);
+}
+.link:hover { color: var(--ink); }
+.link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
+.link:disabled { opacity: 0.5; cursor: default; }

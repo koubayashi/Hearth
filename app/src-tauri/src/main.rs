@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use hub_core::{Db, Game, LibraryQuery};
 use hub_providers::epic::{self, Epic};
-use hub_providers::{merge_entries, secrets, steam::Steam, LibraryProvider};
+use hub_providers::steam::{self, Steam, SteamAuth};
+use hub_providers::{merge_entries, secrets, LibraryProvider};
 use serde::Serialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -95,9 +96,10 @@ fn now_playing(app: AppHandle) -> Vec<tracking::NowPlaying> {
 #[derive(Serialize)]
 struct Accounts {
     epic: Option<String>,
-    /// The Steam account signed in on this PC, if any.
+    /// The Steam account Hearth reads, if any.
     steam: Option<String>,
-    steam_api_key: bool,
+    /// "session", "api_key", or null when Hearth can only see installed games.
+    steam_auth: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -105,32 +107,39 @@ fn accounts(state: State<AppState>) -> Accounts {
     Accounts {
         epic: state.epic.account_name(),
         steam: state.steam.account().map(|a| a.name),
-        steam_api_key: state.steam.has_api_key(),
+        steam_auth: state.steam.auth().map(|a| match a {
+            SteamAuth::Session { .. } => "session",
+            SteamAuth::ApiKey { .. } => "api_key",
+        }),
     }
 }
 
-/// Validates the key against Steam before keeping it, so a typo never
-/// silently empties the library.
+fn save_steam_auth(app: &AppHandle, auth: Option<SteamAuth>) {
+    let json = auth.as_ref().and_then(|a| serde_json::to_string(a).ok());
+    secrets::save("steam-auth", json.as_deref());
+    app.state::<AppState>().steam.set_auth(auth);
+    let _ = app.emit("accounts-changed", ());
+}
+
+/// Advanced alternative to signing in. Validated before it's kept, so a typo
+/// never silently empties the library.
 #[tauri::command]
 async fn steam_set_api_key(app: AppHandle, key: String) -> CmdResult<usize> {
     let key = key.trim().to_string();
     if key.len() != 32 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("A Steam Web API key is 32 letters and numbers. Copy it from steamcommunity.com/dev/apikey.".into());
     }
+    let auth = SteamAuth::ApiKey { key };
     let steam = app.state::<AppState>().steam.clone();
-    let count = steam.check_api_key(&key).await.map_err(|e| format!("{e:#}"))?;
-    secrets::save("steam-api-key", Some(&key));
-    steam.set_api_key(Some(key));
-    let _ = app.emit("accounts-changed", ());
+    let count = steam.check_auth(&auth).await.map_err(|e| format!("{e:#}"))?;
+    save_steam_auth(&app, Some(auth));
     sync_all(app);
     Ok(count)
 }
 
 #[tauri::command]
-fn steam_clear_api_key(app: AppHandle) {
-    secrets::save("steam-api-key", None);
-    app.state::<AppState>().steam.set_api_key(None);
-    let _ = app.emit("accounts-changed", ());
+fn steam_sign_out(app: AppHandle) {
+    save_steam_auth(&app, None);
 }
 
 /// Opens Steam's API key page in the default browser. Only this fixed URL.
@@ -144,49 +153,48 @@ fn sync_now(app: AppHandle) {
     sync_all(app);
 }
 
-#[tauri::command]
-async fn epic_sign_out(app: AppHandle) -> CmdResult<()> {
-    let epic = app.state::<AppState>().epic.clone();
-    epic.sign_out().await;
-    let _ = app.emit("accounts-changed", ());
-    Ok(())
-}
-
-/// Opens Epic's own sign-in page in a separate window with no access to the
-/// app. When Epic shows the one-time code, it's caught here and exchanged.
-// Async on purpose: on Windows, building a window inside a synchronous
-// command deadlocks the main thread (the app freezes on an empty window).
-#[tauri::command]
-async fn epic_sign_in(app: AppHandle) -> CmdResult<()> {
-    if let Some(w) = app.get_webview_window("epic-login") {
-        let _ = w.set_focus();
+/// Opens a store's own sign-in page in a separate window that has no access
+/// to the app. When the page at `capture` loads, its text is handed back by
+/// navigating to a made-up host that is intercepted and never loaded.
+/// A hidden window reuses the saved browser session without showing anything.
+fn open_auth_window(
+    app: &AppHandle,
+    label: &'static str,
+    title: &str,
+    url: &str,
+    capture: &'static str,
+    visible: bool,
+    on_body: impl Fn(AppHandle, String) + Send + Sync + 'static,
+) -> CmdResult<()> {
+    if let Some(w) = app.get_webview_window(label) {
+        if visible {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
         return Ok(());
     }
-    let url = epic::login_url().parse().map_err(err)?;
-    let on_nav = app.clone();
-    WebviewWindowBuilder::new(&app, "epic-login", WebviewUrl::External(url))
-        .title("Sign in to Epic Games")
-        .inner_size(520.0, 760.0)
+    let handle = app.clone();
+    WebviewWindowBuilder::new(app, label, WebviewUrl::External(url.parse().map_err(err)?))
+        .title(title)
+        .inner_size(900.0, 860.0)
+        .min_inner_size(480.0, 600.0)
+        .resizable(true)
         .center()
+        .visible(visible)
         .on_navigation(move |url| {
-            // The redirect page hands its JSON to this made-up host; never load it.
             if url.host_str() == Some("hearth.invalid") {
                 let body = url
                     .query_pairs()
                     .find(|(k, _)| k == "body")
                     .map(|(_, v)| v.into_owned())
                     .unwrap_or_default();
-                if let Some(code) = epic::code_from_redirect_body(&body) {
-                    finish_epic_sign_in(on_nav.clone(), code);
-                }
+                on_body(handle.clone(), body);
                 return false;
             }
             true
         })
-        .on_page_load(|window, payload| {
-            if payload.event() == PageLoadEvent::Finished
-                && payload.url().as_str().starts_with("https://www.epicgames.com/id/api/redirect")
-            {
+        .on_page_load(move |window, payload| {
+            if payload.event() == PageLoadEvent::Finished && payload.url().as_str().starts_with(capture) {
                 let _ = window.eval(
                     "location.replace('https://hearth.invalid/?body=' + encodeURIComponent(document.body.innerText))",
                 );
@@ -197,14 +205,121 @@ async fn epic_sign_in(app: AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
+fn close_window(app: &AppHandle, label: &str) {
+    if let Some(w) = app.get_webview_window(label) {
+        let _ = w.close();
+    }
+}
+
+// Sign-in commands are async on purpose: on Windows, building a window inside
+// a synchronous command deadlocks the main thread (the app freezes).
+
+/// Sign in on Steam's real login page (password, Steam Guard or QR code).
+#[tauri::command]
+async fn steam_sign_in(app: AppHandle) -> CmdResult<()> {
+    open_auth_window(&app, "steam-login", "Sign in to Steam", steam::LOGIN_URL, steam::TOKEN_URL, true, |app, body| {
+        if let Some(token) = steam::token_from_body(&body) {
+            close_window(&app, "steam-login");
+            finish_steam_sign_in(app, token);
+        }
+        // No token yet means Steam bounced back to its login page; stay open.
+    })
+}
+
+fn finish_steam_sign_in(app: AppHandle, token: String) {
+    tauri::async_runtime::spawn(async move {
+        let auth = SteamAuth::Session { token };
+        let steam = app.state::<AppState>().steam.clone();
+        match steam.check_auth(&auth).await {
+            Ok(_) => {
+                save_steam_auth(&app, Some(auth));
+                sync_all(app);
+            }
+            Err(e) => {
+                let _ = app.emit("sync-error", format!("{e:#}"));
+            }
+        }
+    });
+}
+
+/// Session tokens last about a day. The sign-in window keeps Steam's cookies,
+/// so a hidden window can usually fetch a fresh token without asking.
+fn steam_refresh_silently(app: &AppHandle) {
+    let _ = open_auth_window(app, "steam-refresh", "Steam", steam::TOKEN_URL, steam::TOKEN_URL, false, |app, body| {
+        close_window(&app, "steam-refresh");
+        match steam::token_from_body(&body) {
+            Some(token) => {
+                save_steam_auth(&app, Some(SteamAuth::Session { token }));
+                sync_all(app);
+            }
+            None => {
+                let _ = app.emit("sync-error", steam::SESSION_EXPIRED);
+            }
+        }
+    });
+    // If Steam redirects the hidden window to its login page instead, the
+    // capture never fires: give up quietly after a while.
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        if app.get_webview_window("steam-refresh").is_some() {
+            close_window(&app, "steam-refresh");
+            let _ = app.emit("sync-error", steam::SESSION_EXPIRED);
+        }
+    });
+}
+
+#[tauri::command]
+async fn epic_sign_out(app: AppHandle) -> CmdResult<()> {
+    let epic = app.state::<AppState>().epic.clone();
+    epic.sign_out().await;
+    let _ = app.emit("accounts-changed", ());
+    Ok(())
+}
+
+/// Epic's own sign-in page in a Hearth window. Some providers (Google) refuse
+/// embedded windows; for those, [`epic_open_browser`] is the way in.
+#[tauri::command]
+async fn epic_sign_in(app: AppHandle) -> CmdResult<()> {
+    let url = epic::login_url();
+    open_auth_window(
+        &app,
+        "epic-login",
+        "Sign in to Epic Games",
+        &url,
+        "https://www.epicgames.com/id/api/redirect",
+        true,
+        |app, body| {
+            if let Some(code) = epic::code_from_redirect_body(&body) {
+                close_window(&app, "epic-login");
+                finish_epic_sign_in(app, code);
+            }
+        },
+    )
+}
+
+/// Opens Epic's sign-in in the default browser, where every sign-in option
+/// works and the user is often already signed in. Epic then shows a one-time
+/// code to paste back into Hearth.
+#[tauri::command]
+fn epic_open_browser() -> CmdResult<()> {
+    hub_launch::run(&hub_launch::LaunchAction::Uri { uri: epic::login_url() }).map_err(err)
+}
+
+#[tauri::command]
+async fn epic_submit_code(app: AppHandle, code: String) -> CmdResult<()> {
+    let code = epic::clean_code(&code).map_err(err)?;
+    let epic = app.state::<AppState>().epic.clone();
+    epic.sign_in(&code).await.map_err(|e| format!("{e:#}"))?;
+    let _ = app.emit("accounts-changed", ());
+    sync_all(app);
+    Ok(())
+}
+
 fn finish_epic_sign_in(app: AppHandle, code: String) {
     tauri::async_runtime::spawn(async move {
         let epic = app.state::<AppState>().epic.clone();
-        let result = epic.sign_in(&code).await;
-        if let Some(w) = app.get_webview_window("epic-login") {
-            let _ = w.close();
-        }
-        match result {
+        match epic.sign_in(&code).await {
             Ok(()) => {
                 let _ = app.emit("accounts-changed", ());
                 sync_all(app);
@@ -237,6 +352,10 @@ fn sync_all(app: AppHandle) {
             });
             let owned = match provider.owned().await {
                 Ok(g) => g,
+                Err(e) if store == hub_core::StoreId::Steam && e.to_string() == steam::SESSION_EXPIRED => {
+                    steam_refresh_silently(&app);
+                    Vec::new()
+                }
                 Err(e) => {
                     let _ = app.emit("sync-error", format!("{e:#}"));
                     Vec::new()
@@ -290,7 +409,11 @@ fn main() {
                 }),
             ));
 
-            let steam = Arc::new(Steam::detect(secrets::load("steam-api-key")));
+            // Older builds stored a bare API key; carry it over.
+            let steam_auth = secrets::load("steam-auth")
+                .and_then(|s| serde_json::from_str::<SteamAuth>(&s).ok())
+                .or_else(|| secrets::load("steam-api-key").map(|key| SteamAuth::ApiKey { key }));
+            let steam = Arc::new(Steam::detect(steam_auth));
             app.manage(AppState {
                 db: Mutex::new(db),
                 providers: vec![steam.clone(), epic.clone()],
@@ -337,8 +460,11 @@ fn main() {
             epic_sign_out,
             now_playing,
             steam_set_api_key,
-            steam_clear_api_key,
-            open_steam_key_page
+            steam_sign_in,
+            steam_sign_out,
+            open_steam_key_page,
+            epic_open_browser,
+            epic_submit_code
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hearth");

@@ -1545,6 +1545,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-autostart",
  "tauri-plugin-single-instance",
+ "tokio",
  "window-vibrancy 0.6.0",
 ]
 
@@ -1645,6 +1646,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "futures",
  "hub-core",
  "hub-launch",
