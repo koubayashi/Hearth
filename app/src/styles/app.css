@@ -185,11 +185,14 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 /* ---------- library layout: poster beside the wall ---------- */
 .library { display: grid; grid-template-columns: clamp(280px, 27vw, 400px) minmax(0, 1fr); height: 100%; }
 .library .scroll { container-type: inline-size; }
+.library.solo { grid-template-columns: minmax(0, 1fr); }
 .library .scroll { padding-left: var(--space-5); }
 
 /* ---------- poster: the selected game, framed ---------- */
 .poster {
-  position: relative; margin: var(--space-3) 0; border-radius: var(--radius-panel); overflow: hidden;
+  /* clip, not hidden: a hidden box can still be scrolled by focus(), which
+     shifted the whole poster when focus returned to its buttons. */
+  position: relative; margin: var(--space-3) 0; border-radius: var(--radius-panel); overflow: clip;
   background: var(--base-2); border: 1px solid var(--line); box-shadow: var(--shadow);
   display: flex; flex-direction: column; justify-content: flex-end;
 }
@@ -227,7 +230,6 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .poster dt { color: var(--ink-2); }
 .poster dd { text-align: right; }
 .poster dd.playing { color: var(--accent); font-weight: 600; }
-.poster-empty { color: var(--ink-3); padding: var(--space-5); }
 .actions { display: flex; gap: var(--space-2); margin-top: var(--space-4); position: relative; }
 .primary {
   all: unset; flex: 1; height: 40px; border-radius: var(--radius-control);
@@ -505,6 +507,17 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 /* ---------- statuses and collections ---------- */
 .menu-label { padding: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-3); }
 .menu button svg:last-child:not(:first-child) { margin-left: auto; color: var(--accent); }
+.menu button .sub-arrow { color: var(--ink-3); }
+
+/* Statuses: one compact 2 by 2 picker instead of four menu rows. */
+.status-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px 0; }
+.menu .status-pick button { gap: 6px; padding: 7px 8px; font-size: var(--text-sm); color: var(--ink-2); }
+.menu .status-pick button:hover, .menu .status-pick button:focus-visible { color: var(--ink); }
+.menu .status-pick button[aria-checked="true"] {
+  color: var(--ink); background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.status-pick .status-dot { width: 12px; }
 .status-dot { width: 18px; display: grid; place-items: center; flex: none; }
 .status-dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
 .status-dot.playing::before { background: #6fcf97; }
@@ -615,4 +628,17 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   .tile:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .stats-pair { grid-template-columns: minmax(0, 1fr); }
   .bar-row { grid-template-columns: 20px 28px minmax(90px, 160px) minmax(0, 1fr) 48px; }
+}
+
+/* ---------- press feedback ----------
+   Every control answers the instant it is pressed, not on release. Small
+   controls dip slightly; full-width rows darken instead, since a scaled row
+   reads as a glitch. Uses the standalone scale property so it never fights
+   the hover and focus transforms already on these elements. */
+:is(.chip, .seg button, .icon-btn, .swatch, .shelf, .surprise, .switch, .link, .winbtn):active:not(:disabled) {
+  scale: 0.96; transition: scale 80ms var(--ease-out);
+}
+:is(.nav, .menu button, .install-row):active:not(:disabled) { background: var(--line-strong); }
+.cover:active .cover-art, .piece:active .frame, .art-grid button:active:not(:disabled) {
+  scale: 0.98; transition: scale 80ms var(--ease-out);
 }

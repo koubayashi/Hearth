@@ -118,6 +118,8 @@ export function Library({
     [all],
   );
 
+  const filtered = install !== "all" || stores.length > 0 || search !== "";
+
   // Something should always be in the light: default to the most recent game.
   useEffect(() => {
     if (focused && games?.some((g) => g.id === focused.id)) {
@@ -126,6 +128,9 @@ export function Library({
       return;
     }
     if (!games) return;
+    // A search or filter that matches nothing keeps the last game in view
+    // rather than blanking the poster while you type.
+    if (games.length === 0 && filtered && focused) return;
     const showRecent = prefs.showRecent && !hiddenView && !scope;
     onFocusGame((showRecent ? recent[0] : undefined) ?? games.find((g) => g.installed) ?? games[0] ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,7 +160,6 @@ export function Library({
   };
 
   const showRecent = prefs.showRecent && !hiddenView && !scope && recent.length > 0;
-  const filtered = install !== "all" || stores.length > 0 || search !== "";
 
   // Installed games first, then everything you own but haven't installed.
   const sections = useMemo(() => {
@@ -169,7 +173,10 @@ export function Library({
   }, [games, hiddenView, scope?.title]);
 
   return (
-    <div className="library">
+    // A view with nothing in it (no hidden games, an empty collection) drops
+    // the poster column instead of showing an empty frame beside the message.
+    <div className={`library${games?.length === 0 && !focused ? " solo" : ""}`}>
+      {(games?.length !== 0 || focused) && (
       <Poster
         ref={primaryRef}
         game={focused}
@@ -180,12 +187,17 @@ export function Library({
         onBack={backToFocused}
         request={panel}
       />
+      )}
       {menu && (
         <GameMenu
           game={menu.game}
           x={menu.x}
           y={menu.y}
-          onClose={() => setMenu(null)}
+          onClose={() => {
+            // Back to the cover the menu came from, for keyboard and controller.
+            document.querySelector<HTMLElement>(`[data-game="${menu.game.id}"]`)?.focus();
+            setMenu(null);
+          }}
           onPrimary={onPrimary}
           onToggleFavorite={onToggleFavorite}
           onToggleHidden={onToggleHidden}

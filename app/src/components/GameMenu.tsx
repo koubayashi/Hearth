@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import type { Collection, Game, GameStatus } from "../lib/types";
 import { STATUSES, STORE_LABEL } from "../lib/types";
@@ -6,11 +7,16 @@ import { Icon, type IconName } from "./Icon";
 
 export type PanelAction = "artwork" | "match";
 
-/** Right-click (or Menu key / controller Y) menu for a game. */
+/**
+ * The one menu for a game: right-click, Menu key or controller Y on a cover,
+ * and the poster's "More options" button. Kept short: statuses are one
+ * compact picker, and the store and folder links share a submenu.
+ */
 export function GameMenu({
   game,
   x,
   y,
+  anchor,
   onClose,
   onPrimary,
   onToggleFavorite,
@@ -20,6 +26,8 @@ export function GameMenu({
   game: Game;
   x: number;
   y: number;
+  /** Open above this element, right-aligned to it, instead of at x/y. */
+  anchor?: DOMRect;
   onClose: () => void;
   onPrimary: (g: Game) => void;
   onToggleFavorite: (g: Game) => void;
@@ -29,19 +37,20 @@ export function GameMenu({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
-  const [view, setView] = useState<"main" | "collections">("main");
+  const [view, setView] = useState<"main" | "collections" | "open">("main");
 
   // Keep the menu on screen near the pointer.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
+    const want = anchor ? { x: anchor.right - r.width, y: anchor.top - r.height - 6 } : { x, y };
     setPos({
-      x: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)),
-      y: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)),
+      x: Math.max(8, Math.min(want.x, window.innerWidth - r.width - 8)),
+      y: Math.max(8, Math.min(want.y, window.innerHeight - r.height - 8)),
     });
     el.querySelector<HTMLElement>("button, input")?.focus();
-  }, [x, y, view]);
+  }, [x, y, anchor, view]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && onClose();
@@ -68,8 +77,22 @@ export function GameMenu({
     </button>
   );
   const setStatus = (s: GameStatus | null) => api.setStatus(game.id, s);
+  const sub = (icon: IconName, label: string, to: "collections" | "open") => (
+    <button role="menuitem" aria-haspopup="menu" onClick={() => setView(to)}>
+      <Icon name={icon} />
+      {label}
+      <Icon name="chevronRight" size={15} className="sub-arrow" />
+    </button>
+  );
+  const back = (
+    <button role="menuitem" onClick={() => setView("main")}>
+      <Icon name="chevronLeft" />
+      Back
+    </button>
+  );
 
-  return (
+  // Rendered at the page root so no panel can clip or offset it.
+  return createPortal(
     <div
       ref={ref}
       className="menu context-menu"
@@ -90,44 +113,49 @@ export function GameMenu({
       }}
     >
       {view === "collections" ? (
-        <CollectionsView game={game} onBack={() => setView("main")} />
+        <CollectionsView game={game} back={back} />
+      ) : view === "open" ? (
+        <>
+          {back}
+          <hr />
+          {item("external", `Open ${store} page`, () => api.openStorePage(game.id))}
+          {game.installed && item("folder", "Open install folder", () => api.openInstallFolder(game.id))}
+          {item("search", "Find on Steam store…", () => onPanel("match"))}
+        </>
       ) : (
         <>
           {item(game.installed ? "play" : "download", game.installed ? "Play" : `Install from ${store}`, () => onPrimary(game))}
           {item("star", game.favorite ? "Remove from favourites" : "Add to favourites", () => onToggleFavorite(game))}
           <hr />
-          <div className="menu-label">Status</div>
-          {STATUSES.map((s) => (
-            <button
-              key={s.id}
-              role="menuitemradio"
-              aria-checked={game.status === s.id}
-              onClick={run(() => setStatus(game.status === s.id ? null : s.id))}
-            >
-              <span className={`status-dot ${s.id}`} />
-              {s.label}
-              {game.status === s.id && <Icon name="check" size={15} />}
-            </button>
-          ))}
-          <button role="menuitem" onClick={() => setView("collections")}>
-            <Icon name="collections" />
-            Add to collection…
-          </button>
+          {/* Pressing the current status again clears it. */}
+          <div className="status-pick" role="group" aria-label="Status">
+            {STATUSES.map((s) => (
+              <button
+                key={s.id}
+                role="menuitemradio"
+                aria-checked={game.status === s.id}
+                onClick={run(() => setStatus(game.status === s.id ? null : s.id))}
+              >
+                <span className={`status-dot ${s.id}`} />
+                {s.label}
+              </button>
+            ))}
+          </div>
           <hr />
+          {sub("collections", "Add to collection", "collections")}
           {item("library", "Change artwork…", () => onPanel("artwork"))}
-          {item("search", "Find on Steam store…", () => onPanel("match"))}
-          {item("external", "Open store page", () => api.openStorePage(game.id))}
-          {game.installed && item("folder", "Open install folder", () => api.openInstallFolder(game.id))}
+          {sub("external", "Store and files", "open")}
           <hr />
           {item(game.hidden ? "eye" : "hidden", game.hidden ? "Show in library" : "Hide from library", () => onToggleHidden(game))}
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 /** Tick the collections a game belongs to, or start a new one. */
-function CollectionsView({ game, onBack }: { game: Game; onBack: () => void }) {
+function CollectionsView({ game, back }: { game: Game; back: React.ReactNode }) {
   const [list, setList] = useState<Collection[] | null>(null);
   const [member, setMember] = useState<number[]>(game.collections);
   const [name, setName] = useState("");
@@ -152,10 +180,7 @@ function CollectionsView({ game, onBack }: { game: Game; onBack: () => void }) {
 
   return (
     <>
-      <button role="menuitem" onClick={onBack}>
-        <Icon name="collections" />
-        Back
-      </button>
+      {back}
       <hr />
       {list?.length === 0 && <div className="menu-label">No collections yet</div>}
       {list?.map((c) => (

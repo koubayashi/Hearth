@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
 import { StoreMatch } from "./StoreMatch";
 import { ArtworkPicker } from "./ArtworkPicker";
+import { GameMenu } from "./GameMenu";
 
 /** Store-page details and install info for a game, loaded when it's selected. */
 function useGameInfo(game: Game | null, nonce: number) {
@@ -55,8 +56,9 @@ export const Poster = forwardRef<
     request?: { action: "artwork" | "match"; nonce: number } | null;
   }
 >(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack, request }, primaryRef) {
-  const [menu, setMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  // Where the "More options" button sits while its menu is open.
+  const [menu, setMenu] = useState<DOMRect | null>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
   const [matching, setMatching] = useState(false);
   const [picking, setPicking] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -64,7 +66,7 @@ export const Poster = forwardRef<
   const { showScores } = usePrefs();
 
   useEffect(() => {
-    setMenu(false);
+    setMenu(null);
     setMatching(false);
     setPicking(false);
   }, [game?.id]);
@@ -73,21 +75,9 @@ export const Poster = forwardRef<
     setPicking(request.action === "artwork");
     setMatching(request.action === "match");
   }, [request]);
-  useEffect(() => {
-    if (!menu) return;
-    menuRef.current?.querySelector("button")?.focus();
-    const close = (e: MouseEvent) => !menuRef.current?.contains(e.target as Node) && setMenu(false);
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, [menu]);
 
-  if (!game) {
-    return (
-      <aside className="poster">
-        <p className="poster-empty">Select a game to see it here.</p>
-      </aside>
-    );
-  }
+  // Only while the library loads: the frame holds its place, quietly.
+  if (!game) return <aside className="poster" aria-hidden />;
 
   const installStore = STORE_LABEL[game.entries[0]?.store ?? "manual"];
   const year = releaseYear(details?.release_date ?? null);
@@ -101,7 +91,7 @@ export const Poster = forwardRef<
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
-          if (menu) setMenu(false);
+          if (menu) setMenu(null);
           else onBack();
         }
       }}
@@ -230,41 +220,36 @@ export const Poster = forwardRef<
             <Icon name="star" />
           </button>
           <button
+            ref={moreRef}
             className="icon-btn"
             data-nav
             aria-label="More options"
             aria-haspopup="menu"
-            aria-expanded={menu}
-            onClick={() => setMenu((m) => !m)}
+            aria-expanded={menu !== null}
+            // While open, a press here should close the menu, not reopen it.
+            onMouseDown={(e) => menu && e.stopPropagation()}
+            onClick={(e) => {
+              const at = e.currentTarget.getBoundingClientRect();
+              setMenu((m) => (m ? null : at));
+            }}
           >
             <Icon name="more" />
           </button>
           {menu && (
-            <div className="menu" role="menu" ref={menuRef}>
-              <button role="menuitem" onClick={() => (setMenu(false), api.openStorePage(game.id))}>
-                <Icon name="external" />
-                Open store page
-              </button>
-
-              {game.installed && (
-                <button role="menuitem" onClick={() => (setMenu(false), api.openInstallFolder(game.id))}>
-                  <Icon name="folder" />
-                  Open install folder
-                </button>
-              )}
-              <button role="menuitem" onClick={() => (setMenu(false), setPicking(true))}>
-                <Icon name="library" />
-                Change artwork…
-              </button>
-              <button role="menuitem" onClick={() => (setMenu(false), setMatching(true))}>
-                <Icon name="search" />
-                Find on Steam store…
-              </button>
-              <button role="menuitem" onClick={() => onToggleHidden(game)}>
-                <Icon name={game.hidden ? "eye" : "hidden"} />
-                {game.hidden ? "Show in library" : "Hide from library"}
-              </button>
-            </div>
+            <GameMenu
+              game={game}
+              x={0}
+              y={0}
+              anchor={menu}
+              onClose={() => {
+                setMenu(null);
+                moreRef.current?.focus();
+              }}
+              onPrimary={onPrimary}
+              onToggleFavorite={onToggleFavorite}
+              onToggleHidden={onToggleHidden}
+              onPanel={(action) => (action === "artwork" ? setPicking(true) : setMatching(true))}
+            />
           )}
         </div>
       </div>
