@@ -124,6 +124,7 @@ export const mockBackend = {
   },
   async openInstallFolder(_id: number) {},
   async openStorePage(_id: number) {},
+  async openBackloggd(_id: number) {},
   async setStatus(id: number, status: GameStatus | null) {
     const g = games.find((g) => g.id === id);
     if (g) g.status = status;

@@ -606,6 +606,7 @@ fn main() {
             details::install_info,
             details::open_install_folder,
             details::open_store_page,
+            details::open_backloggd,
             folders::game_folders,
             folders::add_game_folder,
             folders::remove_game_folder,

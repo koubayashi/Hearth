@@ -117,6 +117,7 @@ export function GameMenu({
           {item("library", "Change artwork…", () => onPanel("artwork"))}
           {item("search", "Find on Steam store…", () => onPanel("match"))}
           {item("external", "Open store page", () => api.openStorePage(game.id))}
+          {item("external", "Open on Backloggd", () => api.openBackloggd(game.id))}
           {game.installed && item("folder", "Open install folder", () => api.openInstallFolder(game.id))}
           <hr />
           {item(game.hidden ? "eye" : "hidden", game.hidden ? "Show in library" : "Hide from library", () => onToggleHidden(game))}

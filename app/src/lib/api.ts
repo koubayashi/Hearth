@@ -31,6 +31,7 @@ const backend = isTauri()
       installInfo: (id: number, refresh: boolean) => invoke<InstallInfo | null>("install_info", { id, refresh }),
       openInstallFolder: (id: number) => invoke<void>("open_install_folder", { id }),
       openStorePage: (id: number) => invoke<void>("open_store_page", { id }),
+      openBackloggd: (id: number) => invoke<void>("open_backloggd", { id }),
       gameFolders: () => invoke<string[]>("game_folders"),
       searchStore: (term: string) => invoke<StoreHit[]>("search_store", { term }),
       sgdbSetKey: (key: string) => invoke<void>("sgdb_set_key", { key }),
