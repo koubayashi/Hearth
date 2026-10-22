@@ -142,6 +142,11 @@ impl Epic {
         }
     }
 
+    /// When each game was last played, from the Epic launcher's own logs.
+    fn last_played(&self) -> HashMap<String, i64> {
+        crate::epic_logs::log_dir().map(|d| crate::epic_logs::last_played(&d)).unwrap_or_default()
+    }
+
     pub fn with_manifests(mut self, dir: impl Into<PathBuf>) -> Self {
         self.manifests = dir.into();
         self
@@ -295,11 +300,16 @@ impl LibraryProvider for Epic {
 
     async fn installed(&self) -> anyhow::Result<Vec<GameEntry>> {
         let Ok(dir) = std::fs::read_dir(&self.manifests) else { return Ok(Vec::new()) };
+        let played = self.last_played();
         Ok(dir
             .flatten()
             .filter(|f| f.path().extension().is_some_and(|e| e == "item"))
             .filter_map(|f| std::fs::read_to_string(f.path()).ok())
             .filter_map(|t| parse_manifest(&t))
+            .map(|mut g| {
+                g.store_last_played = played.get(&g.store_game_id).copied();
+                g
+            })
             .collect())
     }
 
@@ -314,6 +324,7 @@ impl LibraryProvider for Epic {
             .collect();
         self.fill_catalog(&s, &ids).await;
         let playtime = self.playtime(&s).await.unwrap_or_default();
+        let played = self.last_played();
 
         let cat = self.catalog.lock().unwrap();
         Ok(ids
@@ -327,7 +338,7 @@ impl LibraryProvider for Epic {
                     installed: false,
                     install_dir: None,
                     store_playtime_secs: playtime.get(&id.app_name).copied(),
-                    store_last_played: None,
+                    store_last_played: played.get(&id.encode()).copied(),
                 })
             })
             .collect())

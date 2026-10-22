@@ -2,6 +2,7 @@
 //! syncs every enabled provider into the local database.
 
 pub mod epic;
+pub mod epic_logs;
 pub mod folders;
 pub mod metadata;
 pub mod secrets;

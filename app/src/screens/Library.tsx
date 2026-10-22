@@ -5,7 +5,8 @@ import { STORE_LABEL } from "../lib/types";
 import { formatHoursShort, formatLastPlayed, formatPlaytime } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import { Art } from "../components/Art";
-import { CoverGrid } from "../components/CoverGrid";
+import { CoverGrid, isMenuKey } from "../components/CoverGrid";
+import { GameMenu, type PanelAction } from "../components/GameMenu";
 import { Icon } from "../components/Icon";
 import { Poster } from "../components/Poster";
 import { StoreIcon } from "../components/StoreIcon";
@@ -46,6 +47,12 @@ export function Library({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [all, setAll] = useState<Game[]>([]);
   const [reveal, setReveal] = useState<{ id: number; nonce: number } | null>(null);
+  const [menu, setMenu] = useState<{ game: Game; x: number; y: number } | null>(null);
+  const [panel, setPanel] = useState<{ action: PanelAction; nonce: number } | null>(null);
+  const openMenu = (g: Game, x: number, y: number) => {
+    onFocusGame(g);
+    setMenu({ game: g, x, y });
+  };
 
   useEffect(() => {
     let live = true;
@@ -139,7 +146,20 @@ export function Library({
         onToggleHidden={onToggleHidden}
         onToggleFavorite={onToggleFavorite}
         onBack={backToFocused}
+        request={panel}
       />
+      {menu && (
+        <GameMenu
+          game={menu.game}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          onPrimary={onPrimary}
+          onToggleFavorite={onToggleFavorite}
+          onToggleHidden={onToggleHidden}
+          onPanel={(action) => setPanel({ action, nonce: Date.now() })}
+        />
+      )}
     <div className="scroll" ref={scrollRef}>
       <div className="top" role="toolbar" aria-label="Library filters">
         <label className={`search ${search ? "has-value" : ""}`} title="Search">
@@ -205,7 +225,20 @@ export function Library({
                     onFocus={() => onFocusGame(g)}
                     onClick={() => onFocusGame(g)}
                     onDoubleClick={() => onPrimary(g)}
-                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), activate(g))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        activate(g);
+                      } else if (isMenuKey(e)) {
+                        e.preventDefault();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        openMenu(g, r.left + r.width / 2, r.top + r.height / 3);
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      openMenu(g, e.clientX, e.clientY);
+                    }}
                   >
                     <span className="frame">
                       <Art src={g.hero} title={g.title} />
@@ -264,6 +297,7 @@ export function Library({
                 <div className="section-grid">
                   <CoverGrid
                     reveal={reveal}
+                    onContext={openMenu}
                     games={s.games}
                     focusedId={focused?.id ?? null}
                     scrollRef={scrollRef}

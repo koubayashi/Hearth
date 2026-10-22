@@ -51,8 +51,10 @@ export const Poster = forwardRef<
     onToggleHidden: (g: Game) => void;
     onToggleFavorite: (g: Game) => void;
     onBack: () => void;
+    /** Open a picker from outside (the right-click menu). */
+    request?: { action: "artwork" | "match"; nonce: number } | null;
   }
->(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack }, primaryRef) {
+>(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack, request }, primaryRef) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [matching, setMatching] = useState(false);
@@ -66,6 +68,11 @@ export const Poster = forwardRef<
     setMatching(false);
     setPicking(false);
   }, [game?.id]);
+  useEffect(() => {
+    if (!request) return;
+    setPicking(request.action === "artwork");
+    setMatching(request.action === "match");
+  }, [request]);
   useEffect(() => {
     if (!menu) return;
     menuRef.current?.querySelector("button")?.focus();

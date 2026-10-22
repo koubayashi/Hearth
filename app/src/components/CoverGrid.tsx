@@ -19,8 +19,11 @@ export function CoverGrid({
   scrollRef,
   onFocusGame,
   onActivate,
+  onContext,
   reveal,
 }: {
+  /** Right-click / Menu key on a cover, with where to open the menu. */
+  onContext?: (g: Game, x: number, y: number) => void;
   /** Scroll this game into view; the nonce makes repeat picks of one game work. */
   reveal?: { id: number; nonce: number } | null;
   games: Game[];
@@ -108,7 +111,21 @@ export function CoverGrid({
               onFocus={() => onFocusGame(g)}
               onClick={() => onFocusGame(g)}
               onDoubleClick={() => onActivate(g)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onActivate(g))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  onActivate(g);
+                } else if (isMenuKey(e) && onContext) {
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  onContext(g, r.left + r.width / 2, r.top + r.height / 3);
+                }
+              }}
+              onContextMenu={(e) => {
+                if (!onContext) return;
+                e.preventDefault();
+                onContext(g, e.clientX, e.clientY);
+              }}
             >
               <span className="cover-art">
                 <Art src={g.cover} title={g.title} />
@@ -124,4 +141,9 @@ export function CoverGrid({
       ))}
     </div>
   );
+}
+
+/** The keyboard Menu key, Shift+F10, or a controller's Y button (via the bridge). */
+export function isMenuKey(e: { key: string; shiftKey: boolean }) {
+  return e.key === "ContextMenu" || (e.shiftKey && e.key === "F10");
 }
