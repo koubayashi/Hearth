@@ -439,3 +439,19 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .match-list button:disabled { opacity: 0.5; cursor: default; }
 .match-list img { width: 92px; height: 35px; object-fit: cover; border-radius: 3px; background: var(--base-2); flex: none; }
 .match-list span { font-size: var(--text-sm); }
+
+/* ---------- random game ---------- */
+.surprise {
+  all: unset; flex: none; display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px;
+  border-radius: var(--radius-control); color: var(--ink-2); font-weight: 500; cursor: pointer; white-space: nowrap;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.surprise:hover { color: var(--ink); background: var(--line); }
+.surprise:active svg { transform: rotate(90deg); }
+.surprise svg { transition: transform var(--dur-med) var(--ease-out); }
+.surprise:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.surprise:disabled { opacity: 0.4; cursor: default; }
+@container (max-width: 980px) {
+  .surprise .label { display: none; }
+  .surprise { padding: 0 7px; }
+}

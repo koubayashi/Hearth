@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 const DETAILS_URL: &str = "https://store.steampowered.com/api/appdetails";
 const SEARCH_URL: &str = "https://store.steampowered.com/api/storesearch/";
+const ASSETS_URL: &str = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameDetails {
@@ -54,6 +55,32 @@ impl Metadata {
             .await
             .context("reading Steam store details")?;
         Ok(parse_details(&body, app_id))
+    }
+
+    /// The real artwork addresses for Steam apps. Steam moved most artwork to
+    /// content-hashed paths, so guessed URLs 404 for newer or updated games.
+    pub async fn steam_art(&self, app_ids: &[u64]) -> anyhow::Result<std::collections::HashMap<u64, crate::Artwork>> {
+        let mut out = std::collections::HashMap::new();
+        for chunk in app_ids.chunks(50) {
+            let ids: Vec<serde_json::Value> = chunk.iter().map(|id| serde_json::json!({ "appid": id })).collect();
+            let input = serde_json::json!({
+                "ids": ids,
+                "context": { "language": "english", "country_code": "US" },
+                "data_request": { "include_assets": true },
+            });
+            let body: serde_json::Value = self
+                .http
+                .get(ASSETS_URL)
+                .query(&[("input_json", input.to_string())])
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await
+                .context("reading Steam artwork")?;
+            out.extend(parse_assets(&body));
+        }
+        Ok(out)
     }
 
     /// Finds the Steam store page for a game from another store, by title.
@@ -235,6 +262,34 @@ fn parse_details(body: &serde_json::Value, app_id: u64) -> Option<GameDetails> {
     })
 }
 
+const ASSET_BASE: &str = "https://shared.steamstatic.com/store_item_assets/";
+
+fn parse_assets(body: &serde_json::Value) -> std::collections::HashMap<u64, crate::Artwork> {
+    let mut out = std::collections::HashMap::new();
+    let Some(items) = body.pointer("/response/store_items").and_then(|v| v.as_array()) else { return out };
+    for item in items {
+        let (Some(id), Some(assets)) = (item.get("appid").and_then(|v| v.as_u64()), item.get("assets")) else {
+            continue;
+        };
+        let Some(format) = assets.get("asset_url_format").and_then(|v| v.as_str()) else { continue };
+        let url = |key: &str| {
+            assets
+                .get(key)
+                .and_then(|v| v.as_str())
+                .map(|file| format!("{ASSET_BASE}{}", format.replace("${FILENAME}", file)))
+        };
+        out.insert(
+            id,
+            crate::Artwork {
+                cover: url("library_capsule"),
+                hero: url("library_hero").or_else(|| url("hero_capsule")),
+                logo: url("library_logo"),
+            },
+        );
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,6 +313,17 @@ mod tests {
         assert_eq!(d.features, ["Single-player", "Multiplayer", "Co-op", "Full controller support", "Cloud saves", "Achievements"]);
         assert_eq!(d.metacritic, Some(72));
         assert_eq!(d.recommendations, Some(15643));
+    }
+
+    #[test]
+    fn builds_hashed_artwork_urls() {
+        let body: serde_json::Value = serde_json::from_str(r#"{"response":{"store_items":[{"appid":3639070,"assets":{
+            "asset_url_format":"steam/apps/3639070/${FILENAME}?t=1790597941",
+            "library_capsule":"412f/library_capsule.jpg","library_hero":"2221/library_hero.jpg"}}]}}"#).unwrap();
+        let art = &parse_assets(&body)[&3639070];
+        assert_eq!(art.cover.as_deref(), Some("https://shared.steamstatic.com/store_item_assets/steam/apps/3639070/412f/library_capsule.jpg?t=1790597941"));
+        assert_eq!(art.hero.as_deref(), Some("https://shared.steamstatic.com/store_item_assets/steam/apps/3639070/2221/library_hero.jpg?t=1790597941"));
+        assert_eq!(art.logo, None);
     }
 
     #[test]

@@ -193,6 +193,23 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Games whose artwork comes (or should come) from a Steam store page:
+    /// (game id, Steam app id). Covers from other stores are left alone.
+    pub fn steam_art_targets(&self) -> Result<Vec<(i64, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id, CAST(e.store_game_id AS INTEGER) FROM games g
+               JOIN store_entries e ON e.game_id = g.id AND e.store = 'steam'
+              WHERE g.cover IS NULL OR g.cover LIKE '%steamstatic.com%'
+             UNION
+             SELECT g.id, json_extract(g.details_json, '$.steam_app_id') FROM games g
+              WHERE g.details_json IS NOT NULL
+                AND g.id NOT IN (SELECT game_id FROM store_entries WHERE store = 'steam')
+                AND (g.cover IS NULL OR g.cover LIKE '%steamstatic.com%')",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// Forget lookups that found nothing, so they're tried again (after the
     /// matcher improves, or at startup).
     pub fn clear_detail_misses(&self) -> Result<()> {

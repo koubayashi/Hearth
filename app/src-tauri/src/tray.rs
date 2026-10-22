@@ -9,12 +9,33 @@ use crate::tracking::{self, NowPlaying};
 
 const TRAY_ID: &str = "hearth";
 
+/// Shows the main window, loading the interface again if it was unloaded
+/// when the window was closed to the tray.
 pub fn show_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.unminimize();
-        let _ = w.show();
-        let _ = w.set_focus();
-    }
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => {
+            let Some(config) = app.config().app.windows.iter().find(|w| w.label == "main") else { return };
+            match tauri::WebviewWindowBuilder::from_config(app, config).and_then(|b| b.build()) {
+                Ok(w) => {
+                    style_main(&w);
+                    w
+                }
+                Err(_) => return,
+            }
+        }
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Mica needs Windows 11; on Windows 10 the CSS background shows instead.
+pub fn style_main(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "windows")]
+    let _ = window_vibrancy::apply_mica(window, None);
+    #[cfg(not(target_os = "windows"))]
+    let _ = window;
 }
 
 pub fn install(app: &AppHandle) -> tauri::Result<()> {

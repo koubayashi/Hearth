@@ -284,6 +284,43 @@ fn steam_refresh_silently(app: &AppHandle) {
     });
 }
 
+/// Epic's refresh tokens last about 8 hours, so after a night off they're
+/// gone. Epic's sign-in page remembers the user in its cookies, so a hidden
+/// window usually gets a new code without asking; only if that fails is the
+/// user asked to sign in again.
+fn epic_sign_in_silently(app: &AppHandle) {
+    let url = epic::login_url();
+    let _ = open_auth_window(
+        app,
+        "epic-refresh",
+        "Epic Games",
+        &url,
+        "https://www.epicgames.com/id/api/redirect",
+        false,
+        |app, body| {
+            close_window(&app, "epic-refresh");
+            match epic::code_from_redirect_body(&body) {
+                Some(code) => finish_epic_sign_in(app, code),
+                None => give_up_epic(&app),
+            }
+        },
+    );
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        if app.get_webview_window("epic-refresh").is_some() {
+            close_window(&app, "epic-refresh");
+            give_up_epic(&app);
+        }
+    });
+}
+
+fn give_up_epic(app: &AppHandle) {
+    app.state::<AppState>().epic.forget();
+    let _ = app.emit("accounts-changed", ());
+    let _ = app.emit("sync-error", epic::SESSION_EXPIRED);
+}
+
 #[tauri::command]
 async fn epic_sign_out(app: AppHandle) -> CmdResult<()> {
     let epic = app.state::<AppState>().epic.clone();
@@ -364,6 +401,32 @@ async fn fill_missing_art(app: &AppHandle) {
     }
 }
 
+/// Puts the real Steam artwork addresses on every Steam-sourced cover.
+async fn refresh_steam_art(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let targets = lock(&state.db).steam_art_targets().unwrap_or_default();
+    if targets.is_empty() {
+        return;
+    }
+    let mut ids: Vec<u64> = targets.iter().filter_map(|(_, a)| u64::try_from(*a).ok()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let Ok(art) = state.metadata.steam_art(&ids).await else { return };
+    let db = lock(&state.db);
+    let mut changed = false;
+    for (game, app_id) in targets {
+        let Some(a) = u64::try_from(app_id).ok().and_then(|id| art.get(&id)) else { continue };
+        if let Some(cover) = &a.cover {
+            let hero = a.hero.as_deref().unwrap_or(cover);
+            changed |= db.set_game_art(game, cover, hero, a.logo.as_deref().unwrap_or("")).is_ok();
+        }
+    }
+    drop(db);
+    if changed {
+        let _ = app.emit("library-changed", ());
+    }
+}
+
 /// Re-reads every store in the background and tells the UI when anything changed.
 pub(crate) fn sync_all(app: AppHandle) {
     {
@@ -394,6 +457,10 @@ pub(crate) fn sync_all(app: AppHandle) {
                     steam_refresh_silently(&app);
                     Vec::new()
                 }
+                Err(e) if store == hub_core::StoreId::Epic && e.to_string() == epic::SESSION_EXPIRED => {
+                    epic_sign_in_silently(&app);
+                    Vec::new()
+                }
                 Err(e) => {
                     let _ = app.emit("sync-error", format!("{e:#}"));
                     Vec::new()
@@ -422,6 +489,7 @@ pub(crate) fn sync_all(app: AppHandle) {
         tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
         fill_missing_art(&app).await;
+        refresh_steam_art(&app).await;
         let _ = app.emit("library-changed", ());
     });
 }
@@ -469,10 +537,8 @@ fn main() {
                 syncing: Mutex::new(false),
             });
 
-            #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
-                // Mica needs Windows 11; on Windows 10 the CSS background shows instead.
-                let _ = window_vibrancy::apply_mica(&window, None);
+                tray::style_main(&window);
             }
 
             tray::install(app.handle())?;
@@ -491,20 +557,16 @@ fn main() {
             tracking::start(app.handle().clone());
             sync_all(app.handle().clone());
 
-            // Started with Windows: stay in the tray until the user opens Hearth.
-            if !std::env::args().any(|a| a == "--minimized") {
+            // Started with Windows: stay in the tray, without even loading the
+            // interface, until the user opens Hearth.
+            if std::env::args().any(|a| a == "--minimized") {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.destroy();
+                }
+            } else {
                 tray::show_main(app.handle());
             }
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            // Closing the window keeps Hearth in the tray so playtime keeps counting.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
-            }
         })
         .invoke_handler(tauri::generate_handler![
             list_games,
@@ -535,10 +597,13 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building Hearth")
-        .run(|app, event| {
+        .run(|app, event| match event {
+            // Closing the window unloads the interface (most of Hearth's memory)
+            // but keeps Hearth in the tray, so playtime keeps counting. Only
+            // Quit, which passes an exit code, really exits.
+            tauri::RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
             // Windows shutdown, sign-out or Quit: save what is being played.
-            if let tauri::RunEvent::Exit = event {
-                tracking::flush(app);
-            }
+            tauri::RunEvent::Exit => tracking::flush(app),
+            _ => {}
         });
 }

@@ -45,6 +45,7 @@ export function Library({
   const [games, setGames] = useState<Game[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [all, setAll] = useState<Game[]>([]);
+  const [reveal, setReveal] = useState<{ id: number; nonce: number } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -91,6 +92,17 @@ export function Library({
     onFocusGame((showRecent ? recent[0] : undefined) ?? games.find((g) => g.installed) ?? games[0] ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games, recent]);
+
+  // A random game from what's on screen, preferring ones you can play right now.
+  const surprise = () => {
+    const pool = games ?? [];
+    const playable = pool.filter((g) => g.installed);
+    const from = (playable.length > 0 ? playable : pool).filter((g) => g.id !== focused?.id);
+    const pick = from[Math.floor(Math.random() * from.length)] ?? pool[0];
+    if (!pick) return;
+    onFocusGame(pick);
+    setReveal({ id: pick.id, nonce: Date.now() });
+  };
 
   const toggleStore = (s: StoreId) =>
     setStores((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
@@ -163,6 +175,18 @@ export function Library({
           </button>
         ))}
         </div>
+        <span className="spacer" />
+        <button
+          className="surprise"
+          data-nav
+          title="Pick a random game"
+          aria-label="Pick a random game"
+          disabled={!games || games.length === 0}
+          onClick={surprise}
+        >
+          <Icon name="dice" size={16} />
+          <span className="label">Surprise me</span>
+        </button>
       </div>
 
       <div className="page">
@@ -239,6 +263,7 @@ export function Library({
                 </h2>
                 <div className="section-grid">
                   <CoverGrid
+                    reveal={reveal}
                     games={s.games}
                     focusedId={focused?.id ?? null}
                     scrollRef={scrollRef}

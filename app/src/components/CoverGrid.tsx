@@ -19,7 +19,10 @@ export function CoverGrid({
   scrollRef,
   onFocusGame,
   onActivate,
+  reveal,
 }: {
+  /** Scroll this game into view; the nonce makes repeat picks of one game work. */
+  reveal?: { id: number; nonce: number } | null;
   games: Game[];
   focusedId: number | null;
   scrollRef: RefObject<HTMLElement | null>;
@@ -63,6 +66,23 @@ export function CoverGrid({
   });
   // Column count or cell size changed: every row height is stale.
   useLayoutEffect(() => v.measure(), [rowH, v]);
+
+  useLayoutEffect(() => {
+    if (!reveal) return;
+    const i = games.findIndex((g) => g.id === reveal.id);
+    if (i < 0) return;
+    v.scrollToIndex(Math.floor(i / cols), { align: "center" });
+    // Focus once the row exists, so arrows and A/Enter continue from there.
+    // A long jump renders the row a frame or two later: retry briefly.
+    let tries = 0;
+    const focus = () => {
+      const el = document.querySelector<HTMLElement>(`.cover[data-game="${reveal.id}"]`);
+      if (el) el.focus({ preventScroll: true });
+      else if (tries++ < 10) setTimeout(focus, 40);
+    };
+    requestAnimationFrame(focus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal]);
 
   return (
     <div ref={ref} style={{ position: "relative", height: v.getTotalSize() }}>

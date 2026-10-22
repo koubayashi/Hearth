@@ -27,6 +27,9 @@ const LIBRARY_URL: &str =
 const PLAYTIME_URL: &str = "https://library-service.live.use1a.on.epicgames.com/library/api/public/playtime/account";
 const CATALOG_URL: &str = "https://catalog-public-service-prod06.ol.epicgames.com/catalog/api/shared/namespace";
 
+/// The session (or one-time code) was rejected; a fresh sign-in is needed.
+pub const SESSION_EXPIRED: &str = "Your Epic sign-in expired. Sign in again in Settings.";
+
 /// Where the user signs in. After login Epic shows a JSON page containing
 /// `authorizationCode`, which the app's login window picks up.
 pub fn login_url() -> String {
@@ -161,6 +164,11 @@ impl Epic {
         }
     }
 
+    /// Forget the session locally without contacting Epic.
+    pub fn forget(&self) {
+        self.drop_session();
+    }
+
     fn drop_session(&self) {
         *self.session.lock().unwrap() = None;
         (self.on_session)(None);
@@ -183,8 +191,11 @@ impl Epic {
             .form(&body)
             .send()
             .await?;
+        if matches!(res.status().as_u16(), 400 | 401) {
+            bail!(SESSION_EXPIRED);
+        }
         if !res.status().is_success() {
-            bail!("Epic sign-in failed ({}). The code may have expired; sign in again.", res.status());
+            bail!("Epic sign-in failed ({}). Try again later.", res.status());
         }
         let t: TokenResponse = res.json().await?;
         Ok(Session {
@@ -207,16 +218,12 @@ impl Epic {
         if s.expires_at_unix - now() > 120 {
             return Ok(Some(s));
         }
-        match self.token(&[("grant_type", "refresh_token"), ("refresh_token", &s.refresh_token)]).await {
-            Ok(fresh) => {
-                self.store(fresh.clone());
-                Ok(Some(fresh))
-            }
-            Err(e) => {
-                self.drop_session();
-                Err(e.context("Your Epic sign-in expired; sign in again in Settings"))
-            }
-        }
+        // A rejected refresh means the refresh token itself expired (Epic keeps
+        // them ~8 hours): report SESSION_EXPIRED so the app can sign in again
+        // silently. Anything else (offline, Epic down) keeps the session.
+        let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &s.refresh_token)]).await?;
+        self.store(fresh.clone());
+        Ok(Some(fresh))
     }
 
     async fn get<T: serde::de::DeserializeOwned>(&self, url: &str, s: &Session) -> anyhow::Result<T> {
