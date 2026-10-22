@@ -22,6 +22,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/002_details.sql"),
     include_str!("../migrations/003_active_sessions.sql"),
     include_str!("../migrations/004_art_source.sql"),
+    include_str!("../migrations/005_saves.sql"),
 ];
 
 pub struct Db {
@@ -256,6 +257,52 @@ impl Db {
         Ok(self.conn.execute(&sql, params![game_id, url, source])? > 0)
     }
 
+    /// Games whose save locations haven't been looked up since `older_than`:
+    /// (id, title, Steam app id if known).
+    pub fn save_lookup_targets(&self, older_than: i64, limit: i64) -> Result<Vec<(i64, String, Option<i64>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id, g.title,
+                    COALESCE((SELECT CAST(e.store_game_id AS INTEGER) FROM store_entries e
+                               WHERE e.game_id = g.id AND e.store = 'steam' LIMIT 1),
+                             json_extract(g.details_json, '$.steam_app_id'))
+               FROM games g
+              WHERE g.save_checked_at IS NULL OR g.save_checked_at < ?1
+              LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![older_than, limit], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn set_save_paths(&self, game_id: i64, paths: &[String], now: i64) -> Result<()> {
+        let json = serde_json::to_string(paths).unwrap_or_else(|_| "[]".into());
+        self.conn.execute(
+            "UPDATE games SET save_paths_json = ?2, save_checked_at = ?3 WHERE id = ?1",
+            params![game_id, json, now],
+        )?;
+        Ok(())
+    }
+
+    /// Games with known save locations: (id, paths, an install folder).
+    pub fn save_locations(&self) -> Result<Vec<(i64, Vec<String>, Option<String>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id, g.save_paths_json,
+                    (SELECT install_dir FROM store_entries e WHERE e.game_id = g.id AND e.install_dir IS NOT NULL LIMIT 1)
+               FROM games g WHERE g.save_paths_json IS NOT NULL AND g.save_paths_json != '[]'",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            let json: String = r.get(1)?;
+            Ok((r.get(0)?, serde_json::from_str(&json).unwrap_or_default(), r.get(2)?))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn set_save_seen(&self, game_id: i64, at: i64) -> Result<bool> {
+        Ok(self.conn.execute(
+            "UPDATE games SET save_seen_at = ?2 WHERE id = ?1 AND (save_seen_at IS NULL OR save_seen_at != ?2)",
+            params![game_id, at],
+        )? > 0)
+    }
+
     /// Drop chosen artwork so the store's (and SteamGridDB's) apply again.
     pub fn reset_art(&self, game_id: i64) -> Result<()> {
         self.conn.execute(
@@ -475,7 +522,7 @@ impl Db {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, favorite, added_at, cover, hero, logo, description FROM games
+            "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at FROM games
              WHERE ?1 IS NULL OR id = ?1",
         )?;
         let rows = stmt.query_map([only], |r| {
@@ -488,12 +535,13 @@ impl Db {
                 r.get::<_, Option<String>>(5)?,
                 r.get::<_, Option<String>>(6)?,
                 r.get::<_, Option<String>>(7)?,
+                r.get::<_, Option<i64>>(8)?,
             ))
         })?;
 
         let mut games = Vec::new();
         for row in rows {
-            let (id, title, favorite, added_at, cover, hero, logo, description) = row?;
+            let (id, title, favorite, added_at, cover, hero, logo, description, save_seen) = row?;
             let with_last = entries.remove(&id).unwrap_or_default();
             let (hub_secs, hub_last) = sessions.get(&id).copied().unwrap_or((0, 0));
 
@@ -509,6 +557,8 @@ impl Db {
                 .iter()
                 .filter_map(|(_, l)| *l)
                 .chain((hub_last > 0).then_some(hub_last))
+                // The newest save file dates sessions nobody else saw.
+                .chain(save_seen)
                 .max();
             let entries: Vec<StoreEntry> = with_last.into_iter().map(|(e, _)| e).collect();
 
@@ -693,6 +743,22 @@ mod tests {
         assert!(!db.set_art(id, "cover", "https://cdn2.steamgriddb.com/grid/b.png", "sgdb").unwrap());
         assert_eq!(db.game(id).unwrap().unwrap().cover.as_deref(), Some("mine.png"));
         assert!(db.steam_art_targets().unwrap().is_empty(), "Steam refresh leaves it alone too");
+    }
+
+    #[test]
+    fn save_files_date_games_nobody_saw_played() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Epic, &[entry(StoreId::Epic, "ff", "Freedom Fighters", false)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        assert_eq!(db.save_lookup_targets(100, 10).unwrap(), [(id, "Freedom Fighters".to_string(), None)]);
+
+        db.set_save_paths(id, &["{{p|appdata}}\\IO Interactive\\Freedom Fighters".into()], 200).unwrap();
+        assert!(db.save_lookup_targets(100, 10).unwrap().is_empty(), "looked up recently");
+        assert_eq!(db.save_locations().unwrap().len(), 1);
+
+        assert!(db.set_save_seen(id, 1_784_294_580).unwrap());
+        assert!(!db.set_save_seen(id, 1_784_294_580).unwrap(), "unchanged");
+        assert_eq!(db.game(id).unwrap().unwrap().last_played, Some(1_784_294_580));
     }
 
     #[test]

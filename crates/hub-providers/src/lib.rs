@@ -5,6 +5,7 @@ pub mod epic;
 pub mod epic_logs;
 pub mod folders;
 pub mod metadata;
+pub mod saves;
 pub mod secrets;
 pub mod sgdb;
 pub mod steam;

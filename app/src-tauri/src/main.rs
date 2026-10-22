@@ -3,6 +3,7 @@
 mod artwork;
 mod details;
 mod folders;
+mod saves;
 mod tracking;
 mod tray;
 
@@ -23,6 +24,7 @@ pub(crate) struct AppState {
     pub(crate) metadata: hub_providers::metadata::Metadata,
     pub(crate) folders: Arc<folders::FolderProvider>,
     pub(crate) sgdb: Arc<hub_providers::sgdb::SteamGridDb>,
+    pub(crate) saves: hub_providers::saves::Saves,
     providers: Vec<Arc<dyn LibraryProvider>>,
     syncing: Mutex<bool>,
 }
@@ -501,6 +503,7 @@ pub(crate) fn sync_all(app: AppHandle) {
         tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
         refresh_art(&app).await;
+        saves::refresh(&app).await;
         let _ = app.emit("library-changed", ());
     });
 }
@@ -542,6 +545,7 @@ fn main() {
                 // Stores first, so the folder scan knows which folders they already own.
                 providers: vec![steam.clone(), epic.clone(), folders.clone()],
                 folders,
+                saves: Default::default(),
                 sgdb: Arc::new(hub_providers::sgdb::SteamGridDb::new(secrets::load("sgdb-key"))),
                 steam,
                 metadata: Default::default(),

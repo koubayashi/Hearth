@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import type { ArtKind, ArtOption, Game } from "../lib/types";
 import { Icon } from "./Icon";
@@ -14,11 +15,17 @@ export function ArtworkPicker({ game, onDone, onClose }: { game: Game; onDone: (
   const [options, setOptions] = useState<ArtOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [broken, setBroken] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>(".art-dialog [role=tab]")?.focus();
+  }, []);
 
   useEffect(() => {
     let live = true;
     setOptions(null);
     setError(null);
+    setBroken(new Set());
     api
       .artworkOptions(game.id, kind)
       .then((o) => live && setOptions(o))
@@ -50,10 +57,15 @@ export function ArtworkPicker({ game, onDone, onClose }: { game: Game; onDone: (
     }
   };
 
-  return (
+  const shown = options?.filter((o) => !broken.has(o.url)) ?? null;
+
+  // A large window over the library: the game panel is too narrow to judge art.
+  return createPortal(
+    <div className="art-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
     <div
-      className="match"
+      className="art-dialog"
       role="dialog"
+      aria-modal="true"
       aria-label={`Change artwork for ${game.title}`}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
@@ -63,7 +75,7 @@ export function ArtworkPicker({ game, onDone, onClose }: { game: Game; onDone: (
       }}
     >
       <div className="match-head">
-        <b>Change artwork</b>
+        <b>Change artwork · {game.title}</b>
         <button className="icon-btn small" data-nav aria-label="Close" onClick={onClose}>
           <Icon name="close" size={14} />
         </button>
@@ -84,11 +96,16 @@ export function ArtworkPicker({ game, onDone, onClose }: { game: Game; onDone: (
       </div>
       {error && <p className="note error">{error}</p>}
       {!error && options === null && <p className="note">Loading community artwork…</p>}
-      {options?.length === 0 && <p className="note">SteamGridDB has no {kind === "cover" ? "covers" : "backgrounds"} for this game yet.</p>}
+      {shown?.length === 0 && <p className="note">SteamGridDB has no {kind === "cover" ? "covers" : "backgrounds"} for this game yet.</p>}
       <div className={`art-grid ${kind}`}>
-        {options?.map((o) => (
+        {shown?.map((o) => (
           <button key={o.url} data-nav disabled={busy} onClick={() => pick(o.url)} title={o.style || "Artwork"}>
-            <img src={o.thumb} alt="" loading="lazy" />
+            <img
+              src={o.thumb}
+              alt=""
+              loading="lazy"
+              onError={() => setBroken((b) => new Set(b).add(o.url))}
+            />
           </button>
         ))}
       </div>
@@ -96,5 +113,7 @@ export function ArtworkPicker({ game, onDone, onClose }: { game: Game; onDone: (
         Use the store's artwork again
       </button>
     </div>
+    </div>,
+    document.body,
   );
 }

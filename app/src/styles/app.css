@@ -471,16 +471,27 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   .surprise { padding: 0 7px; }
 }
 
-/* ---------- artwork picker ---------- */
+/* ---------- artwork picker (a large window over the library) ---------- */
+.art-backdrop {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--space-6);
+  background: color-mix(in srgb, var(--base) 55%, transparent); backdrop-filter: blur(6px);
+  animation: fade var(--dur-med) var(--ease-out);
+}
+.art-dialog {
+  width: min(1180px, 100%); height: min(860px, 100%); display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-5); border-radius: var(--radius-panel); background: var(--base-2);
+  border: 1px solid var(--line-strong); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  animation: pop var(--dur-med) var(--ease-out);
+}
 .art-tabs { align-self: flex-start; }
-.art-grid { display: grid; gap: 10px; overflow-y: auto; align-content: start; flex: 1; min-height: 0; }
-.art-grid.cover { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-.art-grid.hero, .art-grid.logo { grid-template-columns: 1fr; }
+.art-grid { display: grid; gap: 14px; overflow-y: auto; align-content: start; flex: 1; min-height: 0; padding: 2px; }
+.art-grid.cover { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.art-grid.hero, .art-grid.logo { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); }
 .art-grid button {
   all: unset; cursor: pointer; border-radius: var(--radius-art); overflow: hidden; background: var(--base);
   box-shadow: 0 0 0 1px var(--line); transition: box-shadow var(--dur-fast), transform var(--dur-fast) var(--ease-out);
 }
-.art-grid button:hover, .art-grid button:focus-visible { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-1px); }
+.art-grid button:hover, .art-grid button:focus-visible { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-2px); }
 .art-grid button:disabled { opacity: 0.5; cursor: default; }
 .art-grid img { display: block; width: 100%; object-fit: cover; }
 .art-grid.cover img { aspect-ratio: 2 / 3; }
