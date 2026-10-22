@@ -72,7 +72,13 @@ fn steam_app_of(app: &AppHandle, id: i64) -> CmdResult<(String, Option<i64>)> {
 #[tauri::command]
 pub async fn artwork_options(app: AppHandle, id: i64, kind: ArtKind) -> CmdResult<Vec<ArtOption>> {
     let (title, steam_app) = steam_app_of(&app, id)?;
-    let Some(r) = game_ref(&app, &title, steam_app).await.map_err(|e| format!("{e:#}"))? else {
+    let sgdb = &app.state::<AppState>().sgdb;
+    let r = match steam_app.and_then(|a| u64::try_from(a).ok()) {
+        Some(app_id) => Some(GameRef::Steam(app_id)),
+        // The user sees the pictures, so the closest title is fine here.
+        None => sgdb.closest_game(&title).await.map_err(|e| format!("{e:#}"))?.map(GameRef::Sgdb),
+    };
+    let Some(r) = r else {
         return Ok(Vec::new());
     };
     app.state::<AppState>().sgdb.images(r, kind).await.map_err(|e| format!("{e:#}"))

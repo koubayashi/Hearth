@@ -114,6 +114,19 @@ impl SteamGridDb {
         Ok(games.into_iter().find(|g| crate::metadata::base_title(&g.name) == want).map(|g| g.id))
     }
 
+    /// SteamGridDB's closest match for a title, exact or not. Only for the
+    /// picker, where the user sees the pictures before choosing.
+    pub async fn closest_game(&self, title: &str) -> anyhow::Result<Option<u64>> {
+        if let Some(id) = self.find_game(title).await? {
+            return Ok(Some(id));
+        }
+        let key = self.key()?;
+        let path = format!("/search/autocomplete/{}", urlencode(title));
+        let Some(data) = self.get(&key, &path, &[]).await? else { return Ok(None) };
+        let games: Vec<SearchGame> = serde_json::from_value(data).unwrap_or_default();
+        Ok(games.first().map(|g| g.id))
+    }
+
     /// Images for a game, best first (SteamGridDB orders by community score).
     pub async fn images(&self, game: GameRef, kind: ArtKind) -> anyhow::Result<Vec<ArtOption>> {
         let key = self.key()?;

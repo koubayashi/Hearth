@@ -148,7 +148,7 @@ fn best_match(title: &str, items: &[SearchItem]) -> Option<u64> {
 const EDITION_WORDS: &[&str] = &[
     "director", "directors", "cut", "edition", "goty", "game", "of", "the", "year", "definitive",
     "complete", "enhanced", "remastered", "deluxe", "gold", "ultimate", "standard", "special",
-    "collectors", "anniversary", "hd", "classic", "premium",
+    "collectors", "anniversary", "hd", "classic", "premium", "premier",
 ];
 
 pub fn base_title(title: &str) -> String {
