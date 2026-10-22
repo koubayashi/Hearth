@@ -127,9 +127,10 @@ export const mockBackend = {
   async openSgdbKeyPage() {},
   // Demo choices reuse the library's own art so the picker can be designed.
   async artworkOptions(_id: number, kind: ArtKind): Promise<ArtOption[]> {
-    return games.slice(0, 8).map((g, i) => {
+    // As many as SteamGridDB returns for a popular game, to test long lists.
+    return [...games, ...games, ...games].slice(0, 64).map((g, i) => {
       const url = (kind === "cover" ? g.cover : g.hero) ?? "";
-      return { url, thumb: url, score: 10 - i, style: "alternate" };
+      return { url: `${url}#${i}`, thumb: url, score: 64 - i, style: "alternate" };
     });
   },
   async setArtwork(id: number, kind: ArtKind, url: string) {
