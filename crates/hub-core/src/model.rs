@@ -85,6 +85,45 @@ pub struct Game {
     pub logo: Option<String>,
     pub description: Option<String>,
     pub entries: Vec<StoreEntry>,
+    /// Where the player is with it; None means not set.
+    pub status: Option<GameStatus>,
+    /// Ids of the user's collections this game is in.
+    pub collections: Vec<i64>,
+}
+
+/// Backlog-style progress, set by the user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GameStatus {
+    Playing,
+    Backlog,
+    Completed,
+    Abandoned,
+}
+
+impl GameStatus {
+    pub const ALL: [GameStatus; 4] = [GameStatus::Playing, GameStatus::Backlog, GameStatus::Completed, GameStatus::Abandoned];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GameStatus::Playing => "playing",
+            GameStatus::Backlog => "backlog",
+            GameStatus::Completed => "completed",
+            GameStatus::Abandoned => "abandoned",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|x| x.as_str() == s)
+    }
+}
+
+/// A user-made list of games.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Collection {
+    pub id: i64,
+    pub name: String,
+    pub count: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,6 +154,7 @@ pub enum InstallFilter {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LibraryQuery {
     pub install: InstallFilter,
     /// Empty means every store.
@@ -122,4 +162,8 @@ pub struct LibraryQuery {
     pub search: Option<String>,
     /// When true, return only hidden games (the "Hidden" view).
     pub hidden_only: bool,
+    /// Only games with this status.
+    pub status: Option<GameStatus>,
+    /// Only games in this collection.
+    pub collection: Option<i64>,
 }

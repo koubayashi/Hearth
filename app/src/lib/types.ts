@@ -28,6 +28,24 @@ export interface Game {
   logo: string | null;
   description: string | null;
   entries: StoreEntry[];
+  status: GameStatus | null;
+  /** Ids of the collections this game is in. */
+  collections: number[];
+}
+
+export type GameStatus = "playing" | "backlog" | "completed" | "abandoned";
+
+export const STATUSES: { id: GameStatus; label: string }[] = [
+  { id: "playing", label: "Playing" },
+  { id: "backlog", label: "Backlog" },
+  { id: "completed", label: "Completed" },
+  { id: "abandoned", label: "Abandoned" },
+];
+
+export interface Collection {
+  id: number;
+  name: string;
+  count: number;
 }
 
 export type InstallFilter = "all" | "installed" | "notinstalled";
@@ -37,6 +55,8 @@ export interface LibraryQuery {
   stores: StoreId[];
   search: string | null;
   hidden_only: boolean;
+  status?: GameStatus | null;
+  collection?: number | null;
 }
 
 export const STORE_LABEL: Record<StoreId, string> = {

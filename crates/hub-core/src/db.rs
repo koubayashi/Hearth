@@ -23,6 +23,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/003_active_sessions.sql"),
     include_str!("../migrations/004_art_source.sql"),
     include_str!("../migrations/005_saves.sql"),
+    include_str!("../migrations/006_status.sql"),
 ];
 
 pub struct Db {
@@ -257,6 +258,56 @@ impl Db {
         Ok(self.conn.execute(&sql, params![game_id, url, source])? > 0)
     }
 
+    pub fn set_status(&self, game_id: i64, status: Option<GameStatus>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET status = ?2 WHERE id = ?1",
+            params![game_id, status.map(GameStatus::as_str)],
+        )?;
+        Ok(())
+    }
+
+    /// The user's collections with how many visible games each holds.
+    pub fn collections(&self) -> Result<Vec<Collection>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.name, COUNT(cg.game_id) FROM collections c
+               LEFT JOIN collection_games cg ON cg.collection_id = c.id
+              GROUP BY c.id ORDER BY c.name COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map([], |r| Ok(Collection { id: r.get(0)?, name: r.get(1)?, count: r.get(2)? }))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn create_collection(&self, name: &str) -> Result<i64> {
+        self.conn.execute("INSERT INTO collections (name) VALUES (?1)", [name.trim()])?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn rename_collection(&self, id: i64, name: &str) -> Result<()> {
+        self.conn.execute("UPDATE collections SET name = ?2 WHERE id = ?1", params![id, name.trim()])?;
+        Ok(())
+    }
+
+    /// Deletes the list only; its games stay in the library.
+    pub fn delete_collection(&self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM collections WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn set_in_collection(&self, collection: i64, game: i64, member: bool) -> Result<()> {
+        if member {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO collection_games (collection_id, game_id) VALUES (?1, ?2)",
+                params![collection, game],
+            )?;
+        } else {
+            self.conn.execute(
+                "DELETE FROM collection_games WHERE collection_id = ?1 AND game_id = ?2",
+                params![collection, game],
+            )?;
+        }
+        Ok(())
+    }
+
     /// Games whose save locations haven't been looked up since `older_than`:
     /// (id, title, Steam app id if known).
     pub fn save_lookup_targets(&self, older_than: i64, limit: i64) -> Result<Vec<(i64, String, Option<i64>)>> {
@@ -468,6 +519,8 @@ impl Db {
                 InstallFilter::NotInstalled => !g.installed,
             })
             .filter(|g| q.stores.is_empty() || g.entries.iter().any(|e| q.stores.contains(&e.store)))
+            .filter(|g| q.status.is_none_or(|s| g.status == Some(s)))
+            .filter(|g| q.collection.is_none_or(|c| g.collections.contains(&c)))
             .filter(|g| {
                 search
                     .as_ref()
@@ -521,8 +574,20 @@ impl Db {
             }
         }
 
+        let mut in_collections: HashMap<i64, Vec<i64>> = HashMap::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT game_id, collection_id FROM collection_games WHERE ?1 IS NULL OR game_id = ?1 ORDER BY collection_id",
+            )?;
+            let rows = stmt.query_map([only], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?;
+            for row in rows {
+                let (g, c) = row?;
+                in_collections.entry(g).or_default().push(c);
+            }
+        }
+
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at FROM games
+            "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at, status FROM games
              WHERE ?1 IS NULL OR id = ?1",
         )?;
         let rows = stmt.query_map([only], |r| {
@@ -536,12 +601,13 @@ impl Db {
                 r.get::<_, Option<String>>(6)?,
                 r.get::<_, Option<String>>(7)?,
                 r.get::<_, Option<i64>>(8)?,
+                r.get::<_, Option<String>>(9)?,
             ))
         })?;
 
         let mut games = Vec::new();
         for row in rows {
-            let (id, title, favorite, added_at, cover, hero, logo, description, save_seen) = row?;
+            let (id, title, favorite, added_at, cover, hero, logo, description, save_seen, status) = row?;
             let with_last = entries.remove(&id).unwrap_or_default();
             let (hub_secs, hub_last) = sessions.get(&id).copied().unwrap_or((0, 0));
 
@@ -576,6 +642,8 @@ impl Db {
                 logo,
                 description,
                 entries,
+                status: status.as_deref().and_then(GameStatus::parse),
+                collections: in_collections.remove(&id).unwrap_or_default(),
             });
         }
         Ok(games)
@@ -656,7 +724,7 @@ mod tests {
             install,
             stores,
             search: search.map(Into::into),
-            hidden_only: false,
+            ..Default::default()
         };
         let titles = |q: LibraryQuery| -> Vec<String> {
             db.list_games(&q).unwrap().into_iter().map(|g| g.title).collect()
@@ -759,6 +827,36 @@ mod tests {
         assert!(db.set_save_seen(id, 1_784_294_580).unwrap());
         assert!(!db.set_save_seen(id, 1_784_294_580).unwrap(), "unchanged");
         assert_eq!(db.game(id).unwrap().unwrap().last_played, Some(1_784_294_580));
+    }
+
+    #[test]
+    fn statuses_and_collections_filter_the_library() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(
+            StoreId::Steam,
+            &[entry(StoreId::Steam, "1", "Hades", true), entry(StoreId::Steam, "2", "Celeste", true)],
+            0,
+        )
+        .unwrap();
+        let all = db.list_games(&LibraryQuery::default()).unwrap();
+        let (celeste, hades) = (all[0].id, all[1].id);
+
+        db.set_status(hades, Some(GameStatus::Playing)).unwrap();
+        let playing = LibraryQuery { status: Some(GameStatus::Playing), ..Default::default() };
+        assert_eq!(db.list_games(&playing).unwrap().len(), 1);
+        assert_eq!(db.game(hades).unwrap().unwrap().status, Some(GameStatus::Playing));
+
+        let coop = db.create_collection("  Co-op night ").unwrap();
+        db.set_in_collection(coop, celeste, true).unwrap();
+        db.set_in_collection(coop, celeste, true).unwrap();
+        assert_eq!(db.collections().unwrap(), [Collection { id: coop, name: "Co-op night".into(), count: 1 }]);
+        let in_coop = LibraryQuery { collection: Some(coop), ..Default::default() };
+        assert_eq!(db.list_games(&in_coop).unwrap()[0].title, "Celeste");
+        assert_eq!(db.game(celeste).unwrap().unwrap().collections, [coop]);
+
+        db.delete_collection(coop).unwrap();
+        assert!(db.collections().unwrap().is_empty());
+        assert_eq!(db.list_games(&LibraryQuery::default()).unwrap().len(), 2, "games stay");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import type { Accounts, ArtKind, ArtOption, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit, StoreId } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit, StoreId } from "./types";
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
@@ -61,6 +61,8 @@ const games: Game[] = seeds.map(([title, appid, store, installed, hours, daysAgo
   hero: art(appid, "library_hero"),
   logo: art(appid, "logo"),
   description: null,
+  status: (["playing", "backlog", null, "completed", null, "backlog"] as (GameStatus | null)[])[i % 6],
+  collections: i % 4 === 0 ? [1] : [],
   entries: [
     ...(title === "Hollow Knight"
       ? [{ id: 1000, game_id: i + 1, store: "gog" as StoreId, store_game_id: "hk", installed: false, install_dir: null, hidden: false, store_playtime_secs: null, store_baseline_secs: null }]
@@ -78,6 +80,8 @@ const games: Game[] = seeds.map(([title, appid, store, installed, hours, daysAgo
     },
   ],
 }));
+
+const collections: Collection[] = [{ id: 1, name: "Co-op night", count: 0 }];
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
@@ -120,6 +124,32 @@ export const mockBackend = {
   },
   async openInstallFolder(_id: number) {},
   async openStorePage(_id: number) {},
+  async setStatus(id: number, status: GameStatus | null) {
+    const g = games.find((g) => g.id === id);
+    if (g) g.status = status;
+  },
+  async listCollections(): Promise<Collection[]> {
+    return collections.map((c) => ({ ...c, count: games.filter((g) => g.collections.includes(c.id)).length }));
+  },
+  async createCollection(name: string): Promise<number> {
+    const id = Math.max(0, ...collections.map((c) => c.id)) + 1;
+    collections.push({ id, name: name.trim(), count: 0 });
+    return id;
+  },
+  async renameCollection(id: number, name: string) {
+    const c = collections.find((c) => c.id === id);
+    if (c) c.name = name.trim();
+  },
+  async deleteCollection(id: number) {
+    collections.splice(collections.findIndex((c) => c.id === id), 1);
+    games.forEach((g) => (g.collections = g.collections.filter((c) => c !== id)));
+  },
+  async setInCollection(collection: number, game: number, member: boolean) {
+    const g = games.find((g) => g.id === game);
+    if (!g) return;
+    g.collections = g.collections.filter((c) => c !== collection);
+    if (member) g.collections.push(collection);
+  },
   async sgdbSetKey(_key: string) {
     throw new Error("Demo library: add your SteamGridDB key in the desktop app");
   },
@@ -170,6 +200,8 @@ export const mockBackend = {
       )
       .filter((g) => q.stores.length === 0 || g.entries.some((e) => q.stores.includes(e.store)))
       .filter((g) => !search || norm(g.title).includes(search))
+      .filter((g) => !q.status || g.status === q.status)
+      .filter((g) => q.collection == null || g.collections.includes(q.collection))
       .sort((a, b) => a.title.localeCompare(b.title))
       // Copies, like the real IPC boundary, so UI state never aliases the store.
       .map((g) => structuredClone(g));

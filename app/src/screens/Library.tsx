@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
-import type { Game, InstallFilter, NowPlaying, StoreId } from "../lib/types";
+import type { Game, GameStatus, InstallFilter, NowPlaying, StoreId } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { formatHoursShort, formatLastPlayed, formatPlaytime } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
@@ -17,8 +17,19 @@ const FILTERS: { id: InstallFilter; label: string }[] = [
   { id: "notinstalled", label: "Not installed" },
 ];
 
+/** Narrows the library to one status or collection (the Collections page). */
+export interface LibraryScope {
+  status?: GameStatus;
+  collection?: number;
+  title: string;
+  /** Shown under the toolbar, above the games. */
+  header?: ReactNode;
+  emptyText: string;
+}
+
 export function Library({
   hiddenView,
+  scope,
   version,
   focused,
   playing,
@@ -28,6 +39,7 @@ export function Library({
   onToggleFavorite,
 }: {
   hiddenView: boolean;
+  scope?: LibraryScope;
   /** Bumped by the parent whenever library data changes. */
   version: number;
   focused: Game | null;
@@ -57,7 +69,14 @@ export function Library({
   useEffect(() => {
     let live = true;
     api
-      .listGames({ install, stores, search: search || null, hidden_only: hiddenView })
+      .listGames({
+        install,
+        stores,
+        search: search || null,
+        hidden_only: hiddenView,
+        status: scope?.status ?? null,
+        collection: scope?.collection ?? null,
+      })
       .then((g) => {
         if (!live) return;
         setGames(g);
@@ -67,7 +86,7 @@ export function Library({
     return () => {
       live = false;
     };
-  }, [install, stores, search, hiddenView, version]);
+  }, [install, stores, search, hiddenView, version, scope?.status, scope?.collection]);
 
   // Unfiltered list for the store chips and "Jump back in".
   useEffect(() => {
@@ -107,7 +126,7 @@ export function Library({
       return;
     }
     if (!games) return;
-    const showRecent = prefs.showRecent && !hiddenView;
+    const showRecent = prefs.showRecent && !hiddenView && !scope;
     onFocusGame((showRecent ? recent[0] : undefined) ?? games.find((g) => g.installed) ?? games[0] ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games, recent]);
@@ -135,18 +154,19 @@ export function Library({
     document.querySelector<HTMLElement>(`[data-game="${focused.id}"]`)?.focus();
   };
 
-  const showRecent = prefs.showRecent && !hiddenView && recent.length > 0;
+  const showRecent = prefs.showRecent && !hiddenView && !scope && recent.length > 0;
   const filtered = install !== "all" || stores.length > 0 || search !== "";
 
   // Installed games first, then everything you own but haven't installed.
   const sections = useMemo(() => {
     const list = games ?? [];
     if (hiddenView) return [{ title: "Hidden games", games: list }];
+    if (scope) return [{ title: scope.title, games: list }];
     return [
       { title: "Library", games: list.filter((g) => g.installed) },
       { title: "Not installed", games: list.filter((g) => !g.installed) },
     ].filter((s) => s.games.length > 0);
-  }, [games, hiddenView]);
+  }, [games, hiddenView, scope?.title]);
 
   return (
     <div className="library">
@@ -221,6 +241,7 @@ export function Library({
         </button>
       </div>
 
+      {scope?.header}
       <div className="page">
         <div>
           {showRecent && (
@@ -277,9 +298,14 @@ export function Library({
             </div>
           ) : games && games.length === 0 ? (
             <>
-            <h2>{hiddenView ? "Hidden games" : "Library"}</h2>
+            <h2>{hiddenView ? "Hidden games" : (scope?.title ?? "Library")}</h2>
             <div className="empty">
-              {hiddenView ? (
+              {scope && !filtered ? (
+                <>
+                  <h3>Nothing here yet</h3>
+                  {scope.emptyText}
+                </>
+              ) : hiddenView ? (
                 <>
                   <h3>Nothing hidden</h3>
                   Games you hide from the library land here, and you can bring them back any time.

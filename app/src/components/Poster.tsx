@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { Game, GameDetails, InstallInfo } from "../lib/types";
-import { STORE_LABEL } from "../lib/types";
+import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatBytes, formatLastPlayed, formatPlaytime, releaseYear } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import { Art } from "./Art";
@@ -146,14 +146,20 @@ export const Poster = forwardRef<
           {byline && <span className="byline">{byline}</span>}
         </div>
 
-        {details && ((showScores && details.metacritic != null) || details.genres.length > 0) && (
+        {(game.status || (details && ((showScores && details.metacritic != null) || details.genres.length > 0))) && (
           <div className="facts">
-            {showScores && details.metacritic != null && (
+            {game.status && (
+              <span className="tag status-chip">
+                <span className={`status-dot ${game.status}`} />
+                {STATUSES.find((s) => s.id === game.status)?.label}
+              </span>
+            )}
+            {showScores && details?.metacritic != null && (
               <span className={`score ${scoreTone(details.metacritic)}`} title="Metacritic score">
                 {details.metacritic}
               </span>
             )}
-            {details.genres.slice(0, 3).map((g) => (
+            {details?.genres.slice(0, 3).map((g) => (
               <span key={g} className="tag">
                 {g}
               </span>

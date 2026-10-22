@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Accounts, ArtKind, ArtOption, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit } from "./types";
 import { mockBackend } from "./mock";
 
 const on = (event: string) => (cb: (payload: unknown) => void) => listen(event, (e) => cb(e.payload));
@@ -34,6 +34,13 @@ const backend = isTauri()
       gameFolders: () => invoke<string[]>("game_folders"),
       searchStore: (term: string) => invoke<StoreHit[]>("search_store", { term }),
       sgdbSetKey: (key: string) => invoke<void>("sgdb_set_key", { key }),
+      setStatus: (id: number, status: GameStatus | null) => invoke<void>("set_status", { id, status }),
+      listCollections: () => invoke<Collection[]>("list_collections"),
+      createCollection: (name: string) => invoke<number>("create_collection", { name }),
+      renameCollection: (id: number, name: string) => invoke<void>("rename_collection", { id, name }),
+      deleteCollection: (id: number) => invoke<void>("delete_collection", { id }),
+      setInCollection: (collection: number, game: number, member: boolean) =>
+        invoke<void>("set_in_collection", { collection, game, member }),
       sgdbClearKey: () => invoke<void>("sgdb_clear_key"),
       openSgdbKeyPage: () => invoke<void>("open_sgdb_key_page"),
       artworkOptions: (id: number, kind: ArtKind) => invoke<ArtOption[]>("artwork_options", { id, kind }),

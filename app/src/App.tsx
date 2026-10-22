@@ -6,6 +6,7 @@ import { Rail, type Route } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
 import { Toast, type ToastMsg } from "./components/Toast";
 import { Library } from "./screens/Library";
+import { Collections } from "./screens/Collections";
 import { Settings } from "./screens/Settings";
 import { Soon } from "./screens/Soon";
 import { legacy } from "./components/Art";
@@ -75,10 +76,12 @@ export function App() {
   }, []);
 
   const libraryLike = route === "library" || route === "hidden";
+  // Pages that show the selected game's art behind them.
+  const showsArt = libraryLike || route === "collections";
 
   return (
     <>
-      <Backdrop src={libraryLike ? (focused?.hero ?? null) : null} />
+      <Backdrop src={showsArt ? (focused?.hero ?? null) : null} />
       <TitleBar />
       <div className="app">
         <Rail route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null))} />
@@ -97,7 +100,15 @@ export function App() {
             />
           )}
           {route === "collections" && (
-            <Soon title="Collections" text="Group games your way, like Backlog or Co-op night, plus smart collections that fill themselves. Coming soon." />
+            <Collections
+              version={version}
+              focused={focused}
+              playing={playing}
+              onFocusGame={setFocused}
+              onPrimary={primary}
+              onToggleHidden={toggleHidden}
+              onToggleFavorite={toggleFavorite}
+            />
           )}
           {route === "stats" && (
             <Soon title="Stats" text="Your playtime by week and month, top games, and a yearly recap. Coming soon." />

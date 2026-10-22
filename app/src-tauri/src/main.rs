@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artwork;
+mod collections;
 mod details;
 mod folders;
 mod saves;
@@ -615,7 +616,13 @@ fn main() {
             artwork::open_sgdb_key_page,
             artwork::artwork_options,
             artwork::set_artwork,
-            artwork::reset_artwork
+            artwork::reset_artwork,
+            collections::set_status,
+            collections::list_collections,
+            collections::create_collection,
+            collections::rename_collection,
+            collections::delete_collection,
+            collections::set_in_collection
         ])
         .build(tauri::generate_context!())
         .expect("error while building Hearth")

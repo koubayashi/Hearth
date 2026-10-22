@@ -498,3 +498,38 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 /* ---------- right-click menu ---------- */
 .context-menu { position: fixed; right: auto; bottom: auto; z-index: 40; min-width: 230px; }
 .context-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+
+/* ---------- statuses and collections ---------- */
+.menu-label { padding: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-3); }
+.menu button svg:last-child:not(:first-child) { margin-left: auto; color: var(--accent); }
+.status-dot { width: 18px; display: grid; place-items: center; flex: none; }
+.status-dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+.status-dot.playing::before { background: #6fcf97; }
+.status-dot.backlog::before { background: #f2c94c; }
+.status-dot.completed::before { background: #56ccf2; }
+.status-dot.abandoned::before { background: #eb5757; }
+.check-box {
+  width: 16px; height: 16px; flex: none; border-radius: 3px; border: 1px solid var(--line-strong);
+  display: grid; place-items: center; color: var(--accent); margin: 0 1px;
+}
+.menu-new { padding: 4px; }
+.menu-new .text-input { width: 100%; box-sizing: border-box; }
+.status-chip { display: inline-flex; align-items: center; gap: 2px; }
+.status-chip .status-dot { width: 14px; }
+
+/* ---------- collections page: shelves ---------- */
+.shelves { display: flex; flex-direction: column; gap: var(--space-2); margin: 0 140px var(--space-5) 0; }
+.shelf-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.shelf {
+  all: unset; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px;
+  border-radius: var(--radius-control); border: 1px solid var(--line); color: var(--ink-2); font-weight: 500;
+  cursor: pointer; background: var(--glass); transition: background var(--dur-fast), color var(--dur-fast);
+}
+.shelf small { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.shelf:hover { color: var(--ink); background: var(--line); }
+.shelf[aria-selected="true"] { color: var(--ink); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.shelf:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.shelf.add { border-style: dashed; color: var(--ink-3); }
+.shelf-form .text-input { width: 220px; height: 34px; }
+.shelf-actions { display: inline-flex; gap: var(--space-4); margin-left: var(--space-2); }
+@container (max-width: 640px) { .shelves { margin-right: 0; } }
