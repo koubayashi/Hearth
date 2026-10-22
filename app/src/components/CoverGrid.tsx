@@ -36,13 +36,16 @@ export function CoverGrid({
 
   useLayoutEffect(() => {
     const el = ref.current;
-    const scroller = scrollRef.current;
-    if (!el || !scroller) return;
+    if (!el) return;
+    // The parent's ref may not be attached yet when this grid mounts in the
+    // same render (the Hidden view), so find the scroller from the DOM too.
+    const scroller = () => scrollRef.current ?? el.closest<HTMLElement>(".scroll");
     // Distance from the top of the scroll content; changes whenever a section
     // above this grid (Jump back in, another grid) grows or shrinks.
     const measure = () => {
       setWidth(el.clientWidth);
-      setOffset(el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop);
+      const s = scroller();
+      if (s) setOffset(el.getBoundingClientRect().top - s.getBoundingClientRect().top + s.scrollTop);
     };
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -59,7 +62,7 @@ export function CoverGrid({
 
   const v = useVirtualizer({
     count: rows,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => scrollRef.current ?? ref.current?.closest<HTMLElement>(".scroll") ?? null,
     estimateSize: () => rowH,
     overscan: 3,
     scrollMargin: offset,
