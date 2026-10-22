@@ -120,3 +120,12 @@ export interface ArtOption {
   score: number;
   style: string;
 }
+
+/** One recorded play session (unix seconds). */
+export interface PlaySession {
+  id: number;
+  game_id: number;
+  started_at: number;
+  ended_at: number;
+  source: "hub" | "tracker";
+}

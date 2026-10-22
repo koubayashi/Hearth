@@ -8,7 +8,7 @@ import { Toast, type ToastMsg } from "./components/Toast";
 import { Library } from "./screens/Library";
 import { Collections } from "./screens/Collections";
 import { Settings } from "./screens/Settings";
-import { Soon } from "./screens/Soon";
+import { Stats } from "./screens/Stats";
 import { legacy } from "./components/Art";
 
 export function App() {
@@ -110,9 +110,7 @@ export function App() {
               onToggleFavorite={toggleFavorite}
             />
           )}
-          {route === "stats" && (
-            <Soon title="Stats" text="Your playtime by week and month, top games, and a yearly recap. Coming soon." />
-          )}
+          {route === "stats" && <Stats version={version} />}
           {route === "settings" && <Settings />}
         </main>
       </div>

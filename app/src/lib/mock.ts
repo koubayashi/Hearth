@@ -1,4 +1,4 @@
-import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit, StoreId } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, StoreHit, StoreId } from "./types";
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
@@ -101,6 +101,19 @@ export const mockBackend = {
   async epicSignIn() {},
   async epicSignOut() {},
   nowPlaying: async (): Promise<NowPlaying[]> => [],
+  // A few months of evening sessions on a handful of games, deterministic.
+  async playSessions(): Promise<PlaySession[]> {
+    const out: PlaySession[] = [];
+    const now = Math.floor(Date.now() / 1000);
+    for (let day = 150; day >= 0; day--) {
+      const r = (day * 7919) % 97;
+      if (r % 3 === 0 || (day > 60 && day < 80)) continue;
+      const game_id = [1, 1, 2, 3, 5, 1, 8][r % 7];
+      const started_at = now - day * 86400 - 3 * H;
+      out.push({ id: day, game_id, started_at, ended_at: started_at + 1200 + (r % 13) * 900, source: "tracker" });
+    }
+    return out;
+  },
   // Synthetic details so the panel can be designed without the store API.
   async gameDetails(id: number): Promise<GameDetails | null> {
     const g = games.find((g) => g.id === id);

@@ -97,6 +97,12 @@ fn launch_game(state: State<AppState>, id: i64) -> CmdResult<()> {
     hub_launch::run(&action).map_err(err)
 }
 
+/// Recorded play sessions, for the Stats page.
+#[tauri::command]
+fn play_sessions(state: State<AppState>) -> CmdResult<Vec<hub_core::PlaySession>> {
+    lock(&state.db).sessions().map_err(err)
+}
+
 #[tauri::command]
 fn now_playing(app: AppHandle) -> Vec<tracking::NowPlaying> {
     tracking::now_playing(&app)
@@ -617,6 +623,7 @@ fn main() {
             set_hidden,
             set_favorite,
             launch_game,
+            play_sessions,
             accounts,
             sync_now,
             epic_sign_in,

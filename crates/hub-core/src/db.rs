@@ -489,6 +489,30 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Every recorded play session of games that aren't hidden, oldest first
+    /// (the Stats page's history).
+    pub fn sessions(&self) -> Result<Vec<PlaySession>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.id, s.game_id, s.started_at, s.ended_at, s.source FROM sessions s
+             WHERE EXISTS (
+                 SELECT 1 FROM store_entries e
+                 WHERE e.game_id = s.game_id
+                   AND NOT EXISTS (SELECT 1 FROM hidden h WHERE h.store = e.store AND h.store_game_id = e.store_game_id))
+             ORDER BY s.started_at",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            let source: String = r.get(4)?;
+            Ok(PlaySession {
+                id: r.get(0)?,
+                game_id: r.get(1)?,
+                started_at: r.get(2)?,
+                ended_at: r.get(3)?,
+                source: if source == "hub" { SessionSource::Hub } else { SessionSource::Tracker },
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// Install folders of installed games, for the tracker to match processes against.
     pub fn install_dirs(&self) -> Result<Vec<(i64, String)>> {
         let mut stmt = self.conn.prepare(
@@ -751,6 +775,27 @@ mod tests {
         e.store_playtime_secs = Some(5400);
         db.sync_store(StoreId::Steam, &[e], 3000).unwrap();
         assert_eq!(db.game(id).unwrap().unwrap().playtime_secs, 5400);
+    }
+
+    #[test]
+    fn sessions_skip_hidden_games() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(
+            StoreId::Steam,
+            &[entry(StoreId::Steam, "1", "Hades", true), entry(StoreId::Steam, "2", "Celeste", true)],
+            0,
+        )
+        .unwrap();
+        let ids: Vec<i64> = db.list_games(&LibraryQuery::default()).unwrap().iter().map(|g| g.id).collect();
+        db.record_session(ids[1], 500, 900, SessionSource::Tracker).unwrap();
+        db.record_session(ids[0], 100, 400, SessionSource::Hub).unwrap();
+        let started: Vec<i64> = db.sessions().unwrap().iter().map(|s| s.started_at).collect();
+        assert_eq!(started, [100, 500]);
+
+        db.set_game_hidden(ids[1], true).unwrap();
+        let left = db.sessions().unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!((left[0].game_id, left[0].source), (ids[0], SessionSource::Hub));
     }
 
     #[test]
