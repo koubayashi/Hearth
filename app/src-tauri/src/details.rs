@@ -173,19 +173,3 @@ pub async fn open_store_page(app: AppHandle, id: i64) -> CmdResult<()> {
     hub_launch::run(&LaunchAction::Uri { uri }).map_err(err)
 }
 
-/// Opens the game on Backloggd in the browser (its search, which finds the
-/// right page by title). Backloggd has no API; this is just a link.
-#[tauri::command]
-pub fn open_backloggd(app: AppHandle, id: i64) -> CmdResult<()> {
-    let g = game(&app, id)?;
-    let title: String = g.title.chars().filter(|c| !matches!(c, '™' | '®' | '©')).collect();
-    let query: String = title
-        .trim()
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect();
-    hub_launch::run(&LaunchAction::Uri { uri: format!("https://backloggd.com/search/games/{query}/") }).map_err(err)
-}

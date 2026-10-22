@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artwork;
+mod backloggd;
 mod collections;
 mod details;
 mod folders;
@@ -308,22 +309,47 @@ fn epic_sign_in_silently(app: &AppHandle) {
         |app, body| {
             close_window(&app, "epic-refresh");
             match epic::code_from_redirect_body(&body) {
-                Some(code) => finish_epic_sign_in(app, code),
-                None => give_up_epic(&app),
+                Some(code) => {
+                    tracking::log(&app, "epic: signed in again silently");
+                    finish_epic_sign_in(app, code)
+                }
+                None => give_up_epic(&app, "Epic's page had no sign-in code"),
             }
         },
     );
+    tracking::log(app, "epic: session expired, trying to sign in again in the background");
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(90)).await;
         if app.get_webview_window("epic-refresh").is_some() {
             close_window(&app, "epic-refresh");
-            give_up_epic(&app);
+            give_up_epic(&app, "Epic didn't sign in by itself within 90s (it wants you to sign in)");
         }
     });
 }
 
-fn give_up_epic(app: &AppHandle) {
+/// Renews Epic's tokens every 20 minutes while Hearth runs, so a sign-in
+/// lasts as long as Hearth keeps running (which, from the tray, is all day).
+fn keep_epic_alive(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let epic = app.state::<AppState>().epic.clone();
+            match epic.keep_alive().await {
+                Ok(Some(until)) => tracking::log(&app, &format!("epic: renewed sign-in (refresh token valid until {until})")),
+                Ok(None) => {}
+                Err(e) if e.to_string() == epic::SESSION_EXPIRED => epic_sign_in_silently(&app),
+                // Offline: try again next round, keep the session.
+                Err(e) => tracking::log(&app, &format!("epic: couldn't renew yet ({e})")),
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(20 * 60)).await;
+        }
+    });
+}
+
+/// The saved refresh token was rejected and Epic didn't remember the browser:
+/// a fresh sign-in is the only way back.
+fn give_up_epic(app: &AppHandle, why: &str) {
+    tracking::log(app, &format!("epic: signed out ({why})"));
     app.state::<AppState>().epic.forget();
     let _ = app.emit("accounts-changed", ());
     let _ = app.emit("sync-error", epic::SESSION_EXPIRED);
@@ -570,6 +596,7 @@ fn main() {
                 }
             }
 
+            keep_epic_alive(app.handle().clone());
             tracking::recover(app.handle());
             tracking::start(app.handle().clone());
             sync_all(app.handle().clone());
@@ -606,7 +633,10 @@ fn main() {
             details::install_info,
             details::open_install_folder,
             details::open_store_page,
-            details::open_backloggd,
+            backloggd::backloggd_show,
+            backloggd::backloggd_hide,
+            backloggd::backloggd_nav,
+            backloggd::backloggd_open_external,
             folders::game_folders,
             folders::add_game_folder,
             folders::remove_game_folder,

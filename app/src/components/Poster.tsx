@@ -245,10 +245,7 @@ export const Poster = forwardRef<
                 <Icon name="external" />
                 Open store page
               </button>
-              <button role="menuitem" onClick={() => (setMenu(false), api.openBackloggd(game.id))}>
-                <Icon name="external" />
-                Open on Backloggd
-              </button>
+
               {game.installed && (
                 <button role="menuitem" onClick={() => (setMenu(false), api.openInstallFolder(game.id))}>
                   <Icon name="folder" />

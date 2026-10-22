@@ -7,3 +7,4 @@ app/src-tauri/gen/
 .impeccable/review/
 .impeccable/build/
 .impeccable/questions/
+app/src-tauri/extensions/ubolite/

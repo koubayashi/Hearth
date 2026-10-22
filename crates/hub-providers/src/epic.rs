@@ -59,6 +59,9 @@ pub struct Session {
     pub display_name: Option<String>,
     /// Unix seconds.
     pub expires_at_unix: i64,
+    /// When the refresh token itself runs out (unix seconds); 0 if unknown.
+    #[serde(default)]
+    pub refresh_expires_at_unix: i64,
 }
 
 #[derive(Deserialize)]
@@ -69,6 +72,8 @@ struct TokenResponse {
     #[serde(rename = "displayName")]
     display_name: Option<String>,
     expires_in: i64,
+    #[serde(default)]
+    refresh_expires: i64,
 }
 
 /// Game identity in Epic: all three parts are needed to launch.
@@ -209,12 +214,29 @@ impl Epic {
             account_id: t.account_id,
             display_name: t.display_name,
             expires_at_unix: now() + t.expires_in,
+            refresh_expires_at_unix: if t.refresh_expires > 0 { now() + t.refresh_expires } else { 0 },
         })
     }
 
     fn store(&self, s: Session) {
         (self.on_session)(Some(&s));
         *self.session.lock().unwrap() = Some(s);
+    }
+
+    /// Renews the session ahead of time so the refresh token never ages out
+    /// while Hearth runs (Epic keeps refresh tokens only for hours). Returns
+    /// when the refresh token now expires, or None if nothing was due.
+    pub async fn keep_alive(&self) -> anyhow::Result<Option<i64>> {
+        let Some(s) = self.session.lock().unwrap().clone() else { return Ok(None) };
+        let soon = now() + 45 * 60;
+        let refresh_due = s.refresh_expires_at_unix != 0 && s.refresh_expires_at_unix < now() + 3 * 3600;
+        if s.expires_at_unix > soon && !refresh_due {
+            return Ok(None);
+        }
+        let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &s.refresh_token)]).await?;
+        let until = fresh.refresh_expires_at_unix;
+        self.store(fresh);
+        Ok(Some(until))
     }
 
     /// A valid access token, refreshing it when it is about to expire.

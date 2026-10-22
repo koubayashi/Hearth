@@ -203,7 +203,10 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 }
 /* The cover at its real 2:3 shape, as large as the panel allows. */
 .poster-cover {
-  position: relative; flex: 1 1 0; min-height: 0; display: flex; align-items: flex-end; justify-content: center;
+  /* Centered: when the panel is tall and narrow the cover hits its width first,
+     and pinning it to the bottom left a large empty band above it. */
+  position: relative; flex: 1 1 0; min-height: 0; display: flex; align-items: center; justify-content: center;
+  padding-top: var(--space-3);
   /* Size container: the cover can shrink to whichever of width or height runs out first. */
   container-type: size;
   animation: fade var(--dur-slow) var(--ease-out);
@@ -533,3 +536,11 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .shelf-form .text-input { width: 220px; height: 34px; }
 .shelf-actions { display: inline-flex; gap: var(--space-4); margin-left: var(--space-2); }
 @container (max-width: 640px) { .shelves { margin-right: 0; } }
+
+/* ---------- Backloggd section ---------- */
+.web-section { display: flex; flex-direction: column; height: 100%; padding: var(--space-3) var(--space-6) var(--space-3) var(--space-3); }
+.web-bar { position: static; margin-bottom: var(--space-3); }
+.web-note { font-size: var(--text-xs); color: var(--ink-3); white-space: nowrap; }
+/* The Backloggd page is a separate browser view laid exactly over this box. */
+.web-area { flex: 1; min-height: 0; border-radius: var(--radius-panel); border: 1px solid var(--line); background: var(--base-2); overflow: hidden; }
+.web-area .empty { padding: var(--space-6); }
