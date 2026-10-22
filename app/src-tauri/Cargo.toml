@@ -14,7 +14,7 @@ hub-providers.workspace = true
 serde.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
-tauri = { version = "2", features = ["tray-icon", "unstable"] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"

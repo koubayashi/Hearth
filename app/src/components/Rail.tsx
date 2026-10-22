@@ -1,6 +1,6 @@
 import { Icon, type IconName } from "./Icon";
 
-export type Route = "library" | "collections" | "stats" | "hidden" | "backloggd" | "settings";
+export type Route = "library" | "collections" | "stats" | "hidden" | "settings";
 
 const ITEMS: { id: Route; label: string; icon: IconName }[] = [
   { id: "library", label: "Library", icon: "library" },
@@ -13,9 +13,7 @@ export function Rail({
   route,
   counts,
   onNavigate,
-  showBackloggd,
 }: {
-  showBackloggd: boolean;
   route: Route;
   counts: Partial<Record<Route, number>>;
   onNavigate: (r: Route) => void;
@@ -40,7 +38,6 @@ export function Rail({
         Hearth
       </div>
       {ITEMS.map((i) => item(i.id, i.label, i.icon))}
-      {showBackloggd && item("backloggd", "Backloggd", "book")}
       <div className="spacer" />
       {item("settings", "Settings", "settings")}
     </nav>

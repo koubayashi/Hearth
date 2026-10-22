@@ -536,11 +536,3 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .shelf-form .text-input { width: 220px; height: 34px; }
 .shelf-actions { display: inline-flex; gap: var(--space-4); margin-left: var(--space-2); }
 @container (max-width: 640px) { .shelves { margin-right: 0; } }
-
-/* ---------- Backloggd section ---------- */
-.web-section { display: flex; flex-direction: column; height: 100%; padding: var(--space-3) var(--space-6) var(--space-3) var(--space-3); }
-.web-bar { position: static; margin-bottom: var(--space-3); }
-.web-note { font-size: var(--text-xs); color: var(--ink-3); white-space: nowrap; }
-/* The Backloggd page is a separate browser view laid exactly over this box. */
-.web-area { flex: 1; min-height: 0; border-radius: var(--radius-panel); border: 1px solid var(--line); background: var(--base-2); overflow: hidden; }
-.web-area .empty { padding: var(--space-6); }

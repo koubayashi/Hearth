@@ -7,14 +7,11 @@ import { TitleBar } from "./components/TitleBar";
 import { Toast, type ToastMsg } from "./components/Toast";
 import { Library } from "./screens/Library";
 import { Collections } from "./screens/Collections";
-import { Backloggd } from "./screens/Backloggd";
-import { usePrefs } from "./lib/prefs";
 import { Settings } from "./screens/Settings";
 import { Soon } from "./screens/Soon";
 import { legacy } from "./components/Art";
 
 export function App() {
-  const prefs = usePrefs();
   const [route, setRoute] = useState<Route>("library");
   const [focused, setFocused] = useState<Game | null>(null);
   const [version, setVersion] = useState(0);
@@ -87,7 +84,7 @@ export function App() {
       <Backdrop src={showsArt ? (focused?.hero ?? null) : null} />
       <TitleBar />
       <div className="app">
-        <Rail showBackloggd={prefs.showBackloggd} route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null))} />
+        <Rail route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null))} />
         <main className="main">
           {libraryLike && (
             <Library
@@ -117,7 +114,6 @@ export function App() {
             <Soon title="Stats" text="Your playtime by week and month, top games, and a yearly recap. Coming soon." />
           )}
           {route === "settings" && <Settings />}
-          {route === "backloggd" && prefs.showBackloggd && <Backloggd />}
         </main>
       </div>
       <Toast toast={toast} onDone={clearToast} />

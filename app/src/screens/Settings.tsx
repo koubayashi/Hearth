@@ -494,20 +494,6 @@ export function Settings() {
 
         <h2>Library</h2>
         <div className="setting-group glass">
-          <div className="setting">
-            <div className="text">
-              <b>Backloggd in the sidebar</b>
-              <span>Browse and log games on backloggd.com inside Hearth, with ads blocked by uBlock Origin Lite.</span>
-            </div>
-            <button
-              className="switch"
-              role="switch"
-              data-nav
-              aria-label="Backloggd in the sidebar"
-              aria-checked={p.showBackloggd}
-              onClick={() => setPrefs({ showBackloggd: !p.showBackloggd })}
-            />
-          </div>
           <CoverSizeSetting />
           <div className="setting">
             <div className="text">

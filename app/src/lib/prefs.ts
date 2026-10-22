@@ -15,8 +15,6 @@ export interface Prefs {
   coverSize: number;
   /** Metacritic badge in the game panel. */
   showScores: boolean;
-  /** Backloggd section in the sidebar. */
-  showBackloggd: boolean;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -27,7 +25,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, showBackloggd: true };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false };
 
 function load(): Prefs {
   try {

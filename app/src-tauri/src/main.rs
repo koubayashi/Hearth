@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artwork;
-mod backloggd;
 mod collections;
 mod details;
 mod folders;
@@ -633,10 +632,6 @@ fn main() {
             details::install_info,
             details::open_install_folder,
             details::open_store_page,
-            backloggd::backloggd_show,
-            backloggd::backloggd_hide,
-            backloggd::backloggd_nav,
-            backloggd::backloggd_open_external,
             folders::game_folders,
             folders::add_game_folder,
             folders::remove_game_folder,

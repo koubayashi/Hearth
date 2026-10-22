@@ -124,6 +124,9 @@ pub struct Epic {
     session: Mutex<Option<Session>>,
     catalog: Mutex<HashMap<String, CatalogEntry>>,
     on_session: SessionHook,
+    /// One renewal at a time: Epic replaces the refresh token on every
+    /// renewal, so two at once would leave one holding a dead token.
+    renewing: tokio::sync::Mutex<()>,
 }
 
 impl Epic {
@@ -144,6 +147,7 @@ impl Epic {
             session: Mutex::new(session),
             catalog: Mutex::new(catalog),
             on_session,
+            renewing: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -224,7 +228,7 @@ impl Epic {
     }
 
     /// Renews the session ahead of time so the refresh token never ages out
-    /// while Hearth runs (Epic keeps refresh tokens only for hours). Returns
+    /// while Hearth runs. Returns
     /// when the refresh token now expires, or None if nothing was due.
     pub async fn keep_alive(&self) -> anyhow::Result<Option<i64>> {
         let Some(s) = self.session.lock().unwrap().clone() else { return Ok(None) };
@@ -233,10 +237,24 @@ impl Epic {
         if s.expires_at_unix > soon && !refresh_due {
             return Ok(None);
         }
-        let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &s.refresh_token)]).await?;
-        let until = fresh.refresh_expires_at_unix;
-        self.store(fresh);
-        Ok(Some(until))
+        let fresh = self.renew(&s).await?;
+        Ok(Some(fresh.refresh_expires_at_unix))
+    }
+
+    /// Swaps the refresh token in `stale` for a new session. If another
+    /// renewal finished while this one waited, its result is used instead of
+    /// spending the (now replaced) token again.
+    async fn renew(&self, stale: &Session) -> anyhow::Result<Session> {
+        let _turn = self.renewing.lock().await;
+        let current = self.session.lock().unwrap().clone();
+        match current {
+            Some(c) if c.refresh_token != stale.refresh_token => return Ok(c),
+            None => bail!("Not signed in to Epic"),
+            _ => {}
+        }
+        let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &stale.refresh_token)]).await?;
+        self.store(fresh.clone());
+        Ok(fresh)
     }
 
     /// A valid access token, refreshing it when it is about to expire.
@@ -245,12 +263,10 @@ impl Epic {
         if s.expires_at_unix - now() > 120 {
             return Ok(Some(s));
         }
-        // A rejected refresh means the refresh token itself expired (Epic keeps
-        // them ~8 hours): report SESSION_EXPIRED so the app can sign in again
+        // A rejected refresh means the refresh token itself expired:
+        // report SESSION_EXPIRED so the app can sign in again
         // silently. Anything else (offline, Epic down) keeps the session.
-        let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &s.refresh_token)]).await?;
-        self.store(fresh.clone());
-        Ok(Some(fresh))
+        Ok(Some(self.renew(&s).await?))
     }
 
     async fn get<T: serde::de::DeserializeOwned>(&self, url: &str, s: &Session) -> anyhow::Result<T> {
