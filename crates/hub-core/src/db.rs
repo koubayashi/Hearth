@@ -21,6 +21,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/001_init.sql"),
     include_str!("../migrations/002_details.sql"),
     include_str!("../migrations/003_active_sessions.sql"),
+    include_str!("../migrations/004_art_source.sql"),
 ];
 
 pub struct Db {
@@ -199,15 +200,70 @@ impl Db {
         let mut stmt = self.conn.prepare(
             "SELECT g.id, CAST(e.store_game_id AS INTEGER) FROM games g
                JOIN store_entries e ON e.game_id = g.id AND e.store = 'steam'
-              WHERE g.cover IS NULL OR g.cover LIKE '%steamstatic.com%'
+              WHERE (g.cover IS NULL OR g.cover LIKE '%steamstatic.com%')
+                AND COALESCE(g.art_source, 'store') = 'store'
              UNION
              SELECT g.id, json_extract(g.details_json, '$.steam_app_id') FROM games g
               WHERE g.details_json IS NOT NULL
                 AND g.id NOT IN (SELECT game_id FROM store_entries WHERE store = 'steam')
-                AND (g.cover IS NULL OR g.cover LIKE '%steamstatic.com%')",
+                AND (g.cover IS NULL OR g.cover LIKE '%steamstatic.com%')
+                AND COALESCE(g.art_source, 'store') = 'store'",
         )?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Games still on store artwork that SteamGridDB hasn't been asked about
+    /// since `older_than`: (id, title, Steam app id if known). Installed and
+    /// recently played games come first.
+    pub fn sgdb_targets(&self, older_than: i64, limit: i64) -> Result<Vec<(i64, String, Option<i64>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id, g.title,
+                    COALESCE((SELECT CAST(e.store_game_id AS INTEGER) FROM store_entries e
+                               WHERE e.game_id = g.id AND e.store = 'steam' LIMIT 1),
+                             json_extract(g.details_json, '$.steam_app_id'))
+               FROM games g
+              WHERE COALESCE(g.art_source, 'store') = 'store'
+                AND (g.sgdb_checked_at IS NULL OR g.sgdb_checked_at < ?1)
+              ORDER BY (SELECT MAX(installed) FROM store_entries e WHERE e.game_id = g.id) DESC,
+                       (SELECT MAX(store_last_played) FROM store_entries e WHERE e.game_id = g.id) DESC
+              LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![older_than, limit], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn mark_sgdb_checked(&self, game_id: i64, now: i64) -> Result<()> {
+        self.conn
+            .execute("UPDATE games SET sgdb_checked_at = ?2 WHERE id = ?1", params![game_id, now])?;
+        Ok(())
+    }
+
+    /// Set one piece of artwork. `kind` is "cover", "hero" or "logo";
+    /// `source` is "store", "sgdb" or "user". Hand-picked art is never
+    /// replaced by an automatic source.
+    pub fn set_art(&self, game_id: i64, kind: &str, url: &str, source: &str) -> Result<bool> {
+        let column = match kind {
+            "cover" => "cover",
+            "hero" => "hero",
+            "logo" => "logo",
+            _ => return Ok(false),
+        };
+        let sql = format!(
+            "UPDATE games SET {column} = ?2, art_source = ?3
+              WHERE id = ?1 AND (?3 = 'user' OR COALESCE(art_source, 'store') != 'user')"
+        );
+        Ok(self.conn.execute(&sql, params![game_id, url, source])? > 0)
+    }
+
+    /// Drop chosen artwork so the store's (and SteamGridDB's) apply again.
+    pub fn reset_art(&self, game_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET cover = NULL, hero = NULL, logo = NULL, art_source = NULL, sgdb_checked_at = NULL
+              WHERE id = ?1",
+            [game_id],
+        )?;
+        Ok(())
     }
 
     /// Forget lookups that found nothing, so they're tried again (after the
@@ -621,6 +677,22 @@ mod tests {
         db.checkpoint_active(&[(id, 1000, 1600)]).unwrap();
         assert_eq!(db.take_active().unwrap(), [(id, 1000, 1600)]);
         assert!(db.take_active().unwrap().is_empty(), "taken once");
+    }
+
+    #[test]
+    fn hand_picked_art_is_never_replaced_automatically() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "620", "Portal 2", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+
+        assert_eq!(db.sgdb_targets(100, 10).unwrap(), [(id, "Portal 2".to_string(), Some(620))]);
+        assert!(db.set_art(id, "cover", "https://cdn2.steamgriddb.com/grid/a.png", "sgdb").unwrap());
+        assert!(db.sgdb_targets(100, 10).unwrap().is_empty(), "already on SteamGridDB art");
+
+        assert!(db.set_art(id, "cover", "mine.png", "user").unwrap());
+        assert!(!db.set_art(id, "cover", "https://cdn2.steamgriddb.com/grid/b.png", "sgdb").unwrap());
+        assert_eq!(db.game(id).unwrap().unwrap().cover.as_deref(), Some("mine.png"));
+        assert!(db.steam_art_targets().unwrap().is_empty(), "Steam refresh leaves it alone too");
     }
 
     #[test]

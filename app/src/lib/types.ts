@@ -52,6 +52,8 @@ export const STORE_LABEL: Record<StoreId, string> = {
 export interface Accounts {
   /** Display name when signed in to Epic. */
   epic: string | null;
+  /** A SteamGridDB API key is saved. */
+  sgdb: boolean;
   /** Steam account signed in on this PC. */
   steam: string | null;
   /** How Hearth reads the Steam library, or null for installed games only. */
@@ -87,4 +89,14 @@ export interface InstallInfo {
 export interface StoreHit {
   steam_app_id: number;
   name: string;
+}
+
+export type ArtKind = "cover" | "hero" | "logo";
+
+/** A SteamGridDB picture to choose from. */
+export interface ArtOption {
+  url: string;
+  thumb: string;
+  score: number;
+  style: string;
 }

@@ -1,4 +1,4 @@
-import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit, StoreId } from "./types";
+import type { Accounts, ArtKind, ArtOption, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit, StoreId } from "./types";
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
@@ -84,7 +84,7 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 export const mockBackend = {
   demo: true,
   async launch(_id: number) {},
-  accounts: async (): Promise<Accounts> => ({ epic: null, steam: "Demo player", steam_auth: null }),
+  accounts: async (): Promise<Accounts> => ({ epic: null, sgdb: false, steam: "Demo player", steam_auth: null }),
   async steamSetApiKey(_key: string): Promise<number> {
     throw new Error("Demo library: add your key in the desktop app");
   },
@@ -120,6 +120,24 @@ export const mockBackend = {
   },
   async openInstallFolder(_id: number) {},
   async openStorePage(_id: number) {},
+  async sgdbSetKey(_key: string) {
+    throw new Error("Demo library: add your SteamGridDB key in the desktop app");
+  },
+  async sgdbClearKey() {},
+  async openSgdbKeyPage() {},
+  // Demo choices reuse the library's own art so the picker can be designed.
+  async artworkOptions(_id: number, kind: ArtKind): Promise<ArtOption[]> {
+    return games.slice(0, 8).map((g, i) => {
+      const url = (kind === "cover" ? g.cover : g.hero) ?? "";
+      return { url, thumb: url, score: 10 - i, style: "alternate" };
+    });
+  },
+  async setArtwork(id: number, kind: ArtKind, url: string) {
+    const g = games.find((g) => g.id === id);
+    if (g && kind === "cover") g.cover = url;
+    if (g && kind === "hero") g.hero = url;
+  },
+  async resetArtwork(_id: number) {},
   async searchStore(term: string): Promise<StoreHit[]> {
     return games
       .filter((g) => g.title.toLowerCase().includes(term.toLowerCase().slice(0, 4)))

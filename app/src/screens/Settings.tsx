@@ -179,6 +179,73 @@ function EpicRow({ accounts }: { accounts: Accounts | null }) {
   );
 }
 
+/** Optional SteamGridDB key for community covers and backgrounds. */
+function SgdbRow({ accounts }: { accounts: Accounts | null }) {
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<Note>(null);
+  const on = !!accounts?.sgdb;
+
+  const save = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await api.sgdbSetKey(key);
+      setKey("");
+      setNote({ ok: true, text: "Connected. Covers are being updated in the background." });
+    } catch (e) {
+      setNote({ ok: false, text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-row">
+        <div className="text">
+          <b>SteamGridDB artwork</b>
+          <span>
+            {on
+              ? "Your games use the community's favourite covers and backgrounds. Change any game's art from its ⋯ menu."
+              : "Optional. Community-made covers and backgrounds, usually nicer than store art. Needs your own free key: sign in to SteamGridDB with Steam, then Preferences → API."}
+          </span>
+        </div>
+        {on && (
+          <button className="chip" data-nav onClick={() => api.sgdbClearKey()}>
+            Remove key
+          </button>
+        )}
+      </div>
+      {!on && (
+        <div className="key-row">
+          <input
+            className="text-input"
+            type="password"
+            data-nav
+            placeholder="Paste your SteamGridDB API key"
+            aria-label="SteamGridDB API key"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && key && !busy && save()}
+          />
+          <button className="chip" data-nav disabled={!key || busy} onClick={save}>
+            {busy ? "Checking…" : "Save key"}
+          </button>
+          <button className="chip" data-nav onClick={() => api.openSgdbKeyPage()}>
+            Get a key
+          </button>
+        </div>
+      )}
+      {note && (
+        <p className={note.ok ? "note" : "note error"} role="status">
+          {note.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Plain folders of games (DRM-free, copies, other launchers). */
 function GameFolders() {
   const [folders, setFolders] = useState<string[]>([]);
@@ -259,6 +326,7 @@ function StoreAccounts() {
         <SteamRow accounts={accounts} />
         <EpicRow accounts={accounts} />
         <GameFolders />
+        <SgdbRow accounts={accounts} />
         <div className="setting">
           <div className="text">
             <b>Refresh library</b>

@@ -151,7 +151,7 @@ const EDITION_WORDS: &[&str] = &[
     "collectors", "anniversary", "hd", "classic", "premium",
 ];
 
-fn base_title(title: &str) -> String {
+pub fn base_title(title: &str) -> String {
     let lower = title.to_lowercase().replace(['’', '\''], "");
     // "Name: Something Edition" or "Name - Something Edition".
     let main = match lower.find(':').or_else(|| lower.find(" - ")) {

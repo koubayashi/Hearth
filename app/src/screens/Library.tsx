@@ -72,7 +72,7 @@ export function Library({
       all
         .filter((g) => g.last_played !== null)
         .sort((a, b) => b.last_played! - a.last_played!)
-        .slice(0, 5),
+        .slice(0, 6),
     [all],
   );
   const ownedStores = useMemo(

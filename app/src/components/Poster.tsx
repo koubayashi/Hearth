@@ -8,6 +8,7 @@ import { Art } from "./Art";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
 import { StoreMatch } from "./StoreMatch";
+import { ArtworkPicker } from "./ArtworkPicker";
 
 /** Store-page details and install info for a game, loaded when it's selected. */
 function useGameInfo(game: Game | null, nonce: number) {
@@ -55,6 +56,7 @@ export const Poster = forwardRef<
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [matching, setMatching] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [nonce, setNonce] = useState(0);
   const { details, install } = useGameInfo(game, nonce);
   const { showScores } = usePrefs();
@@ -62,6 +64,7 @@ export const Poster = forwardRef<
   useEffect(() => {
     setMenu(false);
     setMatching(false);
+    setPicking(false);
   }, [game?.id]);
   useEffect(() => {
     if (!menu) return;
@@ -96,6 +99,16 @@ export const Poster = forwardRef<
         }
       }}
     >
+      {picking && (
+        <ArtworkPicker
+          game={game}
+          onClose={() => setPicking(false)}
+          onDone={() => {
+            setPicking(false);
+            setNonce((n) => n + 1);
+          }}
+        />
+      )}
       {matching && (
         <StoreMatch
           game={game}
@@ -106,8 +119,12 @@ export const Poster = forwardRef<
           }}
         />
       )}
-      <div className="poster-art" key={game.id}>
+      {/* A blurred copy fills the panel; the cover itself keeps its true shape. */}
+      <div className="poster-art" key={`bg-${game.id}`} aria-hidden>
         <Art src={game.cover ?? game.hero} title="" />
+      </div>
+      <div className="poster-cover" key={game.id}>
+        <Art src={game.cover ?? game.hero} title={game.title} />
       </div>
       <div className="poster-body">
         {/* Cover art already carries the game's logo, so the title stays plain text. */}
@@ -221,6 +238,10 @@ export const Poster = forwardRef<
                   Open install folder
                 </button>
               )}
+              <button role="menuitem" onClick={() => (setMenu(false), setPicking(true))}>
+                <Icon name="library" />
+                Change artwork…
+              </button>
               <button role="menuitem" onClick={() => (setMenu(false), setMatching(true))}>
                 <Icon name="search" />
                 Find on Steam store…

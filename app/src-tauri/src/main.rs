@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod artwork;
 mod details;
 mod folders;
 mod tracking;
@@ -21,6 +22,7 @@ pub(crate) struct AppState {
     steam: Arc<Steam>,
     pub(crate) metadata: hub_providers::metadata::Metadata,
     pub(crate) folders: Arc<folders::FolderProvider>,
+    pub(crate) sgdb: Arc<hub_providers::sgdb::SteamGridDb>,
     providers: Vec<Arc<dyn LibraryProvider>>,
     syncing: Mutex<bool>,
 }
@@ -100,6 +102,8 @@ fn now_playing(app: AppHandle) -> Vec<tracking::NowPlaying> {
 #[derive(Serialize)]
 struct Accounts {
     epic: Option<String>,
+    /// A SteamGridDB key is saved.
+    sgdb: bool,
     /// The Steam account Hearth reads, if any.
     steam: Option<String>,
     /// "session", "api_key", or null when Hearth can only see installed games.
@@ -110,6 +114,7 @@ struct Accounts {
 fn accounts(state: State<AppState>) -> Accounts {
     Accounts {
         epic: state.epic.account_name(),
+        sgdb: state.sgdb.has_key(),
         steam: state.steam.account().map(|a| a.name),
         steam_auth: state.steam.auth().map(|a| match a {
             SteamAuth::Session { .. } => "session",
@@ -401,6 +406,13 @@ async fn fill_missing_art(app: &AppHandle) {
     }
 }
 
+/// Store artwork first (so every game has something), then SteamGridDB's.
+pub(crate) async fn refresh_art(app: &AppHandle) {
+    fill_missing_art(app).await;
+    refresh_steam_art(app).await;
+    artwork::apply_automatically(app).await;
+}
+
 /// Puts the real Steam artwork addresses on every Steam-sourced cover.
 async fn refresh_steam_art(app: &AppHandle) {
     let state = app.state::<AppState>();
@@ -488,8 +500,7 @@ pub(crate) fn sync_all(app: AppHandle) {
         *lock(&state.syncing) = false;
         tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
-        fill_missing_art(&app).await;
-        refresh_steam_art(&app).await;
+        refresh_art(&app).await;
         let _ = app.emit("library-changed", ());
     });
 }
@@ -531,6 +542,7 @@ fn main() {
                 // Stores first, so the folder scan knows which folders they already own.
                 providers: vec![steam.clone(), epic.clone(), folders.clone()],
                 folders,
+                sgdb: Arc::new(hub_providers::sgdb::SteamGridDb::new(secrets::load("sgdb-key"))),
                 steam,
                 metadata: Default::default(),
                 epic,
@@ -593,7 +605,13 @@ fn main() {
             folders::add_game_folder,
             folders::remove_game_folder,
             details::search_store,
-            details::set_store_match
+            details::set_store_match,
+            artwork::sgdb_set_key,
+            artwork::sgdb_clear_key,
+            artwork::open_sgdb_key_page,
+            artwork::artwork_options,
+            artwork::set_artwork,
+            artwork::reset_artwork
         ])
         .build(tauri::generate_context!())
         .expect("error while building Hearth")

@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Accounts, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit } from "./types";
+import type { Accounts, ArtKind, ArtOption, Game, GameDetails, InstallInfo, LibraryQuery, NowPlaying, StoreHit } from "./types";
 import { mockBackend } from "./mock";
 
 const on = (event: string) => (cb: (payload: unknown) => void) => listen(event, (e) => cb(e.payload));
@@ -33,6 +33,12 @@ const backend = isTauri()
       openStorePage: (id: number) => invoke<void>("open_store_page", { id }),
       gameFolders: () => invoke<string[]>("game_folders"),
       searchStore: (term: string) => invoke<StoreHit[]>("search_store", { term }),
+      sgdbSetKey: (key: string) => invoke<void>("sgdb_set_key", { key }),
+      sgdbClearKey: () => invoke<void>("sgdb_clear_key"),
+      openSgdbKeyPage: () => invoke<void>("open_sgdb_key_page"),
+      artworkOptions: (id: number, kind: ArtKind) => invoke<ArtOption[]>("artwork_options", { id, kind }),
+      setArtwork: (id: number, kind: ArtKind, url: string) => invoke<void>("set_artwork", { id, kind, url }),
+      resetArtwork: (id: number) => invoke<void>("reset_artwork", { id }),
       setStoreMatch: (id: number, steamAppId: number) =>
         invoke<GameDetails | null>("set_store_match", { id, steamAppId }),
       addGameFolder: (path: string) => invoke<string[]>("add_game_folder", { path }),
