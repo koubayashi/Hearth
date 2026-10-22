@@ -82,6 +82,18 @@ export function Library({
         .slice(0, 6),
     [all],
   );
+  // Recent games: as many 260px+ tiles as fit on one row, never a partial second row.
+  const recentRef = useRef<HTMLDivElement>(null);
+  const [recentCols, setRecentCols] = useState(3);
+  useEffect(() => {
+    const el = recentRef.current;
+    if (!el) return;
+    const gap = 24;
+    const ro = new ResizeObserver(() => setRecentCols(Math.max(1, Math.floor((el.clientWidth + gap) / (260 + gap)))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+
   const ownedStores = useMemo(
     () => [...new Set(all.flatMap((g) => g.entries.map((e) => e.store)))],
     [all],
@@ -214,8 +226,8 @@ export function Library({
           {showRecent && (
             <>
               <h2>Jump back in</h2>
-              <div className="recent">
-                {recent.map((g) => (
+              <div className="recent" ref={recentRef} style={{ gridTemplateColumns: `repeat(${recentCols}, minmax(0, 1fr))` }}>
+                {recent.slice(0, recentCols).map((g) => (
                   <button
                     key={g.id}
                     data-nav
