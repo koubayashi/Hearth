@@ -16,8 +16,8 @@ const EMPTY: Record<GameStatus, string> = {
 };
 
 /** Statuses and the user's own collections, each a shelf of the library. */
-export function Collections(props: LibraryProps) {
-  const [shelf, setShelf] = useState<Shelf>({ kind: "status", status: "playing" });
+export function Collections({ initialStatus, ...props }: LibraryProps & { initialStatus?: GameStatus }) {
+  const [shelf, setShelf] = useState<Shelf>({ kind: "status", status: initialStatus ?? "playing" });
   const [collections, setCollections] = useState<Collection[]>([]);
   const [counts, setCounts] = useState<Record<GameStatus, number>>({ playing: 0, backlog: 0, completed: 0, abandoned: 0 });
   const [naming, setNaming] = useState<{ id: number | null; name: string } | null>(null);

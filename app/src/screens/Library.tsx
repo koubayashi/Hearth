@@ -37,7 +37,10 @@ export function Library({
   onPrimary,
   onToggleHidden,
   onToggleFavorite,
+  revealId,
 }: {
+  /** Scroll this game into view once the library has loaded (opened from Stats). */
+  revealId?: number | null;
   hiddenView: boolean;
   scope?: LibraryScope;
   /** Bumped by the parent whenever library data changes. */
@@ -158,6 +161,14 @@ export function Library({
     onFocusGame(pick);
     setReveal({ id: pick.id, nonce: Date.now() });
   };
+
+  // Arriving with a game to show: bring its cover into view once it's listed.
+  const revealed = useRef(false);
+  useEffect(() => {
+    if (revealed.current || !revealId || !games?.some((g) => g.id === revealId)) return;
+    revealed.current = true;
+    setReveal({ id: revealId, nonce: Date.now() });
+  }, [games, revealId]);
 
   const toggleStore = (s: StoreId) =>
     setStores((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./lib/api";
-import type { Game, NowPlaying } from "./lib/types";
+import type { Game, GameStatus, NowPlaying } from "./lib/types";
 import { STORE_LABEL } from "./lib/types";
 import { Rail, type Route } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
@@ -20,6 +20,19 @@ export function App() {
   // While the cover size slider moves, the library shows behind Settings.
   // It stays mounted (hidden) while Settings is open, so it is ready at once.
   const [peek, setPeek] = useState(false);
+  // Where Stats sent you: a game to show in the library, or a status shelf.
+  const [revealId, setRevealId] = useState<number | null>(null);
+  const [startStatus, setStartStatus] = useState<GameStatus | undefined>(undefined);
+  const openGame = (g: Game) => {
+    setFocused(g);
+    setRevealId(g.id);
+    setRoute("library");
+  };
+  const openStatus = (status: GameStatus) => {
+    setStartStatus(status);
+    setFocused(null);
+    setRoute("collections");
+  };
   const [counts, setCounts] = useState<Partial<Record<Route, number>>>({});
 
   const refresh = () => setVersion((v) => v + 1);
@@ -87,12 +100,13 @@ export function App() {
       <Backdrop src={showsArt ? (focused?.hero ?? null) : null} />
       <TitleBar />
       <div className="app">
-        <Rail route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false))} />
+        <Rail route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false), setRevealId(null), setStartStatus(undefined))} />
         <main className={`main${peek && route === "settings" ? " peeking" : ""}`}>
           {libraryLike && (
             <Library
               key={route}
               hiddenView={route === "hidden"}
+              revealId={route === "library" ? revealId : null}
               version={version}
               focused={focused}
               playing={playing}
@@ -104,6 +118,8 @@ export function App() {
           )}
           {route === "collections" && (
             <Collections
+              key={startStatus ?? "collections"}
+              initialStatus={startStatus}
               version={version}
               focused={focused}
               playing={playing}
@@ -113,7 +129,7 @@ export function App() {
               onToggleFavorite={toggleFavorite}
             />
           )}
-          {route === "stats" && <Stats version={version} />}
+          {route === "stats" && <Stats version={version} onOpenGame={openGame} onOpenStatus={openStatus} />}
           {route === "settings" && (
             <div className="peek-library" aria-hidden inert>
               <Library

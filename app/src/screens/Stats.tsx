@@ -2,11 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { computeStats, hours, type Stats as StatsData, type Week } from "../lib/stats";
 import { formatPlaytime } from "../lib/format";
-import { STATUSES, STORE_LABEL, type Game, type PlaySession } from "../lib/types";
+import { STATUSES, STORE_LABEL, type Game, type GameStatus, type PlaySession } from "../lib/types";
 import { StoreIcon } from "../components/StoreIcon";
 
 /** Playtime and library numbers: store totals for all-time, Hearth's own sessions for anything dated. */
-export function Stats({ version }: { version: number }) {
+export function Stats({
+  version,
+  onOpenGame,
+  onOpenStatus,
+}: {
+  version: number;
+  /** Show this game in the library. */
+  onOpenGame: (g: Game) => void;
+  /** Show this status's shelf in Collections. */
+  onOpenStatus: (status: GameStatus) => void;
+}) {
   const [data, setData] = useState<{ games: Game[]; sessions: PlaySession[] } | null>(null);
 
   useEffect(() => {
@@ -19,17 +29,16 @@ export function Stats({ version }: { version: number }) {
   const s = useMemo(() => (data ? computeStats(data.games, data.sessions) : null), [data]);
   if (!s) return <div className="scroll" />;
 
+  const podium = s.top.slice(0, 3);
+  const rest = s.top.slice(3);
+  const stores = s.stores.filter((st) => st.secs > 0);
+
   return (
     <div className="scroll stats-scroll">
       <div className="stats">
         <h1>Stats</h1>
 
-        <div className="stat-tiles glass">
-          <Tile value={hours(s.totalSecs)} label="Total playtime" />
-          <Tile value={`${s.played}`} unit={`of ${s.games}`} label="Games played" />
-          <Tile value={`${s.installed}`} label="Installed" />
-          <Tile value={hours(s.thisWeekSecs)} label="This week" />
-        </div>
+        <Headline s={s} onOpenGame={onOpenGame} />
 
         <section>
           <h2>
@@ -38,64 +47,78 @@ export function Stats({ version }: { version: number }) {
           <Activity s={s} />
         </section>
 
-        {s.top.length > 0 && (
+        {podium.length > 0 && (
           <section>
             <h2>Most played</h2>
-            <ol className="bar-list">
-              {s.top.map(({ game, secs }, i) => (
-                <li key={game.id} className="bar-row">
-                  <span className="rank">{i + 1}</span>
-                  {game.cover ? <img className="thumb" src={game.cover} alt="" loading="lazy" /> : <span className="thumb" />}
-                  <span className="name" title={game.title}>
-                    {game.title}
-                  </span>
-                  <Bar value={secs} max={s.top[0].secs} />
-                  <span className="value" title={formatPlaytime(secs)}>
-                    {hours(secs)}
-                  </span>
+            <ol className="podium">
+              {podium.map(({ game, secs }, i) => (
+                <li key={game.id}>
+                  <button className="podium-item" data-nav onClick={() => onOpenGame(game)} title={`Show ${game.title} in the library`}>
+                    {game.cover ? <img src={game.cover} alt="" loading="lazy" /> : <span className="podium-art" />}
+                    <span className="podium-text">
+                      <span className="rank">{i + 1}</span>
+                      <b>{game.title}</b>
+                      <span>{formatPlaytime(secs)}</span>
+                    </span>
+                  </button>
                 </li>
               ))}
             </ol>
+            {rest.length > 0 && (
+              <ol className="ranked" start={4} style={{ ["--rows" as string]: Math.ceil(rest.length / 2) }}>
+                {rest.map(({ game, secs }, i) => (
+                  <li key={game.id}>
+                    <button data-nav onClick={() => onOpenGame(game)} title={`Show ${game.title} in the library`}>
+                      <span className="rank">{i + 4}</span>
+                      <span className="name">{game.title}</span>
+                      <span className="value">{hours(secs)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
           </section>
         )}
 
         <div className="stats-pair">
-          <section>
-            <h2>By store</h2>
-            <ol className="bar-list compact">
-              {s.stores.map((st) => (
-                <li key={st.store} className="bar-row">
-                  <span className="store-mark">
-                    <StoreIcon store={st.store} size={16} />
-                  </span>
-                  <span className="name">
-                    {STORE_LABEL[st.store]} <small>{st.games} {st.games === 1 ? "game" : "games"}</small>
-                  </span>
-                  <Bar value={st.secs} max={s.stores[0].secs} />
-                  <span className="value">{hours(st.secs)}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
+          {stores.length > 0 && (
+            <section>
+              <h2>By store</h2>
+              <ul className="figures">
+                {stores.map((st) => (
+                  <li key={st.store}>
+                    <span className="figure-label">
+                      <StoreIcon store={st.store} size={15} />
+                      {STORE_LABEL[st.store]}
+                    </span>
+                    <b>{hours(st.secs)}</b>
+                    <small>
+                      {st.games} {st.games === 1 ? "game" : "games"}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section>
             <h2>Library</h2>
-            <div className="split" role="img" aria-label={`${s.played} played, ${s.games - s.played} never played`}>
-              <span style={{ flexGrow: s.played }} />
-              <span style={{ flexGrow: s.games - s.played }} />
-            </div>
-            <p className="split-legend">
-              <span><i className="key played" />{s.played} played</span>
-              <span><i className="key" />{s.games - s.played} never played</span>
+            <p className="library-line">
+              <b>{s.played}</b> of {s.games} games played
             </p>
-            <dl className="status-list">
+            <ul className="figures statuses">
               {STATUSES.map((st) => (
-                <div key={st.id}>
-                  <dt>{st.label}</dt>
-                  <dd>{s.statuses[st.id]}</dd>
-                </div>
+                <li key={st.id}>
+                  <button data-nav onClick={() => onOpenStatus(st.id)} title={`Show ${st.label} in Collections`}>
+                    <span className="figure-label">
+                      <span className={`status-dot ${st.id}`} />
+                      {st.label}
+                    </span>
+                    <b>{s.statuses[st.id]}</b>
+                  </button>
+                </li>
               ))}
-            </dl>
+            </ul>
           </section>
         </div>
       </div>
@@ -103,24 +126,35 @@ export function Stats({ version }: { version: number }) {
   );
 }
 
-function Tile({ value, unit, label }: { value: string; unit?: string; label: string }) {
+/**
+ * The headline: the totals in one sentence, over the art of the game you
+ * have played most, which is also a way into it.
+ */
+function Headline({ s, onOpenGame }: { s: StatsData; onOpenGame: (g: Game) => void }) {
+  const top = s.top[0];
+  const art = top?.game.hero ?? top?.game.cover ?? null;
+  const h = Math.round(s.totalSecs / 3600);
+  const total = s.totalSecs === 0 ? "No playtime yet" : h === 0 ? "Under an hour" : `${h.toLocaleString()} ${h === 1 ? "hour" : "hours"}`;
   return (
-    <div className="tile">
-      <b>
-        {value}
-        {unit && <small> {unit}</small>}
-      </b>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function Bar({ value, max }: { value: number; max: number }) {
-  const pct = max > 0 ? (value / max) * 100 : 0;
-  return (
-    <span className="bar">
-      {value > 0 && <span style={{ width: `${Math.max(pct, 1)}%` }} />}
-    </span>
+    <header className={`stats-hero${art ? " has-art" : ""}`}>
+      {art && <img className="stats-hero-art" src={art} alt="" />}
+      <div className="stats-hero-text">
+        <p className="stats-hero-total">
+          {total}
+          <span> across {s.played} {s.played === 1 ? "game" : "games"}</span>
+        </p>
+        <p className="stats-hero-sub">
+          {s.installed} installed
+          {s.sessions > 0 && `, ${hours(s.thisWeekSecs)} played this week`}
+        </p>
+      </div>
+      {top && (
+        <button className="stats-hero-game" data-nav onClick={() => onOpenGame(top.game)}>
+          Most played <b>{top.game.title}</b>
+          <span>{formatPlaytime(top.secs)}</span>
+        </button>
+      )}
+    </header>
   );
 }
 
@@ -185,7 +219,9 @@ function Activity({ s }: { s: StatsData }) {
             onMouseEnter={() => setHover(i)}
             aria-label={`Week of ${weekLabel(w)}: ${formatPlaytime(w.secs)}`}
           >
-            {w.secs > 0 && <span style={{ height: `${Math.max((w.secs / max) * 100, 2)}%` }} />}
+            {w.secs > 0 && (
+              <span style={{ height: `${Math.max((w.secs / max) * 100, 2)}%`, ["--i" as string]: i }} />
+            )}
             <small>{month(w, i)}</small>
           </div>
         ))}
