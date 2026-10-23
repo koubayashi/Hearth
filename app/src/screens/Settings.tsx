@@ -576,6 +576,20 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
           </div>
           <div className="setting">
             <div className="text">
+              <b>Soften the art behind the cover</b>
+              <span>A light blur on the game art in the game panel, so the cover stands out.</span>
+            </div>
+            <button
+              className="switch"
+              role="switch"
+              data-nav
+              aria-label="Soften the art behind the cover"
+              aria-checked={p.blurPosterArt}
+              onClick={() => setPrefs({ blurPosterArt: !p.blurPosterArt })}
+            />
+          </div>
+          <div className="setting">
+            <div className="text">
               <b>Light mode</b>
               <span>A light background for daytime.</span>
             </div>

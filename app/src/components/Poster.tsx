@@ -63,7 +63,7 @@ export const Poster = forwardRef<
   const [picking, setPicking] = useState(false);
   const [nonce, setNonce] = useState(0);
   const { details, install } = useGameInfo(game, nonce);
-  const { showScores } = usePrefs();
+  const { showScores, blurPosterArt } = usePrefs();
 
   useEffect(() => {
     setMenu(null);
@@ -86,7 +86,7 @@ export const Poster = forwardRef<
 
   return (
     <aside
-      className={`poster${game.hero ? " has-hero" : ""}`}
+      className={`poster${game.hero ? " has-hero" : ""}${blurPosterArt ? " soft-art" : ""}`}
       aria-label={`${game.title} details`}
       onKeyDown={(e) => {
         if (e.key === "Escape") {

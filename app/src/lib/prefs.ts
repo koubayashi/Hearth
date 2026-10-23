@@ -15,6 +15,8 @@ export interface Prefs {
   coverSize: number;
   /** Metacritic badge in the game panel. */
   showScores: boolean;
+  /** Soften the hero art behind the cover in the game panel. */
+  blurPosterArt: boolean;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -25,7 +27,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true };
 
 function load(): Prefs {
   try {
