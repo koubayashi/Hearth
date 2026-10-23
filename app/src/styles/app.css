@@ -75,7 +75,18 @@ input { font: inherit; color: inherit; }
    one window tall loops: the scrollbar appears, the covers narrow and fit,
    it disappears, they widen and overflow again, many times a second (it
    looked like blur on the Hidden page, since screenshots catch one frame). */
+/* Scroll edges: content fades out in the gap above the floating toolbar (or
+   the window top) and over the last stretch at the bottom, instead of being
+   cut by the window edge. The mask belongs to the scroll box, so it stays put
+   while the content moves. */
 .scroll {
+  /* Down to where the sticky toolbar sits: its offset plus the scroll padding. */
+  --edge-top: calc(var(--space-3) * 2);
+  --edge-bottom: 28px;
+  /* The gap above the toolbar stays clear; the soft part of the fade sits
+     under the toolbar's top edge, where its glass hides it. */
+  mask-image: linear-gradient(to bottom, transparent var(--edge-top), #000 calc(var(--edge-top) + 18px),
+    #000 calc(100% - var(--edge-bottom)), transparent 100%);
   overflow-y: auto; overflow-x: hidden; height: 100%; scrollbar-gutter: stable;
   padding: var(--space-3) var(--space-6) 80px var(--space-3);
 }
@@ -189,7 +200,7 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 /* ---------- library layout: poster beside the wall ---------- */
 /* The poster width is rounded to whole pixels so covers sit on whole pixels
    (27vw is fractional at most window widths). */
-.library { display: grid; grid-template-columns: round(down, clamp(280px, 27vw, 400px), 1px) minmax(0, 1fr); height: 100%; }
+.library { container: library / inline-size; display: grid; grid-template-columns: round(down, clamp(280px, 27vw, 400px), 1px) minmax(0, 1fr); height: 100%; }
 .library .scroll { container-type: inline-size; }
 .library.solo { grid-template-columns: minmax(0, 1fr); }
 .library .scroll { padding-left: var(--space-5); }
@@ -429,10 +440,19 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   }
   .top .search:not(:focus-within):not(.has-value) input { width: 0; flex: 0; opacity: 0; }
 }
-/* Too narrow to share the top edge with the window buttons: drop below them. */
-@container (max-width: 640px) {
-  .top { margin-right: 0; top: 44px; }
-  .library .scroll > .top:first-child { margin-top: 32px; }
+/* Too narrow to share the top edge with the window buttons: the toolbar drops
+   below them, and the top fade grows to match. Measured on the whole library
+   page (962px there is a 640px wide grid beside the poster) so the scroll box
+   itself can take the new fade height. */
+@container library (max-width: 962px) {
+  .library:not(.solo) .top { margin-right: 0; top: 44px; }
+  .library:not(.solo) .scroll > .top:first-child { margin-top: 32px; }
+  .library:not(.solo) .scroll { --edge-top: calc(44px + var(--space-3)); }
+}
+@container library (max-width: 640px) {
+  .library.solo .top { margin-right: 0; top: 44px; }
+  .library.solo .scroll > .top:first-child { margin-top: 32px; }
+  .library.solo .scroll { --edge-top: calc(44px + var(--space-3)); }
 }
 
 /* ---------- install folder ---------- */
