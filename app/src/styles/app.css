@@ -71,8 +71,12 @@ input { font: inherit; color: inherit; }
 .nav small { margin-left: auto; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .rail .spacer { flex: 1; }
 
+/* The scrollbar space is always reserved. Otherwise a page almost exactly
+   one window tall loops: the scrollbar appears, the covers narrow and fit,
+   it disappears, they widen and overflow again, many times a second (it
+   looked like blur on the Hidden page, since screenshots catch one frame). */
 .scroll {
-  overflow-y: auto; overflow-x: hidden; height: 100%;
+  overflow-y: auto; overflow-x: hidden; height: 100%; scrollbar-gutter: stable;
   padding: var(--space-3) var(--space-6) 80px var(--space-3);
 }
 .page { padding-top: var(--space-2); }
@@ -183,13 +187,10 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .switch:disabled { opacity: 0.4; cursor: default; }
 
 /* ---------- library layout: poster beside the wall ---------- */
-/* The poster width is rounded to whole pixels: 27vw is fractional at most
-   window widths, which put every cover on a half pixel and made the browser
-   resample them soft and washed out. */
+/* The poster width is rounded to whole pixels so covers sit on whole pixels
+   (27vw is fractional at most window widths). */
 .library { display: grid; grid-template-columns: round(down, clamp(280px, 27vw, 400px), 1px) minmax(0, 1fr); height: 100%; }
-/* Its own layer even when there is too little to scroll (the Hidden page),
-   so covers are drawn into it crisply instead of each as a separate layer. */
-.library .scroll { container-type: inline-size; will-change: transform; }
+.library .scroll { container-type: inline-size; }
 .library.solo { grid-template-columns: minmax(0, 1fr); }
 .library .scroll { padding-left: var(--space-5); }
 
