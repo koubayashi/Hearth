@@ -2,6 +2,8 @@ import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDe
 
 // ?sgdb in the URL shows Settings as if a key were saved, to design that state.
 const demoSgdb = typeof location !== "undefined" && location.search.includes("sgdb");
+// ?signedin shows the stores as signed in.
+const demoSignedIn = typeof location !== "undefined" && location.search.includes("signedin");
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
@@ -91,7 +93,12 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 export const mockBackend = {
   demo: true,
   async launch(_id: number) {},
-  accounts: async (): Promise<Accounts> => ({ epic: null, sgdb: demoSgdb, steam: "Demo player", steam_auth: null }),
+  accounts: async (): Promise<Accounts> => ({
+    epic: demoSignedIn ? "DemoPlayer" : null,
+    sgdb: demoSgdb,
+    steam: "Demo player",
+    steam_auth: demoSignedIn ? "session" : null,
+  }),
   async steamSetApiKey(_key: string): Promise<number> {
     throw new Error("Demo library: add your key in the desktop app");
   },

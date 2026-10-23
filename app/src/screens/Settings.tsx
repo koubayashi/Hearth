@@ -39,18 +39,18 @@ function SteamRow({ accounts }: { accounts: Accounts | null }) {
           <b>
             <StoreIcon store="steam" size={15} /> Steam
           </b>
-          <span>
-            {connected
-              ? `Connected to ${accounts?.steam ?? "your account"}. Every game you own and Steam's playtime from all your PCs are included.`
-              : "Installed games and this PC's playtime are read automatically. Sign in to add games you own but haven't installed, and playtime from every PC."}
-          </span>
+          {connected ? (
+            <SignedIn name={accounts?.steam ?? "your Steam account"} detail="Every game you own, with playtime from all your PCs." />
+          ) : (
+            <span>Installed games and this PC's playtime are read automatically. Sign in for the rest of your library.</span>
+          )}
         </div>
         {connected ? (
-          <button className="chip" data-nav onClick={() => api.steamSignOut()}>
+          <button className="btn" data-nav onClick={() => api.steamSignOut()}>
             Disconnect
           </button>
         ) : (
-          <button className="chip primary-chip" data-nav disabled={api.demo} onClick={() => api.steamSignIn()}>
+          <button className="btn btn-primary" data-nav disabled={api.demo} onClick={() => api.steamSignIn()}>
             Sign in
           </button>
         )}
@@ -72,10 +72,10 @@ function SteamRow({ accounts }: { accounts: Accounts | null }) {
             onChange={(e) => setKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && key && !busy && saveKey()}
           />
-          <button className="chip" data-nav disabled={!key || busy} onClick={saveKey}>
+          <button className="btn btn-primary" data-nav disabled={!key || busy} onClick={saveKey}>
             {busy ? "Checking…" : "Save key"}
           </button>
-          <button className="chip" data-nav onClick={() => api.openSteamKeyPage()}>
+          <button className="btn" data-nav onClick={() => api.openSteamKeyPage()}>
             Get a key
           </button>
         </div>
@@ -122,25 +122,25 @@ function EpicRow({ accounts }: { accounts: Accounts | null }) {
           <b>
             <StoreIcon store="epic" size={15} /> Epic Games
           </b>
-          <span>
-            {signedIn
-              ? `Signed in as ${accounts?.epic}. Your full library and Epic playtime are included.`
-              : "Installed games show up without signing in. Sign in to add games you own but haven't installed, and your Epic playtime."}
-          </span>
+          {signedIn ? (
+            <SignedIn name={accounts!.epic!} detail="Your full library and Epic playtime." />
+          ) : (
+            <span>Installed games show up without signing in. Sign in for the rest of your library and Epic playtime.</span>
+          )}
         </div>
         {signedIn ? (
-          <button className="chip" data-nav onClick={() => api.epicSignOut()}>
+          <button className="btn" data-nav onClick={() => api.epicSignOut()}>
             Sign out
           </button>
         ) : (
-          <button className="chip primary-chip" data-nav disabled={api.demo} onClick={() => api.epicSignIn()}>
+          <button className="btn btn-primary" data-nav disabled={api.demo} onClick={() => api.epicSignIn()}>
             Sign in
           </button>
         )}
       </div>
       {!signedIn && !browserFlow && (
         <button className="link" data-nav disabled={api.demo} onClick={openBrowser}>
-          Sign in with your browser instead (Google, Apple, Steam, Xbox, PlayStation…)
+          Sign in with Google, Apple, Steam, Xbox or PlayStation instead
         </button>
       )}
       {!signedIn && browserFlow && (
@@ -159,10 +159,10 @@ function EpicRow({ accounts }: { accounts: Accounts | null }) {
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && code && !busy && submit()}
             />
-            <button className="chip" data-nav disabled={!code || busy} onClick={submit}>
+            <button className="btn btn-primary" data-nav disabled={!code || busy} onClick={submit}>
               {busy ? "Signing in…" : "Sign in"}
             </button>
-            <button className="chip" data-nav onClick={() => api.epicOpenBrowser()}>
+            <button className="btn" data-nav onClick={() => api.epicOpenBrowser()}>
               Open again
             </button>
           </div>
@@ -202,17 +202,17 @@ function SgdbRow({ accounts }: { accounts: Accounts | null }) {
     <div className="setting setting-stack">
       <div className="setting-row">
         <div className="text">
-          <b>SteamGridDB artwork</b>
+          <b>Artwork from SteamGridDB</b>
           <span>
             {on
-              ? "Your games use the community's favourite covers and backgrounds. Change any game's art from its ⋯ menu."
-              : "Optional. Community-made covers and backgrounds, usually nicer than store art. Needs your own free key: sign in to SteamGridDB with Steam, then Preferences → API."}
+              ? "Community covers and backgrounds. Change any game's art from its ⋯ menu."
+              : "Optional community covers and backgrounds, often nicer than store art. Needs a free key."}
           </span>
         </div>
         {on && (
           <div className="key-actions">
             <button
-              className="chip"
+              className="btn"
               data-nav
               onClick={() =>
                 api
@@ -223,7 +223,7 @@ function SgdbRow({ accounts }: { accounts: Accounts | null }) {
             >
               Copy key
             </button>
-            <button className="chip" data-nav onClick={() => (setNote(null), api.sgdbClearKey())}>
+            <button className="btn" data-nav onClick={() => (setNote(null), api.sgdbClearKey())}>
               Remove key
             </button>
           </div>
@@ -241,10 +241,10 @@ function SgdbRow({ accounts }: { accounts: Accounts | null }) {
             onChange={(e) => setKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && key && !busy && save()}
           />
-          <button className="chip" data-nav disabled={!key || busy} onClick={save}>
+          <button className="btn btn-primary" data-nav disabled={!key || busy} onClick={save}>
             {busy ? "Checking…" : "Save key"}
           </button>
-          <button className="chip" data-nav onClick={() => api.openSgdbKeyPage()}>
+          <button className="btn" data-nav onClick={() => api.openSgdbKeyPage()}>
             Get a key
           </button>
         </div>
@@ -280,15 +280,10 @@ function GameFolders() {
     <div className="setting setting-stack">
       <div className="setting-row">
         <div className="text">
-          <b>
-            <StoreIcon store="manual" size={15} /> Game folders
-          </b>
-          <span>
-            Games installed outside a store. Each game is found whether it sits directly in the folder or in a
-            sub-folder; Steam and Epic libraries inside are left to those stores.
-          </span>
+          <b>Folders with games</b>
+          <span>Games installed outside a store, found in the folder or its sub-folders.</span>
         </div>
-        <button className="chip" data-nav onClick={add} disabled={api.demo}>
+        <button className="btn" data-nav onClick={add} disabled={api.demo}>
           Add folder
         </button>
       </div>
@@ -316,44 +311,108 @@ function GameFolders() {
   );
 }
 
-function StoreAccounts() {
-  const [accounts, setAccounts] = useState<Accounts | null>(null);
-  const [syncing, setSyncing] = useState(false);
-
-  useEffect(() => {
-    const load = () => api.accounts().then(setAccounts);
-    load();
-    const offs = [
-      api.onAccountsChanged(load),
-      api.onSyncStarted(() => setSyncing(true)),
-      api.onLibraryChanged(() => setSyncing(false)),
-    ];
-    return () => offs.forEach((o) => void o.then((f) => f()));
-  }, []);
-
+/** Signed-in state, stated plainly under the store's name. */
+function SignedIn({ name, detail }: { name: string; detail: string }) {
   return (
     <>
-      <h2>Stores</h2>
-      <div className="setting-group glass">
-        <SteamRow accounts={accounts} />
-        <EpicRow accounts={accounts} />
-        <GameFolders />
-        <SgdbRow accounts={accounts} />
-        <div className="setting">
-          <div className="text">
-            <b>Refresh library</b>
-            <span>Hearth checks every store when it starts. Run it again after installing something.</span>
-          </div>
-          <button className="chip" data-nav disabled={syncing} onClick={() => (setSyncing(true), api.syncNow())}>
-            {syncing ? "Refreshing…" : "Refresh now"}
-          </button>
-        </div>
-      </div>
+      <span className="signed-in">
+        <Icon name="check" size={14} />
+        Signed in as <b>{name}</b>
+      </span>
+      <span>{detail}</span>
     </>
   );
 }
 
-/** Cover size, previewed with real covers from the library at true size. */
+/** Store accounts, kept current when a sign-in finishes elsewhere. */
+function useAccounts() {
+  const [accounts, setAccounts] = useState<Accounts | null>(null);
+  useEffect(() => {
+    const load = () => api.accounts().then(setAccounts);
+    load();
+    const off = api.onAccountsChanged(load);
+    return () => void off.then((f) => f());
+  }, []);
+  return accounts;
+}
+
+/** Re-checks every store. An action, so it sits by the page title. */
+function RefreshButton() {
+  const [syncing, setSyncing] = useState(false);
+  useEffect(() => {
+    const offs = [api.onSyncStarted(() => setSyncing(true)), api.onLibraryChanged(() => setSyncing(false))];
+    return () => offs.forEach((o) => void o.then((f) => f()));
+  }, []);
+  return (
+    <button
+      className="btn"
+      data-nav
+      disabled={syncing}
+      title="Hearth checks every store when it starts. Run it again after installing something."
+      onClick={() => (setSyncing(true), api.syncNow())}
+    >
+      <Icon name="refresh" size={15} />
+      {syncing ? "Refreshing…" : "Refresh library"}
+    </button>
+  );
+}
+
+const SECTIONS = [
+  { id: "stores", label: "Stores" },
+  { id: "folders", label: "Game folders" },
+  { id: "playtime", label: "Playtime" },
+  { id: "appearance", label: "Appearance" },
+  { id: "library", label: "Library" },
+] as const;
+
+/**
+ * Where you are on the page, and a way to jump: highlights the section in
+ * view as you scroll, like Windows Settings.
+ */
+function SectionIndex() {
+  const [active, setActive] = useState<string>(SECTIONS[0].id);
+  useEffect(() => {
+    const root = document.querySelector<HTMLElement>(".settings-scroll");
+    if (!root) return;
+    // The last section whose heading has reached the top of the view is
+    // current; at the very bottom it's the last one, however short it is.
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const limit = root.getBoundingClientRect().top + 120;
+      const atEnd = root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
+      let current: string = SECTIONS[0].id;
+      for (const x of SECTIONS) {
+        const el = document.getElementById(`settings-${x.id}`);
+        if (el && el.getBoundingClientRect().top <= limit) current = x.id;
+      }
+      setActive(atEnd ? SECTIONS[SECTIONS.length - 1].id : current);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    root.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      root.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  const go = (id: string) => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById(`settings-${id}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
+  return (
+    <nav className="settings-index" aria-label="Settings sections">
+      {SECTIONS.map((x) => (
+        <button key={x.id} data-nav aria-current={active === x.id ? "true" : undefined} onClick={() => go(x.id)}>
+          {x.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 /**
  * The cover size slider. While you drag it (or nudge it with the keys), the
  * rest of Settings fades out and your real library shows underneath at the
@@ -372,7 +431,7 @@ function CoverSizeSetting({ onPeek }: { onPeek: (on: boolean) => void }) {
     <div className="setting size-setting">
       <div className="text">
         <b>Cover size</b>
-        <span>How big game covers are in the library. Your library shows behind Settings while you adjust.</span>
+        <span>Your library shows behind Settings while you adjust.</span>
       </div>
       <input
         type="range"
@@ -418,16 +477,13 @@ function Startup() {
     setEnabled(await autostart.isEnabled());
   };
   return (
-    <>
+    <section id="settings-playtime">
       <h2>Playtime</h2>
       <div className="setting-group glass">
         <div className="setting">
           <div className="text">
             <b>Start with Windows</b>
-            <span>
-              Hearth starts quietly in the tray, so games you launch from their folder or another
-              launcher are timed too. Closing the window keeps it running there.
-            </span>
+            <span>Hearth waits in the tray, so games started outside it are timed too.</span>
           </div>
           <button
             className="switch"
@@ -440,26 +496,47 @@ function Startup() {
           />
         </div>
       </div>
-    </>
+    </section>
   );
 }
 
 export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void }) {
   const p = usePrefs();
+  const accounts = useAccounts();
   return (
     <div className="scroll settings-scroll">
       <div className="settings">
-        <h1>Settings</h1>
+        <SectionIndex />
+        <div className="settings-content">
+        <header className="settings-head">
+          <h1>Settings</h1>
+          <RefreshButton />
+        </header>
 
-        <StoreAccounts />
+        <section id="settings-stores">
+          <h2>Stores</h2>
+          <div className="setting-group glass">
+            <SteamRow accounts={accounts} />
+            <EpicRow accounts={accounts} />
+          </div>
+        </section>
+
+        <section id="settings-folders">
+          <h2>Game folders</h2>
+          <div className="setting-group glass">
+            <GameFolders />
+          </div>
+        </section>
+
         <Startup />
 
+        <section id="settings-appearance">
         <h2>Appearance</h2>
         <div className="setting-group glass">
           <div className="setting">
             <div className="text">
               <b>Tone</b>
-              <span>The background and highlight colour of the whole app.</span>
+              <span>The background and highlight colour.</span>
             </div>
           </div>
           <div className="setting">
@@ -481,7 +558,7 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
           <div className="setting">
             <div className="text">
               <b>Custom highlight colour</b>
-              <span>Replaces the tone's highlight on the Play button and the selected game.</span>
+              <span>Replaces the tone's highlight colour.</span>
             </div>
             <input
               type="color"
@@ -492,7 +569,7 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
               onChange={(e) => setPrefs({ customAccent: e.target.value })}
             />
             {p.customAccent && (
-              <button className="chip" data-nav onClick={() => setPrefs({ customAccent: null })}>
+              <button className="btn" data-nav onClick={() => setPrefs({ customAccent: null })}>
                 Reset
               </button>
             )}
@@ -500,7 +577,7 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
           <div className="setting">
             <div className="text">
               <b>Light mode</b>
-              <span>A bright Porcelain background, for daytime.</span>
+              <span>A light background for daytime.</span>
             </div>
             <button
               className="switch"
@@ -512,14 +589,16 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
             />
           </div>
         </div>
+        </section>
 
+        <section id="settings-library">
         <h2>Library</h2>
         <div className="setting-group glass">
           <CoverSizeSetting onPeek={onPeek} />
           <div className="setting">
             <div className="text">
               <b>Show Metacritic scores</b>
-              <span>A critics' score badge next to the genres in the game panel.</span>
+              <span>A critics' score next to the genres in the game panel.</span>
             </div>
             <button
               className="switch"
@@ -533,7 +612,7 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
           <div className="setting">
             <div className="text">
               <b>Show store icons</b>
-              <span>A small Steam, Epic, Xbox or other mark on each game, showing where it comes from.</span>
+              <span>A small mark on each cover showing which store it's from.</span>
             </div>
             <button
               className="switch"
@@ -558,6 +637,9 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
               onClick={() => setPrefs({ showRecent: !p.showRecent })}
             />
           </div>
+          <SgdbRow accounts={accounts} />
+        </div>
+        </section>
         </div>
       </div>
     </div>
