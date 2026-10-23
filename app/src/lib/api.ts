@@ -43,6 +43,7 @@ const backend = isTauri()
       setInCollection: (collection: number, game: number, member: boolean) =>
         invoke<void>("set_in_collection", { collection, game, member }),
       sgdbClearKey: () => invoke<void>("sgdb_clear_key"),
+      sgdbCopyKey: () => invoke<void>("sgdb_copy_key"),
       openSgdbKeyPage: () => invoke<void>("open_sgdb_key_page"),
       artworkOptions: (id: number, kind: ArtKind) => invoke<ArtOption[]>("artwork_options", { id, kind }),
       setArtwork: (id: number, kind: ArtKind, url: string) => invoke<void>("set_artwork", { id, kind, url }),

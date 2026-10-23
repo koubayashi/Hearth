@@ -1,5 +1,8 @@
 import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, StoreHit, StoreId } from "./types";
 
+// ?sgdb in the URL shows Settings as if a key were saved, to design that state.
+const demoSgdb = typeof location !== "undefined" && location.search.includes("sgdb");
+
 const noop = async (_cb: (payload: unknown) => void) => () => {};
 
 // Synthetic demo library for designing in a plain browser. Artwork comes from
@@ -88,7 +91,7 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 export const mockBackend = {
   demo: true,
   async launch(_id: number) {},
-  accounts: async (): Promise<Accounts> => ({ epic: null, sgdb: false, steam: "Demo player", steam_auth: null }),
+  accounts: async (): Promise<Accounts> => ({ epic: null, sgdb: demoSgdb, steam: "Demo player", steam_auth: null }),
   async steamSetApiKey(_key: string): Promise<number> {
     throw new Error("Demo library: add your key in the desktop app");
   },
@@ -167,6 +170,7 @@ export const mockBackend = {
     throw new Error("Demo library: add your SteamGridDB key in the desktop app");
   },
   async sgdbClearKey() {},
+  async sgdbCopyKey() {},
   async openSgdbKeyPage() {},
   // Demo choices reuse the library's own art so the picker can be designed.
   async artworkOptions(_id: number, kind: ArtKind): Promise<ArtOption[]> {

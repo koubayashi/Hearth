@@ -212,9 +212,23 @@ function SgdbRow({ accounts }: { accounts: Accounts | null }) {
           </span>
         </div>
         {on && (
-          <button className="chip" data-nav onClick={() => api.sgdbClearKey()}>
-            Remove key
-          </button>
+          <div className="key-actions">
+            <button
+              className="chip"
+              data-nav
+              onClick={() =>
+                api
+                  .sgdbCopyKey()
+                  .then(() => setNote({ ok: true, text: "Key copied to the clipboard." }))
+                  .catch((e) => setNote({ ok: false, text: String(e) }))
+              }
+            >
+              Copy key
+            </button>
+            <button className="chip" data-nav onClick={() => (setNote(null), api.sgdbClearKey())}>
+              Remove key
+            </button>
+          </div>
         )}
       </div>
       {!on && (

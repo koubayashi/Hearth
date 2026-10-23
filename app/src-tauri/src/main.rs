@@ -652,6 +652,7 @@ fn main() {
             details::set_store_match,
             artwork::sgdb_set_key,
             artwork::sgdb_clear_key,
+            artwork::sgdb_copy_key,
             artwork::open_sgdb_key_page,
             artwork::artwork_options,
             artwork::set_artwork,

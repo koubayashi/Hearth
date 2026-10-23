@@ -35,6 +35,34 @@ pub fn sgdb_clear_key(app: AppHandle) {
     let _ = app.emit("accounts-changed", ());
 }
 
+/// Puts the saved key on the clipboard. The key goes from Credential Manager
+/// to the clipboard here, in Rust: the app's web view never holds it.
+#[tauri::command]
+pub fn sgdb_copy_key() -> CmdResult<()> {
+    let key = secrets::load("sgdb-key").ok_or("No SteamGridDB key is saved")?;
+    copy_to_clipboard(&key).map_err(err)
+}
+
+/// Windows' own clip.exe, fed on stdin; no window flashes up.
+#[cfg(windows)]
+fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut child = std::process::Command::new("clip")
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(std::process::Stdio::piped())
+        .spawn()?;
+    child.stdin.take().expect("piped stdin").write_all(text.as_bytes())?;
+    anyhow::ensure!(child.wait()?.success(), "clip.exe failed");
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn copy_to_clipboard(_text: &str) -> anyhow::Result<()> {
+    anyhow::bail!("Copying is only supported on Windows")
+}
+
 #[tauri::command]
 pub fn open_sgdb_key_page() -> CmdResult<()> {
     hub_launch::run(&hub_launch::LaunchAction::Uri { uri: sgdb::KEY_PAGE.into() }).map_err(err)
