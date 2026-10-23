@@ -5,7 +5,8 @@ type Dir = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 
 function candidates(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")).filter(
-    (el) => el.offsetParent !== null,
+    // Laid out, and not inside an inert area (the library behind Settings).
+    (el) => el.offsetParent !== null && !el.closest("[inert]"),
   );
 }
 

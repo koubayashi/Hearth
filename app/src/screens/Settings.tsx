@@ -1,14 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import * as autostart from "@tauri-apps/plugin-autostart";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
-import type { Accounts, Game } from "../lib/types";
+import type { Accounts } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
-import { StoreBadges, StoreIcon } from "../components/StoreIcon";
-import { Art } from "../components/Art";
+import { StoreIcon } from "../components/StoreIcon";
 import { Icon } from "../components/Icon";
-import { formatPlaytime } from "../lib/format";
 
 type Note = { ok: boolean; text: string } | null;
 
@@ -356,19 +354,25 @@ function StoreAccounts() {
 }
 
 /** Cover size, previewed with real covers from the library at true size. */
-function CoverSizeSetting() {
-  const { coverSize, showStoreIcons } = usePrefs();
-  const [games, setGames] = useState<Game[]>([]);
-  useEffect(() => {
-    api.listGames({ install: "all", stores: [], search: null, hidden_only: false }).then((g) =>
-      setGames([...g].sort((a, b) => (b.last_played ?? 0) - (a.last_played ?? 0)).slice(0, 8)),
-    );
-  }, []);
+/**
+ * The cover size slider. While you drag it (or nudge it with the keys), the
+ * rest of Settings fades out and your real library shows underneath at the
+ * new size, so you pick the size against your own games.
+ */
+function CoverSizeSetting({ onPeek }: { onPeek: (on: boolean) => void }) {
+  const { coverSize } = usePrefs();
+  const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stop = () => {
+    if (idle.current) clearTimeout(idle.current);
+    onPeek(false);
+  };
+  useEffect(() => stop, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="setting size-setting">
       <div className="text">
         <b>Cover size</b>
-        <span>How big game covers are in the library. The preview below is the real size.</span>
+        <span>How big game covers are in the library. Your library shows behind Settings while you adjust.</span>
       </div>
       <input
         type="range"
@@ -379,22 +383,25 @@ function CoverSizeSetting() {
         data-nav
         aria-label="Cover size"
         onChange={(e) => setPrefs({ coverSize: Number(e.target.value) })}
+        onPointerDown={(e) => {
+          onPeek(true);
+          // Ends wherever the pointer is let go, even outside the slider.
+          window.addEventListener("pointerup", stop, { once: true });
+          window.addEventListener("pointercancel", stop, { once: true });
+          e.currentTarget.focus();
+        }}
+        onKeyDown={(e) => {
+          if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key)) return;
+          // Keyboard and controller: show the library while the keys move it.
+          onPeek(true);
+          if (idle.current) clearTimeout(idle.current);
+          idle.current = setTimeout(() => onPeek(false), 900);
+        }}
+        onBlur={stop}
       />
       <div className="size-scale">
         <span>Smaller, more games</span>
         <span>Larger</span>
-      </div>
-      <div className="size-preview" aria-hidden>
-        {games.map((g) => (
-          <span key={g.id} className={`cover ${g.installed ? "" : "out"}`} style={{ width: coverSize }}>
-            <span className="cover-art">
-              <Art src={g.cover} title={g.title} />
-              {showStoreIcons && <StoreBadges stores={g.entries.map((e) => e.store)} />}
-            </span>
-            <span className="cover-title">{g.title}</span>
-            <span className="cover-meta">{g.playtime_secs > 0 ? formatPlaytime(g.playtime_secs) : "Never played"}</span>
-          </span>
-        ))}
       </div>
     </div>
   );
@@ -437,10 +444,10 @@ function Startup() {
   );
 }
 
-export function Settings() {
+export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void }) {
   const p = usePrefs();
   return (
-    <div className="scroll">
+    <div className="scroll settings-scroll">
       <div className="settings">
         <h1>Settings</h1>
 
@@ -508,7 +515,7 @@ export function Settings() {
 
         <h2>Library</h2>
         <div className="setting-group glass">
-          <CoverSizeSetting />
+          <CoverSizeSetting onPeek={onPeek} />
           <div className="setting">
             <div className="text">
               <b>Show Metacritic scores</b>

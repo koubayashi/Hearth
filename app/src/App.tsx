@@ -17,6 +17,9 @@ export function App() {
   const [version, setVersion] = useState(0);
   const [toast, setToast] = useState<ToastMsg | null>(null);
   const [playing, setPlaying] = useState<NowPlaying[]>([]);
+  // While the cover size slider moves, the library shows behind Settings.
+  // It stays mounted (hidden) while Settings is open, so it is ready at once.
+  const [peek, setPeek] = useState(false);
   const [counts, setCounts] = useState<Partial<Record<Route, number>>>({});
 
   const refresh = () => setVersion((v) => v + 1);
@@ -84,8 +87,8 @@ export function App() {
       <Backdrop src={showsArt ? (focused?.hero ?? null) : null} />
       <TitleBar />
       <div className="app">
-        <Rail route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null))} />
-        <main className="main">
+        <Rail route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false))} />
+        <main className={`main${peek && route === "settings" ? " peeking" : ""}`}>
           {libraryLike && (
             <Library
               key={route}
@@ -111,7 +114,22 @@ export function App() {
             />
           )}
           {route === "stats" && <Stats version={version} />}
-          {route === "settings" && <Settings />}
+          {route === "settings" && (
+            <div className="peek-library" aria-hidden inert>
+              <Library
+                key="peek"
+                hiddenView={false}
+                version={version}
+                focused={focused}
+                playing={playing}
+                onFocusGame={setFocused}
+                onPrimary={primary}
+                onToggleHidden={toggleHidden}
+                onToggleFavorite={toggleFavorite}
+              />
+            </div>
+          )}
+          {route === "settings" && <Settings onPeek={setPeek} />}
         </main>
       </div>
       <Toast toast={toast} onDone={clearToast} />

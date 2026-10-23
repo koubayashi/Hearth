@@ -440,16 +440,30 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .install-row svg { margin-top: 1px; }
 .install-row .path { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; color: var(--ink-2); }
 
-/* ---------- settings: cover size preview ---------- */
+/* ---------- settings: cover size, judged against the real library ---------- */
 .size-setting { flex-direction: column; align-items: stretch; gap: var(--space-3); }
 .size-setting input[type="range"] { width: 100%; accent-color: var(--accent); }
 .size-scale { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--ink-3); }
-.size-preview {
-  display: flex; gap: 22px; overflow: hidden; padding: var(--space-4); border-radius: var(--radius-panel);
-  background: var(--base); border: 1px solid var(--line);
-  mask-image: linear-gradient(90deg, #000 80%, transparent);
+
+.main { position: relative; }
+.settings-scroll { position: relative; z-index: 1; }
+/* The library behind Settings: shown only while adjusting, never interactive. */
+.peek-library {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; visibility: hidden;
+  transition: opacity var(--dur-med) var(--ease-out), visibility 0s linear var(--dur-med);
 }
-.size-preview .cover { flex: none; pointer-events: none; }
+.peeking .peek-library { opacity: 1; visibility: visible; transition: opacity var(--dur-med) var(--ease-out); }
+/* Everything in Settings fades except the slider row, which gets a solid panel
+   so it stays readable over the covers. */
+.settings > *, .setting-group > *, .setting-group { transition: opacity var(--dur-med) var(--ease-out), background var(--dur-med), border-color var(--dur-med); }
+.peeking .settings > :not(:has(.size-setting)) { opacity: 0; }
+.peeking .setting-group:has(.size-setting) { background: transparent; border-color: transparent; backdrop-filter: none; }
+.peeking .setting-group:has(.size-setting) > :not(.size-setting) { opacity: 0; }
+.peeking .size-setting {
+  position: relative; margin: 0 calc(-1 * var(--space-4)); padding: 14px var(--space-4); border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--base-2) 94%, transparent); backdrop-filter: blur(24px);
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+}
 
 /* ---------- settings: game folders ---------- */
 .folder-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
