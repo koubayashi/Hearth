@@ -51,6 +51,18 @@ export function Library({
 }) {
   const prefs = usePrefs();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const wallRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  // The toolbar floats over the scroll area; its height sets the space and
+  // the fade at the top of that area.
+  useEffect(() => {
+    const bar = barRef.current;
+    const wall = wallRef.current;
+    if (!bar || !wall) return;
+    const ro = new ResizeObserver(() => wall.style.setProperty("--bar-h", `${bar.offsetHeight}px`));
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, []);
   const primaryRef = useRef<HTMLButtonElement>(null);
   const [install, setInstall] = useState<InstallFilter>("all");
   const [stores, setStores] = useState<StoreId[]>([]);
@@ -204,8 +216,8 @@ export function Library({
           onPanel={(action) => setPanel({ action, nonce: Date.now() })}
         />
       )}
-    <div className="scroll" ref={scrollRef}>
-      <div className="top" role="toolbar" aria-label="Library filters">
+    <div className="wall" ref={wallRef}>
+      <div className="top" role="toolbar" aria-label="Library filters" ref={barRef}>
         <label className={`search ${search ? "has-value" : ""}`} title="Search">
           <Icon name="search" size={16} />
           <input
@@ -253,6 +265,7 @@ export function Library({
         </button>
       </div>
 
+    <div className="scroll" ref={scrollRef}>
       {scope?.header}
       <div className="page">
         <div>
@@ -360,6 +373,7 @@ export function Library({
           )}
         </div>
       </div>
+    </div>
     </div>
     </div>
   );

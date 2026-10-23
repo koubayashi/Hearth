@@ -83,9 +83,8 @@ input { font: inherit; color: inherit; }
    it disappears, they widen and overflow again, many times a second (it
    looked like blur on the Hidden page, since screenshots catch one frame). */
 /* Bottom scroll edge: the last stretch fades out instead of being cut by the
-   window edge. (No fade at the top: covers stay visible as they scroll past
-   the toolbar.) The mask belongs to the scroll box, so it stays put while the
-   content moves. */
+   window edge. The mask belongs to the scroll box, so it stays put while the
+   content moves. (The library adds a top fade under its toolbar: see .wall.) */
 .scroll {
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent 100%);
   overflow-y: auto; overflow-x: hidden; height: 100%; scrollbar-gutter: stable;
@@ -96,14 +95,9 @@ input { font: inherit; color: inherit; }
 /* ---------- top bar ---------- */
 /* One glass toolbar across the library; leaves room for the window buttons. */
 .top {
-  /* Sticky offsets count from inside the scroll padding, so 0 keeps the bar
-     exactly where it rests (12px down) instead of dropping 12px on scroll. */
-  position: sticky; top: 0; z-index: 6;
   display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2);
-  min-height: 48px; padding: 6px; margin: 0 140px var(--space-4) 0;
-  /* Nearly solid: covers and titles scroll right under it, and the blur alone
-     can't be relied on (it may not apply inside the masked scroll box), so
-     text behind the bar was readable through it. */
+  min-height: 48px; padding: 6px;
+  /* Nearly solid: covers and titles scroll right under it. */
   border-radius: var(--radius-panel); background: color-mix(in srgb, var(--base-2) 95%, transparent);
   backdrop-filter: blur(30px) saturate(1.4); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
@@ -206,8 +200,29 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 /* ---------- library layout: poster beside the wall ---------- */
 /* The poster width is rounded to whole pixels so covers sit on whole pixels
    (27vw is fractional at most window widths). */
-.library { container: library / inline-size; display: grid; grid-template-columns: round(down, clamp(280px, 27vw, 400px), 1px) minmax(0, 1fr); height: 100%; }
-.library .scroll { container-type: inline-size; }
+.library {
+  container: library / inline-size; display: grid; height: 100%;
+  grid-template-columns: round(down, clamp(280px, 27vw, 400px), 1px) minmax(0, 1fr);
+  /* One row, the window's height: content scrolls inside it instead of stretching it. */
+  grid-template-rows: minmax(0, 1fr);
+}
+/* The library's toolbar floats over its scroll area instead of living inside
+   it. That lets the scroll area fade covers out completely above the bar and
+   underneath it, without the fade ever reaching the bar itself. */
+.wall {
+  --bar-top: var(--space-3); --bar-h: 50px;
+  position: relative; min-width: 0; min-height: 0; height: 100%; container-type: inline-size;
+}
+/* Clear of the window buttons on the right, and of the scrollbar. */
+.wall > .top { position: absolute; z-index: 6; top: var(--bar-top); left: var(--space-5); right: calc(var(--space-6) + 150px); }
+.wall > .scroll {
+  padding-top: calc(var(--bar-top) + var(--bar-h) + var(--space-4));
+  /* Nothing shows above the bar; the soft part of the fade runs under it,
+     where the bar hides it. */
+  mask-image: linear-gradient(to bottom,
+    transparent calc(var(--bar-top) + var(--bar-h) * 0.35), #000 calc(var(--bar-top) + var(--bar-h)),
+    #000 calc(100% - 28px), transparent 100%);
+}
 .library.solo { grid-template-columns: minmax(0, 1fr); }
 .library .scroll { padding-left: var(--space-5); }
 
@@ -331,7 +346,7 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
    half used to be cut off in a straight line above the cover. */
 .lit::before {
   content: ""; position: absolute; left: -35%; right: -35%; top: -100px; height: calc(100% + 76px); z-index: -1;
-  background: radial-gradient(50% 92px at 50% 100px, color-mix(in srgb, var(--accent) 24%, transparent), transparent);
+  background: radial-gradient(50% 92px at 50% 100px, color-mix(in srgb, var(--accent) 16%, transparent), transparent);
   pointer-events: none; animation: fade var(--dur-med) var(--ease-out);
 }
 .lit .cover-art, .lit .frame {
@@ -455,12 +470,12 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
    below them. Measured on the whole library page (962px there is a 640px wide
    grid beside the poster). */
 @container library (max-width: 962px) {
-  .library:not(.solo) .top { margin-right: 0; top: 32px; }
-  .library:not(.solo) .scroll > .top:first-child { margin-top: 32px; }
+  .library:not(.solo) .wall { --bar-top: 44px; }
+  .library:not(.solo) .wall > .top { right: calc(var(--space-6) + 10px); }
 }
 @container library (max-width: 640px) {
-  .library.solo .top { margin-right: 0; top: 32px; }
-  .library.solo .scroll > .top:first-child { margin-top: 32px; }
+  .library.solo .wall { --bar-top: 44px; }
+  .library.solo .wall > .top { right: calc(var(--space-6) + 10px); }
 }
 
 /* ---------- install folder ---------- */
