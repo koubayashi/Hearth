@@ -27,9 +27,16 @@ input { font: inherit; color: inherit; }
   transition: opacity var(--dur-slow) var(--ease-out);
 }
 [data-mode="light"] .backdrop img { opacity: 0.22; }
+/* Pale art (a white cover) turned the top of the window into grey fog: in dark
+   mode the glow keeps its colour but not its brightness, and the top edge,
+   behind the toolbar and window buttons, is shaded as well as the bottom. */
+:root:not([data-mode="light"]) .backdrop img { filter: blur(90px) saturate(1.3) brightness(0.75); }
 .backdrop::after {
   content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--base) 35%, transparent), var(--base) 85%);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--base) 80%, transparent) 0%,
+    color-mix(in srgb, var(--base) 40%, transparent) 28%,
+    var(--base) 85%);
 }
 
 /* ---------- window chrome ---------- */
@@ -217,9 +224,12 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .poster-art img, .poster-art .art-fallback {
   width: 100%; height: 100%; object-fit: cover; filter: blur(48px) saturate(1.3); transform: scale(1.2); opacity: 0.55;
 }
+:root:not([data-mode="light"]) .poster-art img { filter: blur(48px) saturate(1.3) brightness(0.7); }
 .poster-art::after {
   content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--base-2) 55%, transparent) 50%, var(--base-2) 85%);
+  /* Shaded at the top too, so the space above a centred cover isn't a haze. */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--base-2) 55%, transparent) 0%, transparent 28%,
+    color-mix(in srgb, var(--base-2) 55%, transparent) 50%, var(--base-2) 85%);
 }
 /* The cover at its real 2:3 shape, as large as the panel allows. */
 .poster-cover {
