@@ -134,7 +134,9 @@ fn accounts(state: State<AppState>) -> Accounts {
 
 fn save_steam_auth(app: &AppHandle, auth: Option<SteamAuth>) {
     let json = auth.as_ref().and_then(|a| serde_json::to_string(a).ok());
-    secrets::save("steam-auth", json.as_deref());
+    if let Err(e) = secrets::save("steam-auth", json.as_deref()) {
+        tracking::log(app, &format!("steam: couldn't save the sign-in ({e})"));
+    }
     app.state::<AppState>().steam.set_auth(auth);
     let _ = app.emit("accounts-changed", ());
 }
@@ -557,12 +559,16 @@ fn main() {
             let _ = db.clear_detail_misses();
 
             let session = secrets::load("epic").and_then(|s| serde_json::from_str(&s).ok());
+            let handle = app.handle().clone();
             let epic = Arc::new(Epic::new(
                 &dir,
                 session,
-                Box::new(|s| {
+                Box::new(move |s| {
                     let json = s.and_then(|s| serde_json::to_string(s).ok());
-                    secrets::save("epic", json.as_deref());
+                    // A sign-in that can't be saved is lost on the next restart: say so.
+                    if let Err(e) = secrets::save("epic", json.as_deref()) {
+                        tracking::log(&handle, &format!("epic: couldn't save the sign-in ({e})"));
+                    }
                 }),
             ));
 

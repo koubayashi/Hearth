@@ -20,7 +20,7 @@ pub async fn sgdb_set_key(app: AppHandle, key: String) -> CmdResult<()> {
     }
     let state = app.state::<AppState>();
     state.sgdb.check_key(&key).await.map_err(|e| format!("{e:#}"))?;
-    secrets::save("sgdb-key", Some(&key));
+    secrets::save("sgdb-key", Some(&key))?;
     state.sgdb.set_key(Some(key));
     let _ = app.emit("accounts-changed", ());
     let handle = app.clone();
@@ -30,7 +30,7 @@ pub async fn sgdb_set_key(app: AppHandle, key: String) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn sgdb_clear_key(app: AppHandle) {
-    secrets::save("sgdb-key", None);
+    let _ = secrets::save("sgdb-key", None);
     app.state::<AppState>().sgdb.set_key(None);
     let _ = app.emit("accounts-changed", ());
 }
