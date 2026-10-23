@@ -108,7 +108,10 @@ input { font: inherit; color: inherit; }
   position: sticky; top: 0; z-index: 6;
   display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2);
   min-height: 48px; padding: 6px; margin: 0 140px var(--space-4) 0;
-  border-radius: var(--radius-panel); background: var(--glass-strong);
+  /* Nearly solid: covers and titles scroll right under it, and the blur alone
+     can't be relied on (it may not apply inside the masked scroll box), so
+     text behind the bar was readable through it. */
+  border-radius: var(--radius-panel); background: color-mix(in srgb, var(--base-2) 95%, transparent);
   backdrop-filter: blur(30px) saturate(1.4); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
 .top .spacer { flex: 1; }
