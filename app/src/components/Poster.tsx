@@ -116,11 +116,12 @@ export const Poster = forwardRef<
           }}
         />
       )}
-      {/* A blurred copy fills the panel; the cover itself keeps its true shape. */}
-      <div className="poster-art" key={`bg-${game.id}`} aria-hidden>
-        <Art src={game.cover ?? game.hero} title="" />
-      </div>
       <div className="poster-cover" key={game.id}>
+        {/* A blurred copy right behind the cover: a soft halo in its colours,
+            wherever the cover sits, instead of a haze over the whole panel. */}
+        <div className="cover-halo" aria-hidden>
+          <Art src={game.cover ?? game.hero} title="" />
+        </div>
         <Art src={game.cover ?? game.hero} title={game.title} />
       </div>
       <div className="poster-body">
