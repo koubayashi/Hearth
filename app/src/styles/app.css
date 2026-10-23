@@ -82,19 +82,12 @@ input { font: inherit; color: inherit; }
    one window tall loops: the scrollbar appears, the covers narrow and fit,
    it disappears, they widen and overflow again, many times a second (it
    looked like blur on the Hidden page, since screenshots catch one frame). */
-/* Scroll edges: content fades out in the gap above the floating toolbar (or
-   the window top) and over the last stretch at the bottom, instead of being
-   cut by the window edge. The mask belongs to the scroll box, so it stays put
-   while the content moves. */
+/* Bottom scroll edge: the last stretch fades out instead of being cut by the
+   window edge. (No fade at the top: covers stay visible as they scroll past
+   the toolbar.) The mask belongs to the scroll box, so it stays put while the
+   content moves. */
 .scroll {
-  /* Where the toolbar's top edge sits (the scroll padding). */
-  --edge-top: var(--space-3);
-  --edge-bottom: 28px;
-  /* Clear above the toolbar, with a short soft edge just above it. The fade
-     must end at the bar's top edge: the bar is inside this box, so anything
-     below that line would fade the bar itself. */
-  mask-image: linear-gradient(to bottom, transparent calc(var(--edge-top) - 8px), #000 var(--edge-top),
-    #000 calc(100% - var(--edge-bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent 100%);
   overflow-y: auto; overflow-x: hidden; height: 100%; scrollbar-gutter: stable;
   padding: var(--space-3) var(--space-6) 80px var(--space-3);
 }
@@ -334,9 +327,12 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .cover:hover .cover-title { color: var(--ink); }
 
 /* The picture light: the one game in focus lifts, takes the accent and a soft light from above. */
+/* The oval is centred on the cover's top edge and sized to fade to nothing
+   inside this box on every side; centred on the box's own top edge, its upper
+   half used to be cut off in a straight line above the cover. */
 .lit::before {
-  content: ""; position: absolute; left: -35%; right: -35%; top: -64px; height: calc(100% + 40px); z-index: -1;
-  background: radial-gradient(50% 55% at 50% 0%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 75%);
+  content: ""; position: absolute; left: -35%; right: -35%; top: -100px; height: calc(100% + 76px); z-index: -1;
+  background: radial-gradient(50% 92px at 50% 100px, color-mix(in srgb, var(--accent) 24%, transparent), transparent);
   pointer-events: none; animation: fade var(--dur-med) var(--ease-out);
 }
 .lit .cover-art, .lit .frame {
@@ -457,18 +453,15 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   .top .search:not(:focus-within):not(.has-value) input { width: 0; flex: 0; opacity: 0; }
 }
 /* Too narrow to share the top edge with the window buttons: the toolbar drops
-   below them, and the top fade grows to match. Measured on the whole library
-   page (962px there is a 640px wide grid beside the poster) so the scroll box
-   itself can take the new fade height. */
+   below them. Measured on the whole library page (962px there is a 640px wide
+   grid beside the poster). */
 @container library (max-width: 962px) {
   .library:not(.solo) .top { margin-right: 0; top: 32px; }
   .library:not(.solo) .scroll > .top:first-child { margin-top: 32px; }
-  .library:not(.solo) .scroll { --edge-top: 44px; }
 }
 @container library (max-width: 640px) {
   .library.solo .top { margin-right: 0; top: 32px; }
   .library.solo .scroll > .top:first-child { margin-top: 32px; }
-  .library.solo .scroll { --edge-top: 44px; }
 }
 
 /* ---------- install folder ---------- */
