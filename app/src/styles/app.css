@@ -183,8 +183,13 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .switch:disabled { opacity: 0.4; cursor: default; }
 
 /* ---------- library layout: poster beside the wall ---------- */
-.library { display: grid; grid-template-columns: clamp(280px, 27vw, 400px) minmax(0, 1fr); height: 100%; }
-.library .scroll { container-type: inline-size; }
+/* The poster width is rounded to whole pixels: 27vw is fractional at most
+   window widths, which put every cover on a half pixel and made the browser
+   resample them soft and washed out. */
+.library { display: grid; grid-template-columns: round(down, clamp(280px, 27vw, 400px), 1px) minmax(0, 1fr); height: 100%; }
+/* Its own layer even when there is too little to scroll (the Hidden page),
+   so covers are drawn into it crisply instead of each as a separate layer. */
+.library .scroll { container-type: inline-size; will-change: transform; }
 .library.solo { grid-template-columns: minmax(0, 1fr); }
 .library .scroll { padding-left: var(--space-5); }
 
@@ -290,7 +295,7 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .hidden-view .cover.out .cover-art img { opacity: 1; filter: none; }
 .cover .badge {
   position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 3px;
-  background: var(--glass-strong); backdrop-filter: blur(12px); font-size: 11px; font-weight: 600;
+  background: var(--glass-strong); font-size: 11px; font-weight: 600;
 }
 .cover-title {
   display: block; margin-top: 8px; font-size: var(--text-sm); color: var(--ink-2);
@@ -320,7 +325,7 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 /* ---------- store marks ---------- */
 .store-badges {
   position: absolute; left: 6px; top: 6px; display: flex; gap: 4px; padding: 4px;
-  border-radius: var(--radius-control); background: var(--glass-strong); backdrop-filter: blur(12px);
+  border-radius: var(--radius-control); background: var(--glass-strong);
   color: var(--ink); border: 1px solid var(--line);
 }
 .chip svg { margin-right: 7px; flex: none; }
