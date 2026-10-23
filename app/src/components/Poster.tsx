@@ -86,7 +86,7 @@ export const Poster = forwardRef<
 
   return (
     <aside
-      className="poster"
+      className={`poster${game.hero ? " has-hero" : ""}`}
       aria-label={`${game.title} details`}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
@@ -119,9 +119,17 @@ export const Poster = forwardRef<
       <div className="poster-cover" key={game.id}>
         {/* A blurred copy right behind the cover: a soft halo in its colours,
             wherever the cover sits, instead of a haze over the whole panel. */}
-        <div className="cover-halo" aria-hidden>
-          <Art src={game.cover ?? game.hero} title="" />
-        </div>
+        {/* The wide hero art fills whatever height is spare above the cover;
+            without one, a soft halo of the cover's colours instead. */}
+        {game.hero ? (
+          <div className="poster-hero" aria-hidden>
+            <Art src={game.hero} title="" />
+          </div>
+        ) : (
+          <div className="cover-halo" aria-hidden>
+            <Art src={game.cover ?? game.hero} title="" />
+          </div>
+        )}
         <Art src={game.cover ?? game.hero} title={game.title} />
       </div>
       <div className="poster-body">

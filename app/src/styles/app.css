@@ -293,7 +293,18 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 }
 :root:not([data-mode="light"]) .cover-halo { filter: blur(42px) saturate(1.3) brightness(0.75); }
 .cover-halo img, .cover-halo .art-fallback { box-shadow: none; }
-.poster-cover > :not(.cover-halo) { position: relative; }
+.poster-cover > :not(.cover-halo):not(.poster-hero) { position: relative; }
+
+/* Hero band: the game's wide art fills the spare height at the top of the
+   panel and fades out; the cover sits on its lower edge, just above the title.
+   In a short window the band shrinks behind the cover. */
+.has-hero .poster-cover { align-items: flex-end; }
+.poster-hero { position: absolute; inset: 0 0 18% 0; pointer-events: none; }
+.poster-cover .poster-hero img, .poster-cover .poster-hero .art-fallback {
+  width: 100%; height: 100%; aspect-ratio: auto; object-fit: cover; border-radius: 0; box-shadow: none;
+  mask-image: linear-gradient(to bottom, #000 30%, transparent 96%);
+}
+:root:not([data-mode="light"]) .poster-hero img { filter: brightness(0.85); }
 .poster-body { flex: none; }
 @keyframes fade { from { opacity: 0; } }
 .poster-body { position: relative; padding: var(--space-5); }
