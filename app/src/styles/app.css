@@ -87,12 +87,13 @@ input { font: inherit; color: inherit; }
    cut by the window edge. The mask belongs to the scroll box, so it stays put
    while the content moves. */
 .scroll {
-  /* Down to where the sticky toolbar sits: its offset plus the scroll padding. */
-  --edge-top: calc(var(--space-3) * 2);
+  /* Where the toolbar's top edge sits (the scroll padding). */
+  --edge-top: var(--space-3);
   --edge-bottom: 28px;
-  /* The gap above the toolbar stays clear; the soft part of the fade sits
-     under the toolbar's top edge, where its glass hides it. */
-  mask-image: linear-gradient(to bottom, transparent var(--edge-top), #000 calc(var(--edge-top) + 18px),
+  /* Clear above the toolbar, with a short soft edge just above it. The fade
+     must end at the bar's top edge: the bar is inside this box, so anything
+     below that line would fade the bar itself. */
+  mask-image: linear-gradient(to bottom, transparent calc(var(--edge-top) - 8px), #000 var(--edge-top),
     #000 calc(100% - var(--edge-bottom)), transparent 100%);
   overflow-y: auto; overflow-x: hidden; height: 100%; scrollbar-gutter: stable;
   padding: var(--space-3) var(--space-6) 80px var(--space-3);
@@ -102,7 +103,9 @@ input { font: inherit; color: inherit; }
 /* ---------- top bar ---------- */
 /* One glass toolbar across the library; leaves room for the window buttons. */
 .top {
-  position: sticky; top: var(--space-3); z-index: 6;
+  /* Sticky offsets count from inside the scroll padding, so 0 keeps the bar
+     exactly where it rests (12px down) instead of dropping 12px on scroll. */
+  position: sticky; top: 0; z-index: 6;
   display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2);
   min-height: 48px; padding: 6px; margin: 0 140px var(--space-4) 0;
   border-radius: var(--radius-panel); background: var(--glass-strong);
@@ -455,14 +458,14 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
    page (962px there is a 640px wide grid beside the poster) so the scroll box
    itself can take the new fade height. */
 @container library (max-width: 962px) {
-  .library:not(.solo) .top { margin-right: 0; top: 44px; }
+  .library:not(.solo) .top { margin-right: 0; top: 32px; }
   .library:not(.solo) .scroll > .top:first-child { margin-top: 32px; }
-  .library:not(.solo) .scroll { --edge-top: calc(44px + var(--space-3)); }
+  .library:not(.solo) .scroll { --edge-top: 44px; }
 }
 @container library (max-width: 640px) {
-  .library.solo .top { margin-right: 0; top: 44px; }
+  .library.solo .top { margin-right: 0; top: 32px; }
   .library.solo .scroll > .top:first-child { margin-top: 32px; }
-  .library.solo .scroll { --edge-top: calc(44px + var(--space-3)); }
+  .library.solo .scroll { --edge-top: 44px; }
 }
 
 /* ---------- install folder ---------- */
