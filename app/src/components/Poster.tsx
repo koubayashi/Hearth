@@ -136,8 +136,14 @@ export const Poster = forwardRef<
           {byline && <span className="byline">{byline}</span>}
         </div>
 
-        {(game.status || (details && ((showScores && details.metacritic != null) || details.genres.length > 0))) && (
+        {(game.hidden || game.status || (details && ((showScores && details.metacritic != null) || details.genres.length > 0))) && (
           <div className="facts">
+            {game.hidden && (
+              <span className="tag hidden-tag">
+                <Icon name="hidden" size={13} />
+                Hidden
+              </span>
+            )}
             {game.status && (
               <span className="tag status-chip">
                 <span className={`status-dot ${game.status}`} />
@@ -205,6 +211,12 @@ export const Poster = forwardRef<
           </button>
         )}
 
+        {game.hidden && (
+          <button className="restore" data-nav onClick={() => onToggleHidden(game)}>
+            <Icon name="eye" size={16} />
+            Show in library
+          </button>
+        )}
         <div className="actions">
           <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>
             <Icon name={game.installed ? "play" : "download"} size={16} />

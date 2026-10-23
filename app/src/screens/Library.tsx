@@ -175,7 +175,7 @@ export function Library({
   return (
     // A view with nothing in it (no hidden games, an empty collection) drops
     // the poster column instead of showing an empty frame beside the message.
-    <div className={`library${games?.length === 0 && !focused ? " solo" : ""}`}>
+    <div className={`library${games?.length === 0 && !focused ? " solo" : ""}${hiddenView ? " hidden-view" : ""}`}>
       {(games?.length !== 0 || focused) && (
       <Poster
         ref={primaryRef}
