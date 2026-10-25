@@ -191,7 +191,9 @@ export function Library({
     if (scope) return [{ title: scope.title, games: list }];
     return [
       { title: "Library", games: list.filter((g) => g.installed) },
-      { title: "Not installed", games: list.filter((g) => !g.installed) },
+      // Installed, but on a drive that's unplugged right now.
+      { title: "Drive not connected", games: list.filter((g) => !g.installed && g.offline_drive) },
+      { title: "Not installed", games: list.filter((g) => !g.installed && !g.offline_drive) },
     ].filter((s) => s.games.length > 0);
   }, [games, hiddenView, scope?.title]);
 

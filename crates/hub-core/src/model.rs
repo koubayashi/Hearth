@@ -67,6 +67,9 @@ pub struct StoreEntry {
     pub hidden: bool,
     pub store_playtime_secs: Option<i64>,
     pub store_baseline_secs: Option<i64>,
+    /// Its install folder is on a drive that isn't connected right now.
+    #[serde(default)]
+    pub offline: bool,
 }
 
 /// A game as shown in the library: one tile, possibly backed by several stores.
@@ -89,6 +92,10 @@ pub struct Game {
     pub status: Option<GameStatus>,
     /// Ids of the user's collections this game is in.
     pub collections: Vec<i64>,
+    /// Set when the game's only install is on a drive that isn't connected
+    /// (e.g. "E:"): it can't be played until that drive is back.
+    #[serde(default)]
+    pub offline_drive: Option<String>,
 }
 
 /// Backlog-style progress, set by the user.

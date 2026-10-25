@@ -68,9 +68,11 @@ const games: Game[] = seeds.map(([title, appid, store, installed, hours, daysAgo
   description: null,
   status: (["playing", "backlog", null, "completed", null, "backlog"] as (GameStatus | null)[])[i % 6],
   collections: i % 4 === 0 ? [1] : [],
+  // One demo game lives on an unplugged external drive.
+  offline_drive: title === "Dead Cells" ? "E:" : null,
   entries: [
     ...(title === "Hollow Knight"
-      ? [{ id: 1000, game_id: i + 1, store: "gog" as StoreId, store_game_id: "hk", installed: false, install_dir: null, hidden: false, store_playtime_secs: null, store_baseline_secs: null }]
+      ? [{ id: 1000, game_id: i + 1, store: "gog" as StoreId, store_game_id: "hk", installed: false, install_dir: null, hidden: false, store_playtime_secs: null, store_baseline_secs: null, offline: false }]
       : []),
     {
       id: i + 1,
@@ -78,10 +80,11 @@ const games: Game[] = seeds.map(([title, appid, store, installed, hours, daysAgo
       store,
       store_game_id: String(appid),
       installed,
-      install_dir: installed ? `C:\\Games\\${title}` : null,
+      install_dir: title === "Dead Cells" ? "E:\\Games\\Dead Cells" : installed ? `C:\\Games\\${title}` : null,
       hidden: false,
       store_playtime_secs: null,
       store_baseline_secs: null,
+      offline: title === "Dead Cells",
     },
   ],
 }));

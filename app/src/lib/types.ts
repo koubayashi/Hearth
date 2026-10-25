@@ -12,6 +12,8 @@ export interface StoreEntry {
   hidden: boolean;
   store_playtime_secs: number | null;
   store_baseline_secs: number | null;
+  /** Its install folder is on a drive that isn't connected right now. */
+  offline: boolean;
 }
 
 export interface Game {
@@ -31,6 +33,8 @@ export interface Game {
   status: GameStatus | null;
   /** Ids of the collections this game is in. */
   collections: number[];
+  /** "E:" when the game's only install is on a drive that isn't connected. */
+  offline_drive: string | null;
 }
 
 export type GameStatus = "playing" | "backlog" | "completed" | "abandoned";

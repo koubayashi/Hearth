@@ -124,7 +124,14 @@ export function GameMenu({
         </>
       ) : (
         <>
-          {item(game.installed ? "play" : "download", game.installed ? "Play" : `Install from ${store}`, () => onPrimary(game))}
+          {game.offline_drive ? (
+            <button role="menuitem" disabled>
+              <Icon name="folder" />
+              Drive {game.offline_drive} not connected
+            </button>
+          ) : (
+            item(game.installed ? "play" : "download", game.installed ? "Play" : `Install from ${store}`, () => onPrimary(game))
+          )}
           {item("star", game.favorite ? "Remove from favourites" : "Add to favourites", () => onToggleFavorite(game))}
           <hr />
           {/* Pressing the current status again clears it. */}

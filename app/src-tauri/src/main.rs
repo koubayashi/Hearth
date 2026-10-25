@@ -3,6 +3,7 @@
 mod artwork;
 mod collections;
 mod details;
+mod drives;
 mod folders;
 mod saves;
 mod tracking;
@@ -76,10 +77,13 @@ fn launch_game(state: State<AppState>, id: i64) -> CmdResult<()> {
         .game(id)
         .map_err(err)?
         .ok_or("That game is no longer in your library")?;
+    if let Some(drive) = &game.offline_drive {
+        return Err(format!("{} is on drive {drive}, which isn't connected. Connect it to play.", game.title));
+    }
     let entry = game
         .entries
         .iter()
-        .find(|e| e.installed)
+        .find(|e| e.installed && !e.offline)
         .or(game.entries.first())
         .ok_or("This game has no store to launch it from")?;
     let provider = state
@@ -87,7 +91,7 @@ fn launch_game(state: State<AppState>, id: i64) -> CmdResult<()> {
         .iter()
         .find(|p| p.id() == entry.store)
         .ok_or_else(|| format!("{} isn't supported yet", entry.store.as_str()))?;
-    let action = if entry.installed {
+    let action = if entry.installed && !entry.offline {
         provider.launch(&entry.store_game_id)
     } else {
         provider
@@ -608,6 +612,7 @@ fn main() {
             }
 
             keep_epic_alive(app.handle().clone());
+            drives::watch(app.handle().clone());
             tracking::recover(app.handle());
             tracking::start(app.handle().clone());
             sync_all(app.handle().clone());

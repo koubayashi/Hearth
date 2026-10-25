@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -119,6 +119,23 @@ impl Db {
                         ],
                     )?;
                 }
+            }
+        }
+        // A game the store no longer reports, on a drive that IS connected, was
+        // uninstalled: forget its folder. On a drive that isn't connected, keep
+        // it, so the game shows as "drive not connected" until the drive is back.
+        let stale: Vec<(i64, String)> = {
+            let mut stmt = tx.prepare(
+                "SELECT id, install_dir FROM store_entries
+                 WHERE store = ?1 AND installed = 0 AND install_dir IS NOT NULL",
+            )?;
+            let rows = stmt.query_map([store.as_str()], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let mut drives = Drives::default();
+        for (id, dir) in stale {
+            if drives.present(&dir) {
+                tx.execute("UPDATE store_entries SET install_dir = NULL WHERE id = ?1", [id])?;
             }
         }
         tx.commit()?;
@@ -580,6 +597,7 @@ impl Db {
                     hidden: r.get(6)?,
                     store_playtime_secs: r.get(7)?,
                     store_baseline_secs: r.get(8)?,
+                    offline: false,
                 };
                 entries.entry(entry.game_id).or_default().push((entry, r.get(9)?));
             }
@@ -629,6 +647,7 @@ impl Db {
             ))
         })?;
 
+        let mut drives = Drives::default();
         let mut games = Vec::new();
         for row in rows {
             let (id, title, favorite, added_at, cover, hero, logo, description, save_seen, status) = row?;
@@ -650,14 +669,26 @@ impl Db {
                 // The newest save file dates sessions nobody else saw.
                 .chain(save_seen)
                 .max();
-            let entries: Vec<StoreEntry> = with_last.into_iter().map(|(e, _)| e).collect();
+            let entries: Vec<StoreEntry> = with_last
+                .into_iter()
+                .map(|(mut e, _)| {
+                    e.offline = e.install_dir.as_deref().is_some_and(|d| !drives.present(d));
+                    e
+                })
+                .collect();
+            let installed = entries.iter().any(|e| e.installed && !e.offline);
+            let offline_drive = if installed {
+                None
+            } else {
+                entries.iter().find(|e| e.offline).and_then(|e| e.install_dir.as_deref()).map(drive_label)
+            };
 
             games.push(Game {
                 id,
                 title,
                 favorite,
                 hidden: !entries.is_empty() && entries.iter().all(|e| e.hidden),
-                installed: entries.iter().any(|e| e.installed),
+                installed,
                 added_at,
                 last_played,
                 playtime_secs: merged_secs(store_total, baseline, hub_secs),
@@ -668,9 +699,35 @@ impl Db {
                 entries,
                 status: status.as_deref().and_then(GameStatus::parse),
                 collections: in_collections.remove(&id).unwrap_or_default(),
+                offline_drive,
             });
         }
         Ok(games)
+    }
+}
+
+/// The drive (or network share) a path lives on: "E:\\Games\\X" -> "E:\\".
+fn drive_root(dir: &str) -> PathBuf {
+    Path::new(dir).ancestors().last().map(Path::to_path_buf).unwrap_or_default()
+}
+
+/// "E:" for a path on drive E:, the share for a network path.
+fn drive_label(dir: &str) -> String {
+    drive_root(dir).to_string_lossy().trim_end_matches(['\\', '/']).to_string()
+}
+
+/// Which drives are connected, asked once per drive however many games use it.
+#[derive(Default)]
+struct Drives(HashMap<PathBuf, bool>);
+
+impl Drives {
+    fn present(&mut self, dir: &str) -> bool {
+        let root = drive_root(dir);
+        // A relative or rootless path can't be on a missing drive.
+        if root.as_os_str().is_empty() || !root.has_root() {
+            return true;
+        }
+        *self.0.entry(root.clone()).or_insert_with(|| root.exists())
     }
 }
 
@@ -775,6 +832,49 @@ mod tests {
         e.store_playtime_secs = Some(5400);
         db.sync_store(StoreId::Steam, &[e], 3000).unwrap();
         assert_eq!(db.game(id).unwrap().unwrap().playtime_secs, 5400);
+    }
+
+    /// A drive letter that isn't connected on this machine.
+    fn missing_drive() -> String {
+        ('D'..='Z')
+            .map(|c| format!("{c}:\\"))
+            .find(|d| !Path::new(d).exists())
+            .expect("a free drive letter")
+    }
+
+    #[test]
+    fn games_on_a_missing_drive_are_not_connected() {
+        let mut db = Db::open_in_memory().unwrap();
+        let gone = missing_drive();
+        let mut e = entry(StoreId::Epic, "a", "Control", true);
+        e.install_dir = Some(format!("{gone}Games\\Control"));
+        db.sync_store(StoreId::Epic, &[e], 0).unwrap();
+        let g = &db.list_games(&LibraryQuery::default()).unwrap()[0];
+        assert!(!g.installed, "a store still says installed, but the drive is gone");
+        assert!(g.entries[0].offline);
+        assert_eq!(g.offline_drive.as_deref(), Some(gone.trim_end_matches('\\')));
+
+        // The game folder's drive is gone and the scan no longer finds it:
+        // its folder is kept, so it stays "not connected" rather than uninstalled.
+        db.sync_store(StoreId::Epic, &[], 1).unwrap();
+        let g = &db.list_games(&LibraryQuery::default()).unwrap()[0];
+        assert!(g.offline_drive.is_some());
+    }
+
+    #[test]
+    fn uninstalled_games_on_a_present_drive_forget_their_folder() {
+        let mut db = Db::open_in_memory().unwrap();
+        let here = std::env::temp_dir().join("hearth-test-game").to_string_lossy().into_owned();
+        let mut e = entry(StoreId::Steam, "1", "Hades", true);
+        e.install_dir = Some(here);
+        db.sync_store(StoreId::Steam, &[e], 0).unwrap();
+        assert!(db.list_games(&LibraryQuery::default()).unwrap()[0].installed);
+
+        db.sync_store(StoreId::Steam, &[], 1).unwrap();
+        let g = &db.list_games(&LibraryQuery::default()).unwrap()[0];
+        assert!(!g.installed);
+        assert_eq!(g.offline_drive, None, "an ordinary uninstall, not a missing drive");
+        assert_eq!(g.entries[0].install_dir, None);
     }
 
     #[test]

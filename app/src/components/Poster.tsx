@@ -183,7 +183,9 @@ export const Poster = forwardRef<
               ? `Playing now · ${formatPlaytime(Math.max(60, Math.floor(Date.now() / 1000) - playingSince))}`
               : game.installed
                 ? "Ready to play"
-                : "Not installed"}
+                : game.offline_drive
+                  ? `Drive ${game.offline_drive} not connected`
+                  : "Not installed"}
           </dd>
           {details?.release_date && (
             <>
@@ -227,10 +229,24 @@ export const Poster = forwardRef<
           </button>
         )}
         <div className="actions">
-          <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>
-            <Icon name={game.installed ? "play" : "download"} size={16} />
-            {game.installed ? "Play" : `Install from ${installStore}`}
-          </button>
+          {game.offline_drive ? (
+            // Nothing to start until the drive is back; it updates by itself.
+            <button
+              ref={primaryRef}
+              className="primary"
+              data-nav
+              disabled
+              title={`Connect drive ${game.offline_drive} to play. Hearth notices when it's back.`}
+            >
+              <Icon name="folder" size={16} />
+              Drive not connected
+            </button>
+          ) : (
+            <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>
+              <Icon name={game.installed ? "play" : "download"} size={16} />
+              {game.installed ? "Play" : `Install from ${installStore}`}
+            </button>
+          )}
           <button
             className="icon-btn"
             data-nav
