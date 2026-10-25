@@ -7,6 +7,7 @@ mod collections;
 mod details;
 mod drives;
 mod folders;
+mod fullscreen_fix;
 mod saves;
 mod tracking;
 mod tray;

@@ -1,13 +1,9 @@
 // Fullscreen for the whole window: F11 anywhere, the Settings switch, and the
-// Console view (which is always fullscreen while it's open).
+// Console view (which is always fullscreen while it's open). From a maximized
+// window too: the Rust side makes sure the page then fills the whole screen.
 
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-
-// Going fullscreen straight from maximized leaves the page at its maximized
-// size on Windows (frameless window), with a bare strip where the taskbar
-// was. So a maximized window is restored first, and maximized again after.
-let wasMaximized = false;
 
 export async function isFullscreen(): Promise<boolean> {
   if (isTauri()) return getCurrentWindow().isFullscreen();
@@ -15,20 +11,7 @@ export async function isFullscreen(): Promise<boolean> {
 }
 
 export async function setFullscreen(on: boolean): Promise<void> {
-  if (isTauri()) {
-    const win = getCurrentWindow();
-    if (on === (await win.isFullscreen())) return;
-    if (on) {
-      wasMaximized = await win.isMaximized();
-      if (wasMaximized) await win.unmaximize();
-      await win.setFullscreen(true);
-    } else {
-      await win.setFullscreen(false);
-      if (wasMaximized) await win.maximize();
-      wasMaximized = false;
-    }
-    return;
-  }
+  if (isTauri()) return getCurrentWindow().setFullscreen(on);
   if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen().catch(() => {});
   if (!on && document.fullscreenElement) await document.exitFullscreen().catch(() => {});
 }
