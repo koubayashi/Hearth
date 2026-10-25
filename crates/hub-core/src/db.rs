@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 use crate::model::*;
 use crate::playtime::merged_secs;
@@ -12,6 +12,12 @@ pub enum DbError {
     Sqlite(#[from] rusqlite::Error),
     #[error("unknown store id in database: {0}")]
     BadStore(String),
+    #[error("That file isn't a Hearth backup.")]
+    NotABackup,
+    #[error("That backup comes from a newer version of Hearth. Update Hearth first.")]
+    BackupTooNew,
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, DbError>;
@@ -47,6 +53,48 @@ impl Db {
             conn.pragma_update(None, "user_version", i + 1)?;
         }
         Ok(Self { conn })
+    }
+
+    /// Writes a complete, consistent copy of the library to `dest` (safe while
+    /// Hearth runs: SQLite takes a snapshot), with `meta` such as the game
+    /// folders and appearance settings stored inside it. Sign-ins are never in
+    /// the library, so never in a backup.
+    pub fn backup_to(&self, dest: &Path, meta: &[(&str, &str)]) -> Result<()> {
+        if dest.exists() {
+            std::fs::remove_file(dest)?;
+        }
+        self.conn.execute("VACUUM INTO ?1", [dest.to_string_lossy()])?;
+        let copy = Connection::open(dest)?;
+        copy.execute_batch("CREATE TABLE backup_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
+        for (k, v) in meta {
+            copy.execute("INSERT INTO backup_meta (key, value) VALUES (?1, ?2)", [k, v])?;
+        }
+        Ok(())
+    }
+
+    /// Drops a restored backup's settings table; the library doesn't need it.
+    pub fn forget_backup_meta(&self) -> Result<()> {
+        self.conn.execute_batch("DROP TABLE IF EXISTS backup_meta;")?;
+        Ok(())
+    }
+
+    /// The settings stored in a backup, after checking it is one Hearth can open.
+    pub fn read_backup(path: &Path) -> Result<HashMap<String, String>> {
+        let c = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|_| DbError::NotABackup)?;
+        let version: usize = c.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(|_| DbError::NotABackup)?;
+        if version == 0 {
+            return Err(DbError::NotABackup);
+        }
+        if version > MIGRATIONS.len() {
+            return Err(DbError::BackupTooNew);
+        }
+        let mut stmt = c.prepare("SELECT key, value FROM backup_meta").map_err(|_| DbError::NotABackup)?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let meta: HashMap<String, String> = rows.collect::<rusqlite::Result<_>>()?;
+        // The library itself must be there too.
+        c.query_row("SELECT COUNT(*) FROM games", [], |r| r.get::<_, i64>(0)).map_err(|_| DbError::NotABackup)?;
+        Ok(meta)
     }
 
     /// Apply one provider's results. Entries the store no longer reports are
@@ -875,6 +923,33 @@ mod tests {
         assert!(!g.installed);
         assert_eq!(g.offline_drive, None, "an ordinary uninstall, not a missing drive");
         assert_eq!(g.entries[0].install_dir, None);
+    }
+
+    #[test]
+    fn backups_round_trip_with_statuses_and_settings() {
+        let dir = std::env::temp_dir().join(format!("hearth-backup-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (live, file) = (dir.join("live.db"), dir.join("test.hearthbackup"));
+        let mut db = Db::open(&live).unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "1", "Hades", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        db.set_status(id, Some(GameStatus::Backlog)).unwrap();
+        db.record_session(id, 100, 400, SessionSource::Tracker).unwrap();
+
+        db.backup_to(&file, &[("game_folders", "[\"D:\\\\Games\"]")]).unwrap();
+        let meta = Db::read_backup(&file).unwrap();
+        assert_eq!(meta.get("game_folders").map(String::as_str), Some("[\"D:\\\\Games\"]"));
+
+        let restored = Db::open(&file).unwrap();
+        let g = restored.game(id).unwrap().unwrap();
+        assert_eq!((g.title.as_str(), g.status), ("Hades", Some(GameStatus::Backlog)));
+        assert_eq!(restored.sessions().unwrap().len(), 1);
+
+        // Anything else is refused.
+        std::fs::write(dir.join("notes.txt"), "not a backup").unwrap();
+        assert!(matches!(Db::read_backup(&dir.join("notes.txt")), Err(DbError::NotABackup)));
+        drop((db, restored));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artwork;
+mod backup;
 mod collections;
 mod details;
 mod drives;
@@ -635,6 +636,8 @@ fn main() {
             set_favorite,
             launch_game,
             play_sessions,
+            backup::backup_export,
+            backup::backup_restore,
             accounts,
             sync_now,
             epic_sign_in,

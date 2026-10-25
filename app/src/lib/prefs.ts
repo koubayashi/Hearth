@@ -17,6 +17,8 @@ export interface Prefs {
   showScores: boolean;
   /** Soften the hero art behind the cover in the game panel. */
   blurPosterArt: boolean;
+  /** When the last backup was saved (ms), or null. */
+  lastBackupAt: number | null;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -27,7 +29,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null };
 
 function load(): Prefs {
   try {

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import * as autostart from "@tauri-apps/plugin-autostart";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
+import { formatLastPlayed } from "../lib/format";
 import { StoreIcon } from "../components/StoreIcon";
 import { Icon } from "../components/Icon";
 
@@ -363,6 +364,7 @@ const SECTIONS = [
   { id: "playtime", label: "Playtime" },
   { id: "appearance", label: "Appearance" },
   { id: "library", label: "Library" },
+  { id: "backup", label: "Backup" },
 ] as const;
 
 /**
@@ -463,6 +465,108 @@ function CoverSizeSetting({ onPeek }: { onPeek: (on: boolean) => void }) {
         <span>Larger</span>
       </div>
     </div>
+  );
+}
+
+const BACKUP_FILTER = [{ name: "Hearth backup", extensions: ["hearthbackup"] }];
+
+/**
+ * Everything Hearth knows about your games, in one file you keep wherever you
+ * like: another drive, or a OneDrive / Google Drive / Dropbox folder.
+ */
+function BackupSection() {
+  const p = usePrefs();
+  const [busy, setBusy] = useState<"backup" | "restore" | null>(null);
+  const [note, setNote] = useState<Note>(null);
+
+  const backup = async () => {
+    setNote(null);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const path = isTauri()
+      ? await saveDialog({ title: "Save a Hearth backup", defaultPath: `Hearth backup ${stamp}.hearthbackup`, filters: BACKUP_FILTER })
+      : null;
+    if (!path && isTauri()) return;
+    setBusy("backup");
+    try {
+      await api.backupExport(path ?? "", JSON.stringify(p));
+      setPrefs({ lastBackupAt: Date.now() });
+      setNote({ ok: true, text: `Saved to ${path}` });
+    } catch (e) {
+      setNote({ ok: false, text: String(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restore = async () => {
+    setNote(null);
+    const path = isTauri()
+      ? await openDialog({ title: "Choose a Hearth backup", multiple: false, directory: false, filters: BACKUP_FILTER })
+      : "";
+    if (typeof path !== "string" || (isTauri() && !path)) return;
+    // The one action here that replaces data: ask first.
+    const sure = isTauri()
+      ? await confirm("Replace this PC's Hearth library with the backup? Your current library is saved as a copy first.", {
+          title: "Restore backup",
+          kind: "warning",
+          okLabel: "Restore",
+          cancelLabel: "Cancel",
+        })
+      : true;
+    if (!sure) return;
+    setBusy("restore");
+    try {
+      const r = await api.backupRestore(path);
+      if (r.prefs) {
+        try {
+          setPrefs(JSON.parse(r.prefs));
+        } catch {
+          // Settings are a bonus; the library itself is restored.
+        }
+      }
+      const when = r.created_at ? new Date(r.created_at * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
+      setNote({ ok: true, text: `Restored the backup${when ? ` from ${when}` : ""}. Sign in to Steam and Epic again if they ask.` });
+    } catch (e) {
+      setNote({ ok: false, text: String(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section id="settings-backup">
+      <h2>Backup</h2>
+      <div className="setting-group glass">
+        <div className="setting setting-stack">
+          <div className="setting-row">
+            <div className="text">
+              <b>Back up your library</b>
+              <span>Games, Hearth's playtime, statuses, collections and settings in one file. Sign-ins aren't included.</span>
+              <span className="backup-when">
+                {p.lastBackupAt ? `Last backup ${formatLastPlayed(Math.floor(p.lastBackupAt / 1000)).toLowerCase()}` : "No backup yet"}
+              </span>
+            </div>
+            <button className="btn btn-primary" data-nav disabled={busy !== null} onClick={backup}>
+              {busy === "backup" ? "Saving…" : "Back up now"}
+            </button>
+          </div>
+          {note && (
+            <p className={note.ok ? "note" : "note error"} role="status">
+              {note.text}
+            </p>
+          )}
+        </div>
+        <div className="setting">
+          <div className="text">
+            <b>Restore from a backup</b>
+            <span>Replaces this library with a backup file. The current one is kept as a copy.</span>
+          </div>
+          <button className="btn" data-nav disabled={busy !== null} onClick={restore}>
+            {busy === "restore" ? "Restoring…" : "Restore…"}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -654,6 +758,8 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
           <SgdbRow accounts={accounts} />
         </div>
         </section>
+
+        <BackupSection />
         </div>
       </div>
     </div>

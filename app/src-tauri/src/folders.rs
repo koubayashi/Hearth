@@ -30,10 +30,15 @@ fn save(app: &AppHandle, folders: &[String]) -> CmdResult<()> {
     std::fs::write(path, serde_json::to_string_pretty(folders).map_err(err)?).map_err(err)
 }
 
-fn current(app: &AppHandle) -> Vec<String> {
+pub(crate) fn current(app: &AppHandle) -> Vec<String> {
     let state = app.state::<AppState>();
     let dirs = lock(&state.folders).roots().to_vec();
     dirs.into_iter().map(|p| p.to_string_lossy().into_owned()).collect()
+}
+
+/// Replaces the folder list (a restored backup's).
+pub(crate) fn replace(app: &AppHandle, folders: Vec<String>) -> CmdResult<()> {
+    set(app, folders).map(|_| ())
 }
 
 fn set(app: &AppHandle, folders: Vec<String>) -> CmdResult<Vec<String>> {

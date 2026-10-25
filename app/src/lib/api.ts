@@ -28,6 +28,9 @@ const backend = isTauri()
       openSteamKeyPage: () => invoke<void>("open_steam_key_page"),
       nowPlaying: () => invoke<NowPlaying[]>("now_playing"),
       playSessions: () => invoke<PlaySession[]>("play_sessions"),
+      backupExport: (path: string, prefs: string) => invoke<void>("backup_export", { path, prefs }),
+      backupRestore: (path: string) =>
+        invoke<{ prefs: string | null; created_at: number | null }>("backup_restore", { path }),
       gameDetails: (id: number) => invoke<GameDetails | null>("game_details", { id }),
       installInfo: (id: number, refresh: boolean) => invoke<InstallInfo | null>("install_info", { id, refresh }),
       openInstallFolder: (id: number) => invoke<void>("open_install_folder", { id }),
