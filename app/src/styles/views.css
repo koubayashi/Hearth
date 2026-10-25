@@ -40,6 +40,9 @@
   border-radius: var(--radius-panel); background: var(--base-2); border: 1px solid var(--line); box-shadow: var(--shadow);
   container-type: inline-size;
 }
+/* Starts below the window buttons (36px tall), so they never sit on the
+   art, where a pale image hid them. The list beside it starts higher. */
+.listview > .lv-detail { margin-top: calc(36px - var(--space-3)); }
 /* The wide art at its own shape (about 3:1), never taller than a third of the window. */
 .lv-hero { position: relative; height: min(100cqw / 3.1, 38vh); min-height: 180px; animation: fade var(--dur-slow) var(--ease-out); }
 .lv-hero > img, .lv-hero > .art-fallback, .lv-hero-blank {
@@ -49,8 +52,6 @@
 .lv-hero-blank { background: linear-gradient(160deg, var(--line-strong), transparent); }
 .lv-hero > .art-fallback { color: transparent; }
 :root:not([data-mode="light"]) .lv-hero > img { filter: brightness(0.9); }
-/* The window buttons sit over the top edge of the art: a little shade keeps them visible. */
-.lv-hero::before { content: ""; position: absolute; inset: 0 0 auto; height: 60px; z-index: 1; background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), transparent); }
 .lv-hero-title { position: absolute; left: var(--space-6); right: var(--space-6); bottom: 48px; z-index: 1; }
 .lv-hero-title img { max-width: min(420px, 50cqw); max-height: 130px; object-fit: contain; object-position: left bottom; filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.5)); }
 .lv-hero-title h1 { font: 600 var(--text-hero) / 1.05 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5); color: #fff; }
@@ -88,7 +89,7 @@
 }
 /* The store match picker opens as a panel over the game page. */
 .listview > .match {
-  inset: var(--space-3) var(--space-3) var(--space-3) auto; width: min(420px, 60%);
+  inset: 36px var(--space-3) var(--space-3) auto; width: min(420px, 60%);
   border-radius: var(--radius-panel); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
 .seg-boxed { border: 1px solid var(--line); flex: none; }
