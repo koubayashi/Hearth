@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./lib/api";
-import type { Game, GameStatus, NowPlaying } from "./lib/types";
+import type { Game, GameStatus, NowPlaying, Via } from "./lib/types";
+import { chosenWay } from "./lib/ways";
 import { STORE_LABEL } from "./lib/types";
 import { Rail, type Route } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
@@ -76,15 +77,16 @@ export function App() {
     await api.setFavorite(g.id, !g.favorite);
     refresh();
   };
-  const primary = async (g: Game) => {
+  const primary = async (g: Game, via?: Via) => {
     const store = STORE_LABEL[g.entries[0]?.store ?? "manual"];
+    const way = chosenWay(g, via);
     if (api.demo) {
-      say(`Demo library: ${g.installed ? "launching" : "installing"} works in the desktop app`);
+      say(way ? `Demo library: would start ${g.title} with ${way.name}` : `Demo library: ${g.installed ? "launching" : "installing"} works in the desktop app`);
       return;
     }
     try {
-      await api.launch(g.id);
-      say(g.installed ? `Starting ${g.title}` : `Opening ${store} to install ${g.title}`);
+      await api.launch(g.id, via);
+      say(way ? `Starting ${g.title} with ${way.name}` : g.installed ? `Starting ${g.title}` : `Opening ${store} to install ${g.title}`);
     } catch (e) {
       say(`Couldn't start ${g.title}: ${e}`);
     }

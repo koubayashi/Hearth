@@ -7,6 +7,7 @@ import { installSpatialNav } from "./lib/spatial";
 import { installFullscreenKey } from "./lib/fullscreen";
 import "./styles/app.css";
 import "./styles/views.css";
+import "./styles/ways.css";
 
 applyPrefs();
 installSpatialNav();

@@ -96,6 +96,24 @@ pub struct Game {
     /// (e.g. "E:"): it can't be played until that drive is back.
     #[serde(default)]
     pub offline_drive: Option<String>,
+    /// Ways to play the user added (a script, a mod loader, another exe).
+    #[serde(default)]
+    pub launch_options: Vec<LaunchOption>,
+}
+
+/// A way to play a game besides its store's own launch, e.g. a server
+/// replacement's start script. Runs the program the user picked, nothing else.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LaunchOption {
+    pub id: i64,
+    pub game_id: i64,
+    pub name: String,
+    pub path: String,
+    /// Passed exactly as typed, like a shortcut's arguments.
+    pub args: String,
+    pub working_dir: Option<String>,
+    /// The Play button uses this one instead of the store.
+    pub is_default: bool,
 }
 
 /// Backlog-style progress, set by the user.

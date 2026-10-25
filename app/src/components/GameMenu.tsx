@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/api";
-import type { Collection, Game, GameStatus } from "../lib/types";
+import type { Collection, Game, GameStatus, Via } from "../lib/types";
+import { defaultWay, storeName } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { Icon, type IconName } from "./Icon";
 
-export type PanelAction = "artwork" | "match";
+export type PanelAction = "artwork" | "match" | "ways";
 
 /**
  * The one menu for a game: right-click, Menu key or controller Y on a cover,
@@ -22,14 +23,17 @@ export function GameMenu({
   onToggleFavorite,
   onToggleHidden,
   onPanel,
+  start = "main",
 }: {
+  /** "play" opens straight on the ways to play (the arrow beside Play). */
+  start?: "main" | "play";
   game: Game;
   x: number;
   y: number;
   /** Open above this element, right-aligned to it, instead of at x/y. */
   anchor?: DOMRect;
   onClose: () => void;
-  onPrimary: (g: Game) => void;
+  onPrimary: (g: Game, via?: Via) => void;
   onToggleFavorite: (g: Game) => void;
   onToggleHidden: (g: Game) => void;
   /** Opens a picker in the game panel. */
@@ -37,7 +41,7 @@ export function GameMenu({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
-  const [view, setView] = useState<"main" | "collections" | "open">("main");
+  const [view, setView] = useState<"main" | "collections" | "open" | "play">(start);
 
   // Keep the menu on screen near the pointer.
   useLayoutEffect(() => {
@@ -77,7 +81,7 @@ export function GameMenu({
     </button>
   );
   const setStatus = (s: GameStatus | null) => api.setStatus(game.id, s);
-  const sub = (icon: IconName, label: string, to: "collections" | "open") => (
+  const sub = (icon: IconName, label: string, to: "collections" | "open" | "play") => (
     <button role="menuitem" aria-haspopup="menu" onClick={() => setView(to)}>
       <Icon name={icon} />
       {label}
@@ -112,7 +116,9 @@ export function GameMenu({
         }
       }}
     >
-      {view === "collections" ? (
+      {view === "play" ? (
+        <PlayView game={game} back={start === "play" ? null : back} item={item} run={run} onPrimary={onPrimary} onPanel={onPanel} />
+      ) : view === "collections" ? (
         <CollectionsView game={game} back={back} />
       ) : view === "open" ? (
         <>
@@ -130,8 +136,13 @@ export function GameMenu({
               Drive {game.offline_drive} not connected
             </button>
           ) : (
-            item(game.installed ? "play" : "download", game.installed ? "Play" : `Install from ${store}`, () => onPrimary(game))
+            item(
+              defaultWay(game) || game.installed ? "play" : "download",
+              defaultWay(game) ? `Play with ${defaultWay(game)!.name}` : game.installed ? "Play" : `Install from ${store}`,
+              () => onPrimary(game),
+            )
           )}
+          {game.launch_options.length > 0 && sub("play", "Play another way", "play")}
           {item("star", game.favorite ? "Remove from favourites" : "Add to favourites", () => onToggleFavorite(game))}
           <hr />
           {/* Pressing the current status again clears it. */}
@@ -151,6 +162,7 @@ export function GameMenu({
           <hr />
           {sub("collections", "Add to collection", "collections")}
           {item("library", "Change artwork…", () => onPanel("artwork"))}
+          {item("sliders", "Ways to play…", () => onPanel("ways"))}
           {sub("external", "Store and files", "open")}
           <hr />
           {item(game.hidden ? "eye" : "hidden", game.hidden ? "Show in library" : "Hide from library", () => onToggleHidden(game))}
@@ -158,6 +170,50 @@ export function GameMenu({
       )}
     </div>,
     document.body,
+  );
+}
+
+/** Every way to start this game; the one the Play button uses is ticked. */
+function PlayView({
+  game,
+  back,
+  item,
+  run,
+  onPrimary,
+  onPanel,
+}: {
+  game: Game;
+  back: React.ReactNode;
+  /** Closes the menu, then does the thing. */
+  run: (f: () => void) => () => void;
+  item: (icon: IconName, label: string, f: () => void) => React.ReactNode;
+  onPrimary: (g: Game, via?: Via) => void;
+  onPanel: (action: PanelAction) => void;
+}) {
+  const fallback = defaultWay(game);
+  const choice = (key: string, label: string, on: boolean, via: Via, disabled = false) => (
+    <button key={key} role="menuitemradio" aria-checked={on} disabled={disabled} onClick={run(() => onPrimary(game, via))}>
+      <span className="check-box">{on && <Icon name="check" size={13} />}</span>
+      {label}
+    </button>
+  );
+  const store = storeName(game);
+  return (
+    <>
+      {back}
+      {back && <hr />}
+      <div className="menu-label">Play button uses the ticked one</div>
+      {choice(
+        "store",
+        game.offline_drive ? `${store}: drive ${game.offline_drive} not connected` : game.installed ? `Play with ${store}` : `Install from ${store}`,
+        fallback === null,
+        { kind: "store" },
+        !!game.offline_drive,
+      )}
+      {game.launch_options.map((o) => choice(String(o.id), `Play with ${o.name}`, o.is_default, { kind: "option", id: o.id }))}
+      <hr />
+      {item("sliders", "Ways to play…", () => onPanel("ways"))}
+    </>
   );
 }
 

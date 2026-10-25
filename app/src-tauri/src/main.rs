@@ -11,6 +11,7 @@ mod fullscreen_fix;
 mod saves;
 mod tracking;
 mod tray;
+mod ways;
 
 use std::sync::{Arc, Mutex};
 
@@ -73,13 +74,28 @@ fn set_favorite(state: State<AppState>, id: i64, favorite: bool) -> CmdResult<()
     lock(&state.db).set_favorite(id, favorite).map_err(err)
 }
 
-/// Plays the game if any store has it installed, otherwise starts its install.
+/// Plays the game: with the way to play the user picked (`via`), else its
+/// default one, else through a store that has it installed, else starts its
+/// install.
 #[tauri::command]
-fn launch_game(state: State<AppState>, id: i64) -> CmdResult<()> {
+fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdResult<()> {
     let game = lock(&state.db)
         .game(id)
         .map_err(err)?
         .ok_or("That game is no longer in your library")?;
+    let chosen = match via {
+        Some(ways::Via::Store) => None,
+        Some(ways::Via::Option { id }) => Some(
+            game.launch_options
+                .iter()
+                .find(|o| o.id == id)
+                .ok_or("That way to play was removed")?,
+        ),
+        None => game.launch_options.iter().find(|o| o.is_default),
+    };
+    if let Some(option) = chosen {
+        return ways::run(option);
+    }
     if let Some(drive) = &game.offline_drive {
         return Err(format!("{} is on drive {drive}, which isn't connected. Connect it to play.", game.title));
     }
@@ -639,6 +655,9 @@ fn main() {
             set_hidden,
             set_favorite,
             launch_game,
+            ways::save_launch_option,
+            ways::delete_launch_option,
+            ways::set_default_launch,
             play_sessions,
             backup::backup_export,
             backup::backup_restore,

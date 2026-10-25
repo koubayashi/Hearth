@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
-import type { Game, GameStatus, InstallFilter, NowPlaying, StoreId } from "../lib/types";
+import type { Game, GameStatus, InstallFilter, NowPlaying, StoreId, Via } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { formatHoursShort, formatLastPlayed, formatPlaytime } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
@@ -48,7 +48,7 @@ export function Library({
   focused: Game | null;
   playing: NowPlaying[];
   onFocusGame: (g: Game | null) => void;
-  onPrimary: (g: Game) => void;
+  onPrimary: (g: Game, via?: Via) => void;
   onToggleHidden: (g: Game) => void;
   onToggleFavorite: (g: Game) => void;
 }) {

@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { LaunchOptionInput, Via } from "./types";
 import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, StoreHit } from "./types";
 import { mockBackend } from "./mock";
 
@@ -15,7 +16,11 @@ const backend = isTauri()
       setHidden: (id: number, hidden: boolean) => invoke<void>("set_hidden", { id, hidden }),
       setFavorite: (id: number, favorite: boolean) =>
         invoke<void>("set_favorite", { id, favorite }),
-      launch: (id: number) => invoke<void>("launch_game", { id }),
+      launch: (id: number, via?: Via) => invoke<void>("launch_game", { id, via: via ?? null }),
+      saveLaunchOption: (option: LaunchOptionInput) => invoke<number>("save_launch_option", { option }),
+      deleteLaunchOption: (id: number) => invoke<void>("delete_launch_option", { id }),
+      setDefaultLaunch: (gameId: number, option: number | null) =>
+        invoke<void>("set_default_launch", { gameId, option }),
       accounts: () => invoke<Accounts>("accounts"),
       syncNow: () => invoke<void>("sync_now"),
       epicSignIn: () => invoke<void>("epic_sign_in"),

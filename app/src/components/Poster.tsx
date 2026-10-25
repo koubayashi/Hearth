@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Game, GameDetails, InstallInfo } from "../lib/types";
+import type { Game, GameDetails, InstallInfo, Via } from "../lib/types";
+import { defaultWay } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatBytes, formatLastPlayed, formatPlaytime, releaseYear } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
@@ -9,7 +10,8 @@ import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
 import { StoreMatch } from "./StoreMatch";
 import { ArtworkPicker } from "./ArtworkPicker";
-import { GameMenu } from "./GameMenu";
+import { GameMenu, type PanelAction } from "./GameMenu";
+import { WaysToPlay } from "./WaysToPlay";
 
 /** Store-page details and install info for a game, loaded when it's selected. */
 export function useGameInfo(game: Game | null, nonce: number) {
@@ -48,12 +50,12 @@ export const Poster = forwardRef<
     game: Game | null;
     /** Unix seconds when the tracker saw this game start, if it is running now. */
     playingSince: number | null;
-    onPrimary: (g: Game) => void;
+    onPrimary: (g: Game, via?: Via) => void;
     onToggleHidden: (g: Game) => void;
     onToggleFavorite: (g: Game) => void;
     onBack: () => void;
     /** Open a picker from outside (the right-click menu). */
-    request?: { action: "artwork" | "match"; nonce: number } | null;
+    request?: { action: PanelAction; nonce: number } | null;
   }
 >(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack, request }, primaryRef) {
   // Where the "More options" button sits while its menu is open.
@@ -61,19 +63,26 @@ export const Poster = forwardRef<
   const moreRef = useRef<HTMLButtonElement>(null);
   const [matching, setMatching] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [ways, setWays] = useState(false);
+  // The arrow beside Play: its menu of ways to play, anchored to it.
+  const [playMenu, setPlayMenu] = useState<DOMRect | null>(null);
+  const waysRef = useRef<HTMLButtonElement>(null);
   const [nonce, setNonce] = useState(0);
   const { details, install } = useGameInfo(game, nonce);
   const { showScores, blurPosterArt } = usePrefs();
 
   useEffect(() => {
     setMenu(null);
+    setPlayMenu(null);
     setMatching(false);
     setPicking(false);
+    setWays(false);
   }, [game?.id]);
   useEffect(() => {
     if (!request) return;
     setPicking(request.action === "artwork");
     setMatching(request.action === "match");
+    setWays(request.action === "ways");
   }, [request]);
 
   // Only while the library loads: the frame holds its place, quietly.
@@ -106,6 +115,7 @@ export const Poster = forwardRef<
           }}
         />
       )}
+      {ways && <WaysToPlay game={game} onClose={() => setWays(false)} />}
       {matching && (
         <StoreMatch
           game={game}
@@ -243,9 +253,52 @@ export const Poster = forwardRef<
             </button>
           ) : (
             <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>
-              <Icon name={game.installed ? "play" : "download"} size={16} />
-              {game.installed ? "Play" : `Install from ${installStore}`}
+              <Icon name={game.installed || defaultWay(game) ? "play" : "download"} size={16} />
+              {defaultWay(game) ? (
+                <>
+                  Play <small className="via">{defaultWay(game)!.name}</small>
+                </>
+              ) : game.installed ? (
+                "Play"
+              ) : (
+                `Install from ${installStore}`
+              )}
             </button>
+          )}
+          {game.launch_options.length > 0 && (
+            <button
+              ref={waysRef}
+              className="icon-btn"
+              data-nav
+              aria-label="Other ways to play"
+              title="Other ways to play"
+              aria-haspopup="menu"
+              aria-expanded={playMenu !== null}
+              onMouseDown={(e) => playMenu && e.stopPropagation()}
+              onClick={(e) => {
+                const at = e.currentTarget.getBoundingClientRect();
+                setPlayMenu((m) => (m ? null : at));
+              }}
+            >
+              <Icon name="chevronDown" />
+            </button>
+          )}
+          {playMenu && (
+            <GameMenu
+              game={game}
+              x={0}
+              y={0}
+              anchor={playMenu}
+              start="play"
+              onClose={() => {
+                setPlayMenu(null);
+                waysRef.current?.focus();
+              }}
+              onPrimary={onPrimary}
+              onToggleFavorite={onToggleFavorite}
+              onToggleHidden={onToggleHidden}
+              onPanel={(action) => (action === "ways" ? setWays(true) : action === "artwork" ? setPicking(true) : setMatching(true))}
+            />
           )}
           <button
             className="icon-btn"
@@ -285,7 +338,7 @@ export const Poster = forwardRef<
               onPrimary={onPrimary}
               onToggleFavorite={onToggleFavorite}
               onToggleHidden={onToggleHidden}
-              onPanel={(action) => (action === "artwork" ? setPicking(true) : setMatching(true))}
+              onPanel={(action) => (action === "ways" ? setWays(true) : action === "artwork" ? setPicking(true) : setMatching(true))}
             />
           )}
         </div>

@@ -35,6 +35,33 @@ export interface Game {
   collections: number[];
   /** "E:" when the game's only install is on a drive that isn't connected. */
   offline_drive: string | null;
+  /** Ways to play the user added, besides the store's own launch. */
+  launch_options: LaunchOption[];
+}
+
+/** A program the user added to play a game another way (a script, a mod loader, another exe). */
+export interface LaunchOption {
+  id: number;
+  game_id: number;
+  name: string;
+  path: string;
+  /** Passed exactly as typed, like a shortcut's arguments. */
+  args: string;
+  working_dir: string | null;
+  /** The Play button uses this instead of the store. */
+  is_default: boolean;
+}
+
+/** How to start a game when the user picks: the store, or one of its ways to play. */
+export type Via = { kind: "store" } | { kind: "option"; id: number };
+
+export interface LaunchOptionInput {
+  id: number | null;
+  game_id: number;
+  name: string;
+  path: string;
+  args: string;
+  working_dir: string | null;
 }
 
 export type GameStatus = "playing" | "backlog" | "completed" | "abandoned";

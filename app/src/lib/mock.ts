@@ -1,3 +1,4 @@
+import type { LaunchOption, LaunchOptionInput, Via } from "./types";
 import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, StoreHit, StoreId } from "./types";
 
 // ?sgdb in the URL shows Settings as if a key were saved, to design that state.
@@ -6,6 +7,9 @@ const demoSgdb = typeof location !== "undefined" && location.search.includes("sg
 const demoSignedIn = typeof location !== "undefined" && location.search.includes("signedin");
 
 const noop = async (_cb: (payload: unknown) => void) => () => {};
+// The demo's own "library changed" event, so edits show up everywhere.
+const changeListeners = new Set<(payload: unknown) => void>();
+const libraryChanged = () => changeListeners.forEach((cb) => cb(null));
 
 // Synthetic demo library for designing in a plain browser. Artwork comes from
 // Steam's public CDN; replace with the metadata service once it exists.
@@ -70,6 +74,7 @@ const games: Game[] = seeds.map(([title, appid, store, installed, hours, daysAgo
   collections: i % 4 === 0 ? [1] : [],
   // One demo game lives on an unplugged external drive.
   offline_drive: title === "Dead Cells" ? "E:" : null,
+  launch_options: [] as LaunchOption[],
   entries: [
     ...(title === "Hollow Knight"
       ? [{ id: 1000, game_id: i + 1, store: "gog" as StoreId, store_game_id: "hk", installed: false, install_dir: null, hidden: false, store_playtime_secs: null, store_baseline_secs: null, offline: false }]
@@ -95,7 +100,28 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
 export const mockBackend = {
   demo: true,
-  async launch(_id: number) {},
+  async launch(_id: number, _via?: Via) {},
+  async saveLaunchOption(o: LaunchOptionInput): Promise<number> {
+    const game = games.find((g) => g.id === o.game_id);
+    if (!game) throw new Error("That game is no longer in your library");
+    if (!o.name.trim()) throw new Error("Give it a name, like \u201cOffline server\u201d.");
+    if (!o.path.trim()) throw new Error("That program can't be found. Choose it again with Browse.");
+    const existing = game.launch_options.find((x) => x.id === o.id);
+    const id = existing?.id ?? Date.now();
+    const next = { id, game_id: game.id, name: o.name.trim(), path: o.path.trim(), args: o.args.trim(), working_dir: o.working_dir?.trim() || null, is_default: existing?.is_default ?? false };
+    game.launch_options = existing ? game.launch_options.map((x) => (x.id === id ? next : x)) : [...game.launch_options, next];
+    libraryChanged();
+    return id;
+  },
+  async deleteLaunchOption(id: number) {
+    for (const g of games) g.launch_options = g.launch_options.filter((x) => x.id !== id);
+    libraryChanged();
+  },
+  async setDefaultLaunch(gameId: number, option: number | null) {
+    const game = games.find((g) => g.id === gameId);
+    if (game) game.launch_options = game.launch_options.map((x) => ({ ...x, is_default: x.id === option }));
+    libraryChanged();
+  },
   accounts: async (): Promise<Accounts> => ({
     epic: demoSignedIn ? "DemoPlayer" : null,
     sgdb: demoSgdb,
@@ -227,7 +253,13 @@ export const mockBackend = {
     return [];
   },
   onNowPlaying: noop,
-  onLibraryChanged: noop,
+  onLibraryChanged: async (cb: (payload: unknown) => void) => {
+    // Each subscription is its own entry, as with Tauri's events: React's dev
+    // mode subscribes the same handler twice and unsubscribes one.
+    const entry = (p: unknown) => cb(p);
+    changeListeners.add(entry);
+    return () => void changeListeners.delete(entry);
+  },
   onAccountsChanged: noop,
   onSyncStarted: noop,
   onAutoBackup: noop,

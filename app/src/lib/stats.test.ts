@@ -21,6 +21,7 @@ function game(id: number, playtime: number, stores: [StoreId, number | null][], 
     status: null,
     collections: [],
     offline_drive: null,
+    launch_options: [],
     entries: stores.map(([store, secs], i) => ({
       id: id * 10 + i,
       game_id: id,

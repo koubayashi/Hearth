@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Game, NowPlaying } from "../lib/types";
+import type { Game, NowPlaying, Via } from "../lib/types";
+import { defaultWay } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatLastPlayed, formatPlaytime } from "../lib/format";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
@@ -11,6 +12,7 @@ import { Icon } from "../components/Icon";
 import { StoreIcon } from "../components/StoreIcon";
 import { ArtworkPicker } from "../components/ArtworkPicker";
 import { StoreMatch } from "../components/StoreMatch";
+import { WaysToPlay } from "../components/WaysToPlay";
 
 type Tab = "recent" | "installed" | "all";
 const TABS: { id: Tab; label: string }[] = [
@@ -34,7 +36,7 @@ export function Console({
 }: {
   version: number;
   playing: NowPlaying[];
-  onPrimary: (g: Game) => void;
+  onPrimary: (g: Game, via?: Via) => void;
   onToggleHidden: (g: Game) => void;
   onToggleFavorite: (g: Game) => void;
   onExit: () => void;
@@ -43,6 +45,9 @@ export function Console({
   const [tab, setTab] = useState<Tab | null>(null);
   const [index, setIndex] = useState(0);
   const [menu, setMenu] = useState<DOMRect | null>(null);
+  // Opened from the arrow beside Play: straight on the ways to play.
+  const [playMenu, setPlayMenu] = useState(false);
+  const waysRef = useRef<HTMLButtonElement>(null);
   const [panel, setPanel] = useState<PanelAction | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const playRef = useRef<HTMLButtonElement>(null);
@@ -272,9 +277,34 @@ export function Console({
               disabled={!!game.offline_drive}
               onClick={() => onPrimary(game)}
             >
-              <Icon name={game.offline_drive ? "folder" : game.installed ? "play" : "download"} size={22} />
-              {game.offline_drive ? "Drive not connected" : game.installed ? "Play" : "Install"}
+              <Icon name={game.offline_drive ? "folder" : game.installed || defaultWay(game) ? "play" : "download"} size={22} />
+              {game.offline_drive ? (
+                "Drive not connected"
+              ) : defaultWay(game) ? (
+                <>
+                  Play <small className="via">{defaultWay(game)!.name}</small>
+                </>
+              ) : game.installed ? (
+                "Play"
+              ) : (
+                "Install"
+              )}
             </button>
+            {game.launch_options.length > 0 && (
+              <button
+                ref={waysRef}
+                className="cx-icon"
+                data-nav
+                aria-label="Other ways to play"
+                aria-haspopup="menu"
+                onClick={(e) => {
+                  setPlayMenu(true);
+                  setMenu(e.currentTarget.getBoundingClientRect());
+                }}
+              >
+                <Icon name="chevronDown" size={22} />
+              </button>
+            )}
             <button
               className="cx-icon"
               data-nav
@@ -315,9 +345,12 @@ export function Console({
           x={0}
           y={0}
           anchor={menu}
+          start={playMenu ? "play" : "main"}
           onClose={() => {
             setMenu(null);
-            tileFocus();
+            if (playMenu) waysRef.current?.focus();
+            else tileFocus();
+            setPlayMenu(false);
           }}
           onPrimary={onPrimary}
           onToggleFavorite={onToggleFavorite}
@@ -326,6 +359,7 @@ export function Console({
         />
       )}
       {panel === "artwork" && game && <ArtworkPicker game={game} onClose={() => setPanel(null)} onDone={() => setPanel(null)} />}
+      {panel === "ways" && game && <WaysToPlay game={game} onClose={() => setPanel(null)} />}
       {panel === "match" && game && <StoreMatch game={game} onClose={() => setPanel(null)} onDone={() => setPanel(null)} />}
     </div>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Game, NowPlaying } from "../lib/types";
+import type { Game, NowPlaying, Via } from "../lib/types";
+import { defaultWay } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatBytes, formatLastPlayed, formatPlaytime } from "../lib/format";
 import { Art } from "../components/Art";
@@ -11,6 +12,7 @@ import { useGameInfo } from "../components/Poster";
 import { StoreIcon } from "../components/StoreIcon";
 import { ArtworkPicker } from "../components/ArtworkPicker";
 import { StoreMatch } from "../components/StoreMatch";
+import { WaysToPlay } from "../components/WaysToPlay";
 
 type Group = { id: string; title: string; games: Game[] };
 
@@ -33,7 +35,7 @@ export function ListView({
   focused: Game | null;
   playing: NowPlaying[];
   onFocusGame: (g: Game | null) => void;
-  onPrimary: (g: Game) => void;
+  onPrimary: (g: Game, via?: Via) => void;
   onToggleHidden: (g: Game) => void;
   onToggleFavorite: (g: Game) => void;
 }) {
@@ -42,7 +44,7 @@ export function ListView({
   const [search, setSearch] = useState("");
   const [installedOnly, setInstalledOnly] = useState(false);
   const [closed, setClosed] = useState<Set<string>>(new Set());
-  const [menu, setMenu] = useState<{ game: Game; x: number; y: number; anchor?: DOMRect } | null>(null);
+  const [menu, setMenu] = useState<{ game: Game; x: number; y: number; anchor?: DOMRect; play?: boolean } | null>(null);
   const [panel, setPanel] = useState<PanelAction | null>(null);
   const [nonce, setNonce] = useState(0);
   const playRef = useRef<HTMLButtonElement>(null);
@@ -85,9 +87,9 @@ export function ListView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games]);
 
-  const openMenu = (g: Game, x: number, y: number, anchor?: DOMRect) => {
+  const openMenu = (g: Game, x: number, y: number, anchor?: DOMRect, play?: boolean) => {
     onFocusGame(g);
-    setMenu({ game: g, x, y, anchor });
+    setMenu({ game: g, x, y, anchor, play });
   };
   const toggleGroup = (id: string) =>
     setClosed((cur) => {
@@ -108,8 +110,9 @@ export function ListView({
           x={menu.x}
           y={menu.y}
           anchor={menu.anchor}
+          start={menu.play ? "play" : "main"}
           onClose={() => {
-            if (menu.anchor) document.querySelector<HTMLElement>(".lv-more")?.focus();
+            if (menu.anchor) document.querySelector<HTMLElement>(menu.play ? ".lv-ways" : ".lv-more")?.focus();
             else document.querySelector<HTMLElement>(`.lv-row[data-game="${menu.game.id}"]`)?.focus();
             setMenu(null);
           }}
@@ -122,6 +125,7 @@ export function ListView({
       {panel === "artwork" && focused && (
         <ArtworkPicker game={focused} onClose={() => setPanel(null)} onDone={() => (setPanel(null), setNonce((n) => n + 1))} />
       )}
+      {panel === "ways" && focused && <WaysToPlay game={focused} onClose={() => setPanel(null)} />}
       {panel === "match" && focused && (
         <StoreMatch game={focused} onClose={() => setPanel(null)} onDone={() => (setPanel(null), setNonce((n) => n + 1))} />
       )}
@@ -225,6 +229,7 @@ export function ListView({
           onToggleHidden={onToggleHidden}
           onToggleFavorite={onToggleFavorite}
           onMore={(r) => openMenu(focused, 0, 0, r)}
+          onWays={(r) => openMenu(focused, 0, 0, r, true)}
           onBack={backToRow}
         />
       ) : (
@@ -243,13 +248,15 @@ function Detail({
   onToggleHidden,
   onToggleFavorite,
   onMore,
+  onWays,
   onBack,
 }: {
+  onWays: (anchor: DOMRect) => void;
   game: Game;
   nonce: number;
   playRef: React.RefObject<HTMLButtonElement | null>;
   playingSince: number | null;
-  onPrimary: (g: Game) => void;
+  onPrimary: (g: Game, via?: Via) => void;
   onToggleHidden: (g: Game) => void;
   onToggleFavorite: (g: Game) => void;
   onMore: (anchor: DOMRect) => void;
@@ -294,8 +301,28 @@ function Detail({
           </button>
         ) : (
           <button ref={playRef} className={`lv-play${game.installed ? "" : " install"}`} data-nav onClick={() => onPrimary(game)}>
-            <Icon name={game.installed ? "play" : "download"} size={18} />
-            {game.installed ? "Play" : "Install"}
+            <Icon name={game.installed || defaultWay(game) ? "play" : "download"} size={18} />
+            {defaultWay(game) ? (
+              <>
+                Play <small className="via">{defaultWay(game)!.name}</small>
+              </>
+            ) : game.installed ? (
+              "Play"
+            ) : (
+              "Install"
+            )}
+          </button>
+        )}
+        {game.launch_options.length > 0 && (
+          <button
+            className="icon-btn lv-ways"
+            data-nav
+            aria-label="Other ways to play"
+            title="Other ways to play"
+            aria-haspopup="menu"
+            onClick={(e) => onWays(e.currentTarget.getBoundingClientRect())}
+          >
+            <Icon name="chevronDown" />
           </button>
         )}
         <div className="lv-stat">

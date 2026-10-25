@@ -30,6 +30,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/004_art_source.sql"),
     include_str!("../migrations/005_saves.sql"),
     include_str!("../migrations/006_status.sql"),
+    include_str!("../migrations/007_launch_options.sql"),
 ];
 
 pub struct Db {
@@ -534,6 +535,60 @@ impl Db {
         Ok(())
     }
 
+    /// Adds a way to play (id None) or updates one; returns its id.
+    pub fn save_launch_option(
+        &self,
+        id: Option<i64>,
+        game_id: i64,
+        name: &str,
+        path: &str,
+        args: &str,
+        working_dir: Option<&str>,
+    ) -> Result<i64> {
+        let working_dir = working_dir.map(str::trim).filter(|d| !d.is_empty());
+        match id {
+            Some(id) => {
+                self.conn.execute(
+                    "UPDATE launch_options SET name = ?2, path = ?3, args = ?4, working_dir = ?5 WHERE id = ?1",
+                    params![id, name.trim(), path.trim(), args.trim(), working_dir],
+                )?;
+                Ok(id)
+            }
+            None => {
+                self.conn.execute(
+                    "INSERT INTO launch_options (game_id, name, path, args, working_dir) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![game_id, name.trim(), path.trim(), args.trim(), working_dir],
+                )?;
+                Ok(self.conn.last_insert_rowid())
+            }
+        }
+    }
+
+    pub fn delete_launch_option(&self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM launch_options WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    /// What Play does for a game: one of its ways to play, or None for the store.
+    pub fn set_default_launch(&self, game_id: i64, option: Option<i64>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE launch_options SET is_default = (id IS ?2) WHERE game_id = ?1",
+            params![game_id, option],
+        )?;
+        Ok(())
+    }
+
+    pub fn launch_option(&self, id: i64) -> Result<Option<LaunchOption>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id, game_id, name, path, args, working_dir, is_default FROM launch_options WHERE id = ?1",
+                [id],
+                launch_option_row,
+            )
+            .optional()?)
+    }
+
     pub fn set_favorite(&self, game_id: i64, favorite: bool) -> Result<()> {
         self.conn.execute(
             "UPDATE games SET favorite = ?2 WHERE id = ?1",
@@ -682,6 +737,18 @@ impl Db {
             }
         }
 
+        let mut ways: HashMap<i64, Vec<LaunchOption>> = HashMap::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, game_id, name, path, args, working_dir, is_default FROM launch_options
+                 WHERE ?1 IS NULL OR game_id = ?1 ORDER BY id",
+            )?;
+            for row in stmt.query_map([only], launch_option_row)? {
+                let o = row?;
+                ways.entry(o.game_id).or_default().push(o);
+            }
+        }
+
         let mut stmt = self.conn.prepare(
             "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at, status FROM games
              WHERE ?1 IS NULL OR id = ?1",
@@ -754,10 +821,23 @@ impl Db {
                 status: status.as_deref().and_then(GameStatus::parse),
                 collections: in_collections.remove(&id).unwrap_or_default(),
                 offline_drive,
+                launch_options: ways.remove(&id).unwrap_or_default(),
             });
         }
         Ok(games)
     }
+}
+
+fn launch_option_row(r: &rusqlite::Row) -> rusqlite::Result<LaunchOption> {
+    Ok(LaunchOption {
+        id: r.get(0)?,
+        game_id: r.get(1)?,
+        name: r.get(2)?,
+        path: r.get(3)?,
+        args: r.get(4)?,
+        working_dir: r.get(5)?,
+        is_default: r.get(6)?,
+    })
 }
 
 /// The drive (or network share) a path lives on: "E:\\Games\\X" -> "E:\\".
@@ -808,6 +888,34 @@ mod tests {
             store_playtime_secs: None,
             store_last_played: None,
         }
+    }
+
+    #[test]
+    fn ways_to_play_are_saved_edited_defaulted_and_removed() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "1", "HITMAN World of Assassination", true)], 0)
+            .unwrap();
+        let game = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        let peacock = db
+            .save_launch_option(None, game, " Peacock (offline) ", "C:/Peacock/Start Server.cmd", "", Some("  "))
+            .unwrap();
+        let g = db.game(game).unwrap().unwrap();
+        assert_eq!(g.launch_options.len(), 1);
+        assert_eq!(g.launch_options[0].name, "Peacock (offline)");
+        assert_eq!(g.launch_options[0].working_dir, None, "a blank folder is no folder");
+        assert!(!g.launch_options[0].is_default, "the store stays the default until chosen");
+
+        db.set_default_launch(game, Some(peacock)).unwrap();
+        assert!(db.launch_option(peacock).unwrap().unwrap().is_default);
+        db.save_launch_option(Some(peacock), game, "Peacock", "C:/Peacock/Start Server.cmd", "-offline", None)
+            .unwrap();
+        let o = db.launch_option(peacock).unwrap().unwrap();
+        assert_eq!((o.name.as_str(), o.args.as_str(), o.is_default), ("Peacock", "-offline", true));
+
+        db.set_default_launch(game, None).unwrap();
+        assert!(!db.launch_option(peacock).unwrap().unwrap().is_default);
+        db.delete_launch_option(peacock).unwrap();
+        assert!(db.game(game).unwrap().unwrap().launch_options.is_empty());
     }
 
     #[test]
