@@ -181,6 +181,13 @@ export const mockBackend = {
   },
   async sgdbClearKey() {},
   async sgdbCopyKey() {},
+  async autoBackupStatus(): Promise<{ folder: string | null; last_at: number | null; error: string | null }> {
+    return { folder: null, last_at: null, error: null };
+  },
+  async autoBackupSet(_folder: string | null): Promise<{ folder: string | null; last_at: number | null; error: string | null }> {
+    throw new Error("Demo library: automatic backups work in the desktop app");
+  },
+  async savePrefsSnapshot(_prefs: string) {},
   async backupExport(_path: string, _prefs: string): Promise<void> {
     throw new Error("Demo library: backups work in the desktop app");
   },
@@ -223,6 +230,7 @@ export const mockBackend = {
   onLibraryChanged: noop,
   onAccountsChanged: noop,
   onSyncStarted: noop,
+  onAutoBackup: noop,
   onSyncError: noop,
   async listGames(q: LibraryQuery): Promise<Game[]> {
     const search = q.search ? norm(q.search) : "";

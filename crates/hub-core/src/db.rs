@@ -72,6 +72,12 @@ impl Db {
         Ok(())
     }
 
+    /// How many rows Hearth has written since the library was opened: a cheap
+    /// way to tell whether anything changed since the last automatic backup.
+    pub fn changes(&self) -> u64 {
+        self.conn.total_changes()
+    }
+
     /// Drops a restored backup's settings table; the library doesn't need it.
     pub fn forget_backup_meta(&self) -> Result<()> {
         self.conn.execute_batch("DROP TABLE IF EXISTS backup_meta;")?;

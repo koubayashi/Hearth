@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artwork;
+mod autobackup;
 mod backup;
 mod collections;
 mod details;
@@ -556,6 +557,7 @@ fn main() {
             Some(vec!["--minimized"]),
         ))
         .manage(tracking::Tracking::default())
+        .manage(autobackup::AutoBackup::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -614,6 +616,7 @@ fn main() {
 
             keep_epic_alive(app.handle().clone());
             drives::watch(app.handle().clone());
+            autobackup::watch(app.handle().clone());
             tracking::recover(app.handle());
             tracking::start(app.handle().clone());
             sync_all(app.handle().clone());
@@ -638,6 +641,9 @@ fn main() {
             play_sessions,
             backup::backup_export,
             backup::backup_restore,
+            autobackup::auto_backup_status,
+            autobackup::auto_backup_set,
+            autobackup::save_prefs_snapshot,
             accounts,
             sync_now,
             epic_sign_in,

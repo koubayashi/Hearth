@@ -470,6 +470,76 @@ function CoverSizeSetting({ onPeek }: { onPeek: (on: boolean) => void }) {
 
 const BACKUP_FILTER = [{ name: "Hearth backup", extensions: ["hearthbackup"] }];
 
+type AutoStatus = { folder: string | null; last_at: number | null; error: string | null };
+
+/** After the library changes, a backup to a folder you choose: at most hourly, the newest 10 kept. */
+function AutoBackupRow() {
+  const [status, setStatus] = useState<AutoStatus | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    const load = () => api.autoBackupStatus().then(setStatus).catch(() => {});
+    load();
+    const off = api.onAutoBackup(load);
+    return () => void off.then((f) => f());
+  }, []);
+  const on = !!status?.folder;
+
+  const choose = async () => {
+    setProblem(null);
+    const picked = isTauri() ? await openDialog({ directory: true, title: "Choose a folder for automatic backups" }) : null;
+    if (typeof picked !== "string") return;
+    try {
+      setStatus(await api.autoBackupSet(picked));
+    } catch (e) {
+      setProblem(String(e));
+    }
+  };
+  const turnOff = async () => {
+    setProblem(null);
+    try {
+      setStatus(await api.autoBackupSet(null));
+    } catch (e) {
+      setProblem(String(e));
+    }
+  };
+
+  const line = !on
+    ? "After changes, a backup to a folder you choose, such as your OneDrive folder. At most hourly; the newest 10 kept."
+    : status?.last_at
+      ? `To ${status.folder}. Last one ${formatLastPlayed(status.last_at).toLowerCase()}.`
+      : `To ${status?.folder}.`;
+
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-row">
+        <div className="text">
+          <b>Automatic backups</b>
+          <span>{line}</span>
+        </div>
+        {on && (
+          <button className="btn" data-nav onClick={choose}>
+            Change folder
+          </button>
+        )}
+        <button
+          className="switch"
+          role="switch"
+          data-nav
+          aria-label="Automatic backups"
+          aria-checked={on}
+          disabled={status === null || api.demo}
+          onClick={() => (on ? turnOff() : choose())}
+        />
+      </div>
+      {(problem || status?.error) && (
+        <p className="note error" role="status">
+          {problem ?? status?.error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Everything Hearth knows about your games, in one file you keep wherever you
  * like: another drive, or a OneDrive / Google Drive / Dropbox folder.
@@ -556,6 +626,7 @@ function BackupSection() {
             </p>
           )}
         </div>
+        <AutoBackupRow />
         <div className="setting">
           <div className="text">
             <b>Restore from a backup</b>

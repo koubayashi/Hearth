@@ -29,6 +29,9 @@ const backend = isTauri()
       nowPlaying: () => invoke<NowPlaying[]>("now_playing"),
       playSessions: () => invoke<PlaySession[]>("play_sessions"),
       backupExport: (path: string, prefs: string) => invoke<void>("backup_export", { path, prefs }),
+      autoBackupStatus: () => invoke<{ folder: string | null; last_at: number | null; error: string | null }>("auto_backup_status"),
+      autoBackupSet: (folder: string | null) => invoke<{ folder: string | null; last_at: number | null; error: string | null }>("auto_backup_set", { folder }),
+      savePrefsSnapshot: (prefs: string) => invoke<void>("save_prefs_snapshot", { prefs }),
       backupRestore: (path: string) =>
         invoke<{ prefs: string | null; created_at: number | null }>("backup_restore", { path }),
       gameDetails: (id: number) => invoke<GameDetails | null>("game_details", { id }),
@@ -59,6 +62,7 @@ const backend = isTauri()
       onLibraryChanged: on("library-changed"),
       onAccountsChanged: on("accounts-changed"),
       onSyncStarted: on("sync-started"),
+      onAutoBackup: on("auto-backup"),
       onSyncError: on("sync-error"),
     }
   : mockBackend;

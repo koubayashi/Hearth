@@ -10,9 +10,16 @@ import { Collections } from "./screens/Collections";
 import { Settings } from "./screens/Settings";
 import { Stats } from "./screens/Stats";
 import { legacy } from "./components/Art";
+import { usePrefs } from "./lib/prefs";
 
 export function App() {
   const [route, setRoute] = useState<Route>("library");
+  // Automatic backups run in the background, window open or not: give them
+  // the current appearance settings to include.
+  const prefs = usePrefs();
+  useEffect(() => {
+    api.savePrefsSnapshot(JSON.stringify(prefs)).catch(() => {});
+  }, [prefs]);
   const [focused, setFocused] = useState<Game | null>(null);
   const [version, setVersion] = useState(0);
   const [toast, setToast] = useState<ToastMsg | null>(null);
