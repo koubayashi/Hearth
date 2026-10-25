@@ -4,13 +4,31 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+// Going fullscreen straight from maximized leaves the page at its maximized
+// size on Windows (frameless window), with a bare strip where the taskbar
+// was. So a maximized window is restored first, and maximized again after.
+let wasMaximized = false;
+
 export async function isFullscreen(): Promise<boolean> {
   if (isTauri()) return getCurrentWindow().isFullscreen();
   return document.fullscreenElement !== null;
 }
 
 export async function setFullscreen(on: boolean): Promise<void> {
-  if (isTauri()) return getCurrentWindow().setFullscreen(on);
+  if (isTauri()) {
+    const win = getCurrentWindow();
+    if (on === (await win.isFullscreen())) return;
+    if (on) {
+      wasMaximized = await win.isMaximized();
+      if (wasMaximized) await win.unmaximize();
+      await win.setFullscreen(true);
+    } else {
+      await win.setFullscreen(false);
+      if (wasMaximized) await win.maximize();
+      wasMaximized = false;
+    }
+    return;
+  }
   if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen().catch(() => {});
   if (!on && document.fullscreenElement) await document.exitFullscreen().catch(() => {});
 }
