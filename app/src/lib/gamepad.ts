@@ -1,13 +1,16 @@
 // Bridges the Gamepad API onto keyboard events, so every screen only has to
 // handle arrows / Enter / Escape and works the same with a controller.
 
-type Key = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Enter" | "Escape" | "ContextMenu";
+type Key = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Enter" | "Escape" | "ContextMenu" | "PageUp" | "PageDown" | "GamepadStart";
 
 // Standard mapping: https://w3c.github.io/gamepad/#remapping
 const BUTTONS: Record<number, Key> = {
   0: "Enter", // A
   1: "Escape", // B
   3: "ContextMenu", // Y
+  4: "PageUp", // LB: previous tab
+  5: "PageDown", // RB: next tab
+  9: "GamepadStart", // Start / Menu: the console
   12: "ArrowUp",
   13: "ArrowDown",
   14: "ArrowLeft",

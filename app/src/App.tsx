@@ -10,7 +10,9 @@ import { Collections } from "./screens/Collections";
 import { Settings } from "./screens/Settings";
 import { Stats } from "./screens/Stats";
 import { legacy } from "./components/Art";
-import { usePrefs } from "./lib/prefs";
+import { setPrefs, usePrefs } from "./lib/prefs";
+import { ListView } from "./screens/ListView";
+import { Console } from "./screens/Console";
 
 export function App() {
   const [route, setRoute] = useState<Route>("library");
@@ -40,6 +42,13 @@ export function App() {
     setFocused(null);
     setRoute("collections");
   };
+  // A controller's Start button opens the console from anywhere.
+  useEffect(() => {
+    if (prefs.consoleMode) return;
+    const onKey = (e: KeyboardEvent) => e.key === "GamepadStart" && setPrefs({ consoleMode: true });
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prefs.consoleMode]);
   const [counts, setCounts] = useState<Partial<Record<Route, number>>>({});
 
   const refresh = () => setVersion((v) => v + 1);
@@ -102,14 +111,43 @@ export function App() {
   // Pages that show the selected game's art behind them.
   const showsArt = libraryLike || route === "collections";
 
+  if (prefs.consoleMode) {
+    return (
+      <>
+        <Console
+          version={version}
+          playing={playing}
+          onPrimary={primary}
+          onToggleHidden={toggleHidden}
+          onToggleFavorite={toggleFavorite}
+          onExit={() => setPrefs({ consoleMode: false })}
+        />
+        <Toast toast={toast} onDone={clearToast} />
+      </>
+    );
+  }
+
   return (
     <>
       <Backdrop src={showsArt ? (focused?.hero ?? null) : null} />
       <TitleBar />
       <div className="app">
-        <Rail route={route} counts={counts} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false), setRevealId(null), setStartStatus(undefined))} />
+        <Rail route={route} counts={counts} onConsole={() => setPrefs({ consoleMode: true })} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false), setRevealId(null), setStartStatus(undefined))} />
         <main className={`main${peek && route === "settings" ? " peeking" : ""}`}>
-          {libraryLike && (
+          {libraryLike && prefs.libraryView === "list" && (
+            <ListView
+              key={route}
+              hiddenView={route === "hidden"}
+              version={version}
+              focused={focused}
+              playing={playing}
+              onFocusGame={setFocused}
+              onPrimary={primary}
+              onToggleHidden={toggleHidden}
+              onToggleFavorite={toggleFavorite}
+            />
+          )}
+          {libraryLike && prefs.libraryView !== "list" && (
             <Library
               key={route}
               hiddenView={route === "hidden"}

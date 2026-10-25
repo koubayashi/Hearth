@@ -5,6 +5,7 @@ import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plu
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
+import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { formatLastPlayed } from "../lib/format";
 import { StoreIcon } from "../components/StoreIcon";
 import { Icon } from "../components/Icon";
@@ -420,6 +421,33 @@ function SectionIndex() {
  * rest of Settings fades out and your real library shows underneath at the
  * new size, so you pick the size against your own games.
  */
+/** The window's full screen state; F11 changes it too, so it follows resizes. */
+function FullscreenSetting() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const read = () => void isFullscreen().then(setOn);
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+  return (
+    <div className="setting">
+      <div className="text">
+        <b>Full screen</b>
+        <span>Fill the whole screen, without the taskbar. F11 switches it any time.</span>
+      </div>
+      <button
+        className="switch"
+        role="switch"
+        data-nav
+        aria-label="Full screen"
+        aria-checked={on}
+        onClick={() => setFullscreen(!on).then(() => isFullscreen().then(setOn))}
+      />
+    </div>
+  );
+}
+
 function CoverSizeSetting({ onPeek }: { onPeek: (on: boolean) => void }) {
   const { coverSize } = usePrefs();
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -783,6 +811,33 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
         <section id="settings-library">
         <h2>Library</h2>
         <div className="setting-group glass">
+          <div className="setting">
+            <div className="text">
+              <b>Layout</b>
+              <span>Covers beside the game panel, or a list of titles beside a full game page.</span>
+            </div>
+            <div className="seg seg-boxed" role="group" aria-label="Layout">
+              <button data-nav aria-pressed={p.libraryView === "covers"} onClick={() => setPrefs({ libraryView: "covers" })}>
+                <Icon name="grid" size={15} />
+                Covers
+              </button>
+              <button data-nav aria-pressed={p.libraryView === "list"} onClick={() => setPrefs({ libraryView: "list" })}>
+                <Icon name="list" size={15} />
+                List
+              </button>
+            </div>
+          </div>
+          <div className="setting">
+            <div className="text">
+              <b>Console</b>
+              <span>Full screen with big art, made for a TV and a controller. The Start button opens and closes it.</span>
+            </div>
+            <button className="btn" data-nav onClick={() => setPrefs({ consoleMode: true })}>
+              <Icon name="gamepad" size={16} />
+              Open console
+            </button>
+          </div>
+          <FullscreenSetting />
           <CoverSizeSetting onPeek={onPeek} />
           <div className="setting">
             <div className="text">

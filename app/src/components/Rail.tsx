@@ -13,7 +13,9 @@ export function Rail({
   route,
   counts,
   onNavigate,
+  onConsole,
 }: {
+  onConsole: () => void;
   route: Route;
   counts: Partial<Record<Route, number>>;
   onNavigate: (r: Route) => void;
@@ -39,6 +41,10 @@ export function Rail({
       </div>
       {ITEMS.map((i) => item(i.id, i.label, i.icon))}
       <div className="spacer" />
+      <button className="nav" data-nav title="Fullscreen, for the couch and a controller (Start button)" onClick={onConsole}>
+        <Icon name="gamepad" />
+        Console
+      </button>
       {item("settings", "Settings", "settings")}
     </nav>
   );

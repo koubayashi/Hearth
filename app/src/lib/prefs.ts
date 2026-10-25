@@ -2,6 +2,9 @@ import { useSyncExternalStore } from "react";
 
 export type Tone = "graphite" | "gallery" | "ember" | "spruce";
 export type Mode = "dark" | "light";
+/** How the library is laid out: a cover wall beside the poster, or a list of
+ *  titles beside a detail page. */
+export type LibraryView = "covers" | "list";
 
 export interface Prefs {
   tone: Tone;
@@ -19,6 +22,9 @@ export interface Prefs {
   blurPosterArt: boolean;
   /** When the last backup was saved (ms), or null. */
   lastBackupAt: number | null;
+  libraryView: LibraryView;
+  /** The fullscreen, controller-first console. Hearth reopens in it if you left it there. */
+  consoleMode: boolean;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -29,7 +35,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false };
 
 function load(): Prefs {
   try {

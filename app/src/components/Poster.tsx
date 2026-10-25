@@ -12,7 +12,7 @@ import { ArtworkPicker } from "./ArtworkPicker";
 import { GameMenu } from "./GameMenu";
 
 /** Store-page details and install info for a game, loaded when it's selected. */
-function useGameInfo(game: Game | null, nonce: number) {
+export function useGameInfo(game: Game | null, nonce: number) {
   const [details, setDetails] = useState<GameDetails | null>(null);
   const [install, setInstall] = useState<InstallInfo | null>(null);
   const id = game?.id ?? null;

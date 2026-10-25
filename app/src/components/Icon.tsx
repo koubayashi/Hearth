@@ -50,6 +50,14 @@ const paths = {
   refresh: <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
   chevronLeft: <path d="M15 6l-6 6 6 6" />,
+  list: <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />,
+  grid: <path d="M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z" />,
+  gamepad: (
+    <>
+      <path d="M7.5 7.5h9a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4a2.4 2.4 0 0 1-4.2 1L14.6 15H9.4L8 17.3a2.4 2.4 0 0 1-4.2-1l-.7-3.4a4.5 4.5 0 0 1 4.4-5.4z" />
+      <path d="M8.5 10.5v3M7 12h3M15.5 11h.01M17 13h.01" />
+    </>
+  ),
   sliders: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4" />,
   dice: (
     <>

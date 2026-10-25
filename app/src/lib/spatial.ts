@@ -42,7 +42,7 @@ export function moveFocus(from: HTMLElement, dir: Dir): boolean {
 
 export function installSpatialNav(): () => void {
   const onKey = (e: KeyboardEvent) => {
-    if (!e.key.startsWith("Arrow")) return;
+    if (!e.key.startsWith("Arrow") || e.defaultPrevented) return;
     const target = e.target as HTMLElement;
     if (target.matches("input, textarea, select")) return;
     if (!target.closest("[data-nav]")) {
