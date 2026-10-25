@@ -27,7 +27,11 @@
   border-radius: var(--radius-control); color: var(--ink-2); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast);
 }
 .lv-row:hover { background: var(--line); color: var(--ink); }
-.lv-row[aria-current="true"] { background: var(--line-strong); color: var(--ink); }
+/* Selected: the accent edge Hearth uses for "you are here" (as in the Settings index). */
+.lv-row[aria-current="true"] {
+  color: var(--ink); font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 var(--accent);
+}
 .lv-row.dim:not([aria-current]) .lv-name { color: var(--ink-3); }
 .lv-thumb { flex: none; width: 22px; height: 30px; border-radius: 2px; overflow: hidden; background: var(--line); }
 .lv-thumb img, .lv-thumb .art-fallback { width: 100%; height: 100%; object-fit: cover; padding: 0; }
@@ -55,6 +59,8 @@
 .lv-hero-title { position: absolute; left: var(--space-6); right: var(--space-6); bottom: 48px; z-index: 1; }
 .lv-hero-title img { max-width: min(420px, 50cqw); max-height: 130px; object-fit: contain; object-position: left bottom; filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.5)); }
 .lv-hero-title h1 { font: 600 var(--text-hero) / 1.05 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5); color: #fff; }
+/* No art to sit on: the title takes the page colours (white on a light page was unreadable). */
+.lv-hero.no-art .lv-hero-title h1 { color: var(--ink); text-shadow: none; }
 /* The play bar stays in reach while the details scroll under it. */
 .lv-bar {
   position: sticky; top: var(--space-3); z-index: 2; margin: -28px var(--space-5) 0;
@@ -100,7 +106,8 @@
 .console {
   --pad: clamp(32px, 4.5vw, 72px); --tile: clamp(112px, 8.5vw, 150px); --tile-on: calc(var(--tile) * 1.5); --gap: 16px;
   position: fixed; inset: 0; z-index: 25; overflow: hidden; isolation: isolate; color: var(--ink); background: var(--base);
-  display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); align-content: start; font-size: 18px;
+  /* Shelves and row at the top, the game in the lower third, the art in between. */
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; font-size: 18px;
 }
 .cx-art { position: absolute; inset: 0; z-index: -1; }
 .cx-art img {
@@ -141,9 +148,14 @@
 }
 .cx-exit:hover { color: var(--ink); background: var(--line-strong); }
 
-/* The row: the selected tile always sits first, larger; the rest follow it. */
+/* The row: the selected tile always sits first, larger; the rest follow it.
+   Only transforms move: every tile keeps the same slot, the selected one is
+   scaled up from its top-left corner, and the ones after it shift right by
+   the extra width. Nothing is laid out again while it moves, however many
+   games the shelf holds. */
 .cx-row { padding: 32px var(--pad) 12px; overflow: hidden; }
 .cx-track {
+  --extra: calc(var(--tile-on) - var(--tile));
   display: flex; align-items: flex-start; gap: var(--gap); height: calc(var(--tile-on) * 1.5);
   transform: translateX(calc(var(--at) * -1 * (var(--tile) + var(--gap))));
   transition: transform 380ms var(--ease-out);
@@ -151,17 +163,26 @@
 .cx-tile {
   all: unset; position: relative; flex: none; width: var(--tile); aspect-ratio: 2 / 3; border-radius: var(--radius-art);
   cursor: pointer; background: var(--line); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  transition: width 380ms var(--ease-out), opacity var(--dur-med), box-shadow var(--dur-med);
+  transform-origin: 0 0; transition: transform 380ms var(--ease-out), opacity var(--dur-med), box-shadow var(--dur-med);
 }
 .cx-tile img, .cx-tile .art-fallback { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .cx-tile.dim:not(.on) { opacity: 0.6; }
-.cx-tile.on { width: var(--tile-on); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5); }
-/* Where the controller is: a clear frame, as on a TV. */
-.cx-tile:focus-visible, .cx-tile.on:focus { outline: 3px solid var(--ink); outline-offset: 4px; }
+.cx-tile.after { transform: translateX(var(--extra)); }
+/* Selected: the picture light from the covers wall, an accent ring with a
+   soft accent glow above. The ring is 2px at 1.5x, so 3px on screen. */
+.cx-tile.on { transform: scale(1.5); z-index: 1; box-shadow: 0 0 0 2px var(--accent), 0 12px 32px rgba(0, 0, 0, 0.5); }
+.cx-tile.on::before {
+  content: ""; position: absolute; left: -40%; right: -40%; top: -20px; height: 60%; z-index: -1; pointer-events: none;
+  background: radial-gradient(50% 60% at 50% 30%, color-mix(in srgb, var(--accent) 22%, transparent), transparent);
+  animation: fade var(--dur-med) var(--ease-out);
+}
+.cx-tile:focus-visible { outline: none; }
+/* Keyboard or controller focus on the selected tile: the ring turns ink with an accent halo. */
+.cx-tile.on:focus { box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px color-mix(in srgb, var(--accent) 60%, transparent), 0 12px 32px rgba(0, 0, 0, 0.5); }
 .cx-live { position: absolute; top: 10px; right: 10px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.4); }
 .cx-empty { padding: 40px 0; color: var(--ink-2); font-size: 20px; }
 
-.cx-info { padding: 12px var(--pad) 0; max-width: min(900px, 70vw); animation: fade var(--dur-med) var(--ease-out); }
+.cx-info { grid-row: 4; padding: 0 var(--pad) clamp(32px, 7vh, 88px); max-width: min(900px, 70vw); animation: fade var(--dur-med) var(--ease-out); }
 .cx-title { font: 600 clamp(36px, 3.6vw, 56px) / 1.05 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4); }
 .cx-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 0; margin-top: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .cx-meta > span + span::before { content: "·"; margin: 0 12px; color: var(--ink-3); }

@@ -1,5 +1,4 @@
 @import "./tokens.css";
-@import "./views.css";
 
 * { box-sizing: border-box; margin: 0; }
 html, body, #root { height: 100%; }

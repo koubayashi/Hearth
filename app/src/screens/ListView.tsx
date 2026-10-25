@@ -275,7 +275,7 @@ function Detail({
       }}
     >
       {/* Keyed, so the art fades in for each game; the rest stays put and keeps focus. */}
-      <div className="lv-hero" key={game.id}>
+      <div className={`lv-hero${game.hero ? "" : " no-art"}`} key={game.id}>
         {game.hero ? <Art src={game.hero} title="" /> : <div className="lv-hero-blank" />}
         <div className="lv-hero-title">
           {game.logo && !logoFailed ? (

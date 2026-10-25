@@ -193,7 +193,7 @@ export function Console({
           {row.map((g, i) => (
             <button
               key={g.id}
-              className={`cx-tile${i === at ? " on" : ""}${g.installed ? "" : " dim"}`}
+              className={`cx-tile${i === at ? " on" : i > at ? " after" : ""}${g.installed ? "" : " dim"}`}
               role="option"
               aria-selected={i === at}
               aria-label={g.title}
