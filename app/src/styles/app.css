@@ -119,7 +119,8 @@ input { font: inherit; color: inherit; }
   all: unset; white-space: nowrap; padding: 5px 12px; border-radius: 3px; color: var(--ink-2); font-weight: 500; cursor: pointer;
   transition: background var(--dur-fast), color var(--dur-fast);
 }
-.seg button:hover { color: var(--ink); }
+.seg button:hover:not(:disabled) { color: var(--ink); }
+.seg button:disabled { opacity: 0.4; cursor: default; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--base); }
 .chip {
   all: unset; white-space: nowrap; height: 30px; padding: 0 12px; border-radius: var(--radius-control);
@@ -192,6 +193,7 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .setting .text { flex: 1; }
 .setting .text b { display: block; font-weight: 600; }
 .setting .text span { color: var(--ink-2); font-size: var(--text-sm); }
+.setting .text .inline-name { display: inline; color: var(--ink); }
 .swatches { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .swatch {
   all: unset; display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; cursor: pointer;

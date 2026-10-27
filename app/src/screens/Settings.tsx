@@ -4,7 +4,8 @@ import { useStartWithWindows } from "../lib/autostart";
 import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
-import { TONES, setPrefs, usePrefs } from "../lib/prefs";
+import { TONES, setPrefs, usePrefs, type NameSource } from "../lib/prefs";
+import { pickName, useAccounts } from "../lib/gamertag";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { formatLastPlayed, inSentence } from "../lib/format";
 import { StoreIcon } from "../components/StoreIcon";
@@ -326,16 +327,65 @@ function SignedIn({ name, detail }: { name: string; detail: string }) {
   );
 }
 
-/** Store accounts, kept current when a sign-in finishes elsewhere. */
-function useAccounts() {
-  const [accounts, setAccounts] = useState<Accounts | null>(null);
-  useEffect(() => {
-    const load = () => api.accounts().then(setAccounts);
-    load();
-    const off = api.onAccountsChanged(load);
-    return () => void off.then((f) => f());
-  }, []);
-  return accounts;
+/**
+ * The name in the console's top bar and Stats. Steam and Epic names can
+ * differ, so one is chosen; a store you aren't signed in to can't be picked.
+ */
+function NameSetting({ accounts }: { accounts: Accounts | null }) {
+  const p = usePrefs();
+  const picked = pickName(accounts, p);
+  const current = p.nameSource === "custom" || p.nameSource === "off" ? p.nameSource : picked?.source;
+  const choices: { source: NameSource; label: string; available: boolean }[] = [
+    { source: "steam", label: "Steam", available: !!accounts?.steam },
+    { source: "epic", label: "Epic", available: !!accounts?.epic },
+    { source: "custom", label: "Your own", available: true },
+    { source: "off", label: "None", available: true },
+  ];
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-row">
+        <div className="text">
+          <b>Your name in the console</b>
+          <span>
+            {picked ? (
+              <>
+                Shown as <b className="inline-name">{picked.name}</b> in the top bar and on Stats.
+              </>
+            ) : p.nameSource === "off" ? (
+              "The console shows no name."
+            ) : (
+              "Sign in to Steam or Epic, or type your own name."
+            )}
+          </span>
+        </div>
+        <div className="seg seg-boxed" role="group" aria-label="Name from">
+          {choices.map((c) => (
+            <button
+              key={c.source}
+              data-nav
+              disabled={!c.available}
+              title={c.available ? undefined : `Not signed in to ${c.label}`}
+              aria-pressed={current === c.source}
+              onClick={() => setPrefs({ nameSource: c.source })}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {p.nameSource === "custom" && (
+        <input
+          className="text-input"
+          data-nav
+          maxLength={32}
+          placeholder="Your name"
+          aria-label="Your name"
+          value={p.customName}
+          onChange={(e) => setPrefs({ customName: e.target.value })}
+        />
+      )}
+    </div>
+  );
 }
 
 /** Re-checks every store. An action, so it sits by the page title. */
@@ -829,6 +879,7 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
               Open console
             </button>
           </div>
+          <NameSetting accounts={accounts} />
           <FullscreenSetting />
           <CoverSizeSetting onPeek={onPeek} />
           <div className="setting">

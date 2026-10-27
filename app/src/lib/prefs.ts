@@ -5,6 +5,8 @@ export type Mode = "dark" | "light";
 /** How the library is laid out: a cover wall beside the poster, or a list of
  *  titles beside a detail page. */
 export type LibraryView = "covers" | "list";
+/** Where the console's name comes from. "auto" picks Steam, then Epic. */
+export type NameSource = "auto" | "steam" | "epic" | "custom" | "off";
 
 export interface Prefs {
   tone: Tone;
@@ -29,6 +31,10 @@ export interface Prefs {
   consoleFullscreen: boolean;
   /** Controller button hints in the console, once a controller is used. */
   consoleHints: boolean;
+  /** Where the name in the console comes from; "off" shows none. */
+  nameSource: NameSource;
+  /** The name typed in Settings, for nameSource "custom". */
+  customName: string;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -39,7 +45,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "" };
 
 function load(): Prefs {
   try {

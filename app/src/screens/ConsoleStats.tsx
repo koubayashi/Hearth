@@ -4,12 +4,14 @@ import { computeStats, hours } from "../lib/stats";
 import { formatPlaytime } from "../lib/format";
 import type { Game, PlaySession } from "../lib/types";
 import { Art } from "../components/Art";
+import { possessive, useGamerTag } from "../lib/gamertag";
 
 /**
  * Stats for the couch: the same numbers as the desk Stats page, sized for a
  * TV and read at a glance. Nothing to operate; B goes back to the games.
  */
 export function ConsoleStats({ version, onArt }: { version: number; onArt: (src: string | null) => void }) {
+  const name = useGamerTag();
   const [data, setData] = useState<{ games: Game[]; sessions: PlaySession[] } | null>(null);
   useEffect(() => {
     Promise.all([api.listGames({ install: "all", stores: [], search: null, hidden_only: false }), api.playSessions()])
@@ -34,7 +36,7 @@ export function ConsoleStats({ version, onArt }: { version: number; onArt: (src:
   return (
     <div className="cx-stats">
       <header className="cx-stats-head">
-        <p className="cx-kicker">All your playtime</p>
+        <p className="cx-kicker">{name ? `${possessive(name)} playtime` : "All your playtime"}</p>
         <h1 className="cx-total">
           {s.totalSecs === 0 ? "No playtime yet" : total === 0 ? "Under an hour" : `${total.toLocaleString()} ${total === 1 ? "hour" : "hours"}`}
         </h1>

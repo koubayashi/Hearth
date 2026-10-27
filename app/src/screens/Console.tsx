@@ -6,6 +6,7 @@ import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatLastPlayed, formatPlaytime, inSentence } from "../lib/format";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { usePrefs } from "../lib/prefs";
+import { useGamerTag } from "../lib/gamertag";
 import { Art, legacy } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
@@ -82,6 +83,7 @@ export function Console({
 }) {
   const prefs = usePrefs();
   const [section, setSection] = useState<Section>("games");
+  const name = useGamerTag();
   const [statsArt, setStatsArt] = useState<string | null>(null);
   const [games, setGames] = useState<Game[] | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -226,6 +228,7 @@ export function Console({
           ))}
         </nav>
         <span className="spacer" />
+        {name && <span className="cx-name">{name}</span>}
         <time className="cx-clock">{now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
         <button className="cx-exit" data-nav title="Leave the console (Start)" onClick={onExit}>
           <Icon name="close" size={16} />

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
 import { setFullscreen } from "../lib/fullscreen";
 import { useStartWithWindows } from "../lib/autostart";
+import { nameOptions, pickName, useAccounts } from "../lib/gamertag";
 import { Icon } from "../components/Icon";
 
 /**
@@ -11,6 +12,15 @@ import { Icon } from "../components/Icon";
 export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }) {
   const p = usePrefs();
   const startup = useStartWithWindows();
+  // Only names that exist; typing your own needs the desktop view.
+  const accounts = useAccounts();
+  const picked = pickName(accounts, p);
+  const current = p.nameSource === "off" ? "off" : picked?.source;
+  const label: Record<string, string> = { steam: "Steam", epic: "Epic", custom: "Your own" };
+  const names = [
+    ...nameOptions(accounts, p.customName).map((o) => ({ source: o.source, label: label[o.source] })),
+    { source: "off" as const, label: "None" },
+  ];
   // Up and down go from row to row; left and right only move between the
   // tones, never off to the Exit button at the top.
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -36,6 +46,21 @@ export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }
             >
               <i style={{ background: t.base, boxShadow: `inset -10px 0 ${t.accent}` }} />
               {t.label}
+            </button>
+          ))}
+        </div>
+      </Row>
+      <Row title="Your name" text={picked ? `Shown as ${picked.name} at the top.` : "No name is shown at the top."}>
+        <div className="cx-tones" role="group" aria-label="Your name">
+          {names.map((n) => (
+            <button
+              key={n.source}
+              className="cx-tone"
+              data-nav
+              aria-pressed={current === n.source}
+              onClick={() => setPrefs({ nameSource: n.source })}
+            >
+              {n.label}
             </button>
           ))}
         </div>

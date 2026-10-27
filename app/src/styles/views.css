@@ -163,6 +163,7 @@
   font: 600 12px var(--font-text); color: var(--ink-2); border: 1px solid var(--line-strong); background: var(--glass);
 }
 .cx-bumper { margin: 0 4px; }
+.cx-name { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 20px var(--font-display); color: var(--ink-2); }
 .cx-clock { font: 600 20px var(--font-display); font-variant-numeric: tabular-nums; }
 .cx-exit {
   all: unset; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 20px; cursor: pointer;
