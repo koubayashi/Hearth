@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatHoursShort, formatLastPlayed, formatPlaytime, releaseYear } from "./format";
+import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatHoursShort, formatLastPlayed, formatPlaytime, inSentence, releaseYear } from "./format";
 
 describe("formatPlaytime", () => {
   it("formats hours and minutes", () => {
@@ -7,6 +7,19 @@ describe("formatPlaytime", () => {
     expect(formatPlaytime(45 * 60)).toBe("45m");
     expect(formatPlaytime(3600)).toBe("1h");
     expect(formatPlaytime(41 * 3600 + 12 * 60)).toBe("41h 12m");
+  });
+  it("doesn't call a game with a last-played date never played", () => {
+    expect(formatGamePlaytime(0, null)).toBe("Never played");
+    expect(formatGamePlaytime(0, 1_700_000_000)).toBe("No time recorded");
+    expect(formatGamePlaytime(3600, 1_700_000_000)).toBe("1h");
+    expect(formatGameLastPlayed(null, 3600)).toBe("Not recorded");
+    expect(formatGameLastPlayed(null, 0)).toBe("Never played");
+  });
+  it("lowercases relative phrases in a sentence, not dates", () => {
+    expect(inSentence("Last week")).toBe("last week");
+    expect(inSentence("An hour ago")).toBe("an hour ago");
+    expect(inSentence("3 days ago")).toBe("3 days ago");
+    expect(inSentence("Mar 12, 2024")).toBe("Mar 12, 2024");
   });
   it("formats short hours for tiles", () => {
     expect(formatHoursShort(0)).toBe("");

@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import type { Game, NowPlaying, Via } from "../lib/types";
 import { defaultWay } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
-import { formatLastPlayed, formatPlaytime } from "../lib/format";
+import { formatLastPlayed, formatPlaytime, inSentence } from "../lib/format";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { Art, legacy } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
@@ -271,8 +271,9 @@ export function Console({
             ) : (
               <span>{game.installed ? "Ready to play" : game.offline_drive ? `Drive ${game.offline_drive} not connected` : "Not installed"}</span>
             )}
-            <span>{formatPlaytime(game.playtime_secs)} played</span>
-            <span>Last played {formatLastPlayed(game.last_played).toLowerCase()}</span>
+            {game.playtime_secs > 0 && <span>{formatPlaytime(game.playtime_secs)} played</span>}
+            {game.last_played !== null && <span>Last played {inSentence(formatLastPlayed(game.last_played))}</span>}
+            {game.playtime_secs === 0 && game.last_played === null && <span>Never played</span>}
             {status && <span>{status}</span>}
             {stores.map((s) => (
               <span key={s} className="cx-store">

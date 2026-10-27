@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Game } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 import { usePrefs } from "../lib/prefs";
-import { formatPlaytime } from "../lib/format";
+import { formatGamePlaytime } from "../lib/format";
 import { Art } from "./Art";
 import { StoreBadges } from "./StoreIcon";
 
@@ -133,7 +133,7 @@ export function CoverGrid({
               </span>
               <span className="cover-title">{g.title}</span>
               <span className="cover-meta">
-                {g.playtime_secs > 0 ? formatPlaytime(g.playtime_secs) : "Never played"}
+                {formatGamePlaytime(g.playtime_secs, g.last_played)}
               </span>
             </button>
           ))}

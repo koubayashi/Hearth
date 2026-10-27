@@ -6,7 +6,7 @@ import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
 import { TONES, setPrefs, usePrefs } from "../lib/prefs";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
-import { formatLastPlayed } from "../lib/format";
+import { formatLastPlayed, inSentence } from "../lib/format";
 import { StoreIcon } from "../components/StoreIcon";
 import { Icon } from "../components/Icon";
 
@@ -534,7 +534,7 @@ function AutoBackupRow() {
   const line = !on
     ? "After changes, a backup to a folder you choose, such as your OneDrive folder. At most hourly; the newest 10 kept."
     : status?.last_at
-      ? `To ${status.folder}. Last one ${formatLastPlayed(status.last_at).toLowerCase()}.`
+      ? `To ${status.folder}. Last one ${inSentence(formatLastPlayed(status.last_at))}.`
       : `To ${status?.folder}.`;
 
   return (
@@ -641,7 +641,7 @@ function BackupSection() {
               <b>Back up your library</b>
               <span>Games, Hearth's playtime, statuses, collections and settings in one file. Sign-ins aren't included.</span>
               <span className="backup-when">
-                {p.lastBackupAt ? `Last backup ${formatLastPlayed(Math.floor(p.lastBackupAt / 1000)).toLowerCase()}` : "No backup yet"}
+                {p.lastBackupAt ? `Last backup ${inSentence(formatLastPlayed(Math.floor(p.lastBackupAt / 1000)))}` : "No backup yet"}
               </span>
             </div>
             <button className="btn btn-primary" data-nav disabled={busy !== null} onClick={backup}>

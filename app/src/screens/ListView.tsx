@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import type { Game, NowPlaying, Via } from "../lib/types";
 import { defaultWay } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
-import { formatBytes, formatLastPlayed, formatPlaytime } from "../lib/format";
+import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatPlaytime } from "../lib/format";
 import { Art } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
@@ -380,12 +380,12 @@ function Detail({
           <b>
             {playingSince
               ? formatPlaytime(Math.max(60, Math.floor(Date.now() / 1000) - playingSince))
-              : formatLastPlayed(game.last_played)}
+              : formatGameLastPlayed(game.last_played, game.playtime_secs)}
           </b>
         </div>
         <div className="lv-stat">
           <span>Play time</span>
-          <b>{formatPlaytime(game.playtime_secs)}</b>
+          <b>{formatGamePlaytime(game.playtime_secs, game.last_played)}</b>
         </div>
         <span className="spacer" />
         <span className="lv-stores">

@@ -6,6 +6,26 @@ export function formatPlaytime(secs: number): string {
   return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+/** A game's playtime. A game with a last-played date but no time (played
+ *  before Hearth, found from its save files) hasn't been "never played". */
+export function formatGamePlaytime(secs: number, lastPlayed: number | null): string {
+  if (secs === 0 && lastPlayed !== null) return "No time recorded";
+  return formatPlaytime(secs);
+}
+
+/** When a game was last played. A store can report hours without a date;
+ *  that game has been played, Hearth just doesn't know when. */
+export function formatGameLastPlayed(lastPlayed: number | null, secs: number): string {
+  if (lastPlayed === null && secs > 0) return "Not recorded";
+  return formatLastPlayed(lastPlayed);
+}
+
+/** A relative phrase inside a sentence: "Last week" → "last week". Dates
+ *  ("Mar 12, 2024") keep their capitals. */
+export function inSentence(phrase: string): string {
+  return /^(Just|Yesterday|Last|An|Never|Under|No)\b/.test(phrase) ? phrase[0].toLowerCase() + phrase.slice(1) : phrase;
+}
+
 /** Compact hours for tiles: "41h", "<1h", "". */
 export function formatHoursShort(secs: number): string {
   if (secs === 0) return "";

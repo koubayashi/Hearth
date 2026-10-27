@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import type { Game, GameDetails, InstallInfo, Via } from "../lib/types";
 import { defaultWay } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
-import { formatBytes, formatLastPlayed, formatPlaytime, releaseYear } from "../lib/format";
+import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatPlaytime, releaseYear } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import { Art } from "./Art";
 import { Icon } from "./Icon";
@@ -184,9 +184,9 @@ export const Poster = forwardRef<
 
         <dl>
           <dt>Played</dt>
-          <dd>{formatPlaytime(game.playtime_secs)}</dd>
+          <dd>{formatGamePlaytime(game.playtime_secs, game.last_played)}</dd>
           <dt>Last played</dt>
-          <dd>{formatLastPlayed(game.last_played)}</dd>
+          <dd>{formatGameLastPlayed(game.last_played, game.playtime_secs)}</dd>
           <dt>Status</dt>
           <dd className={playingSince ? "playing" : undefined}>
             {playingSince

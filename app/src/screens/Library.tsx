@@ -320,7 +320,8 @@ export function Library({
                         <span className="plaque-title">{g.title}</span>
                       </b>
                       <span>
-                        {formatPlaytime(g.playtime_secs)} · {formatLastPlayed(g.last_played)}
+                        {g.playtime_secs > 0 && `${formatPlaytime(g.playtime_secs)} · `}
+                        {formatLastPlayed(g.last_played)}
                       </span>
                     </span>
                   </button>
