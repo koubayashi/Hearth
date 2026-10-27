@@ -37,6 +37,8 @@ const backend = isTauri()
       autoBackupStatus: () => invoke<{ folder: string | null; last_at: number | null; error: string | null }>("auto_backup_status"),
       autoBackupSet: (folder: string | null) => invoke<{ folder: string | null; last_at: number | null; error: string | null }>("auto_backup_set", { folder }),
       savePrefsSnapshot: (prefs: string) => invoke<void>("save_prefs_snapshot", { prefs }),
+      reportError: (message: string) => invoke<void>("report_error", { message }),
+      openErrorLog: () => invoke<void>("open_error_log"),
       backupRestore: (path: string) =>
         invoke<{ prefs: string | null; created_at: number | null }>("backup_restore", { path }),
       gameDetails: (id: number) => invoke<GameDetails | null>("game_details", { id }),

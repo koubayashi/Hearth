@@ -6,6 +6,7 @@ mod backup;
 mod collections;
 mod details;
 mod drives;
+mod errors;
 mod folders;
 mod fullscreen_fix;
 mod saves;
@@ -578,6 +579,7 @@ fn main() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
+            errors::install_panic_hook(dir.clone());
             let db = Db::open(&dir.join("library.db"))?;
             // Re-check games that had no store match last time.
             let _ = db.clear_detail_misses();
@@ -696,7 +698,9 @@ fn main() {
             collections::create_collection,
             collections::rename_collection,
             collections::delete_collection,
-            collections::set_in_collection
+            collections::set_in_collection,
+            errors::report_error,
+            errors::open_error_log
         ])
         .build(tauri::generate_context!())
         .expect("error while building Hearth")

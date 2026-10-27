@@ -812,3 +812,17 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 }
 .key-actions { display: flex; gap: var(--space-2); flex: none; }
 .backup-when { display: block; margin-top: 2px; color: var(--ink-3) !important; font-size: var(--text-xs) !important; }
+
+/* Crash screen: a calm page on the window backdrop, the way out first. */
+.crash {
+  position: relative; z-index: 1; height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: center; gap: var(--space-3);
+  max-width: 640px; margin: 0 auto; padding: var(--space-7) var(--space-5);
+}
+.crash h1 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; }
+.crash p { margin: 0; color: var(--ink-2); line-height: 1.5; }
+.crash .crash-message {
+  font-family: "Cascadia Mono", Consolas, monospace; font-size: var(--text-sm); color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.crash-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }

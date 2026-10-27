@@ -214,6 +214,10 @@ export const mockBackend = {
     throw new Error("Demo library: automatic backups work in the desktop app");
   },
   async savePrefsSnapshot(_prefs: string) {},
+  async reportError(message: string) {
+    console.error(message);
+  },
+  async openErrorLog() {},
   async backupExport(_path: string, _prefs: string): Promise<void> {
     throw new Error("Demo library: backups work in the desktop app");
   },
