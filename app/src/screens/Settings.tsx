@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import * as autostart from "@tauri-apps/plugin-autostart";
+import { useStartWithWindows } from "../lib/autostart";
 import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
@@ -670,15 +670,7 @@ function BackupSection() {
 }
 
 function Startup() {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!isTauri()) return;
-    autostart.isEnabled().then(setEnabled).catch(() => setEnabled(null));
-  }, []);
-  const toggle = async () => {
-    await (enabled ? autostart.disable() : autostart.enable());
-    setEnabled(await autostart.isEnabled());
-  };
+  const { enabled, toggle } = useStartWithWindows();
   return (
     <section id="settings-playtime">
       <h2>Playtime</h2>

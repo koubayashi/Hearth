@@ -123,6 +123,10 @@ export function App() {
           onToggleHidden={toggleHidden}
           onToggleFavorite={toggleFavorite}
           onExit={() => setPrefs({ consoleMode: false })}
+          onOpenDesktopSettings={() => {
+            setRoute("settings");
+            setPrefs({ consoleMode: false });
+          }}
         />
         <Toast toast={toast} onDone={clearToast} />
       </>

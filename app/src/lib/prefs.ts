@@ -25,6 +25,10 @@ export interface Prefs {
   libraryView: LibraryView;
   /** The fullscreen, controller-first console. Hearth reopens in it if you left it there. */
   consoleMode: boolean;
+  /** The console fills the screen while it's open. */
+  consoleFullscreen: boolean;
+  /** Controller button hints in the console, once a controller is used. */
+  consoleHints: boolean;
 }
 
 export const TONES: { id: Tone; label: string; base: string; accent: string }[] = [
@@ -35,7 +39,7 @@ export const TONES: { id: Tone; label: string; base: string; accent: string }[] 
 ];
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true };
 
 function load(): Prefs {
   try {

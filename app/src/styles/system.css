@@ -20,14 +20,15 @@
   .lit .cover-art, .lit .frame, .cx-tile.on { outline: 3px solid Highlight; outline-offset: 2px; }
   .cx-tile.on:focus { outline-color: CanvasText; }
   .lv-row[aria-current="true"], .nav[aria-current="page"], .settings-index button[aria-current="true"],
-  .shelf[aria-selected="true"] {
+  .shelf[aria-selected="true"], .cx-menu-item[aria-current="page"] {
     outline: 2px solid Highlight; outline-offset: -2px;
   }
   .cx-tab[aria-current="page"]::after { background: Highlight; forced-color-adjust: none; }
 
   /* On or off: pressed buttons, switches, the status picker. */
   .seg button[aria-pressed="true"], .chip[aria-pressed="true"], .swatch[aria-pressed="true"],
-  .icon-btn[aria-pressed="true"], .cx-icon[aria-pressed="true"], .menu .status-pick button[aria-checked="true"] {
+  .icon-btn[aria-pressed="true"], .cx-icon[aria-pressed="true"], .cx-tone[aria-pressed="true"],
+  .menu .status-pick button[aria-checked="true"] {
     forced-color-adjust: none; background: Highlight; color: HighlightText;
   }
   .switch { forced-color-adjust: none; background: Canvas; border: 1px solid ButtonText; }
