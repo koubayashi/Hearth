@@ -109,6 +109,8 @@ export interface Accounts {
   steam: string | null;
   /** How Hearth reads the Steam library, or null for installed games only. */
   steam_auth: "session" | "api_key" | null;
+  /** Gamertag when signed in to Xbox. */
+  xbox: string | null;
 }
 
 export interface NowPlaying {

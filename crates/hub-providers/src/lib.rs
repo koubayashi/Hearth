@@ -12,6 +12,7 @@ pub mod sgdb;
 pub mod steam;
 pub mod vdf;
 pub mod xbox;
+pub mod xbox_live;
 
 use async_trait::async_trait;
 use hub_core::{GameEntry, StoreId};

@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use hub_core::{GameEntry, StoreId};
 use hub_launch::LaunchAction;
 
-use crate::LibraryProvider;
+use crate::{Artwork, LibraryProvider};
 
 /// A Store package as Windows records it for the current user.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,7 +106,18 @@ fn app_id(package: &Package, config: &GameConfig) -> String {
     package.apps.first().cloned().or_else(|| config.executable_id.clone()).unwrap_or_else(|| "App".into())
 }
 
-pub struct Xbox;
+/// Installed games from this PC, plus, once signed in, the games the Xbox
+/// account has played with their playtime and art.
+pub struct Xbox {
+    pub live: std::sync::Arc<crate::xbox_live::XboxLive>,
+    art: std::sync::Mutex<std::collections::HashMap<String, crate::Artwork>>,
+}
+
+impl Xbox {
+    pub fn new(live: std::sync::Arc<crate::xbox_live::XboxLive>) -> Self {
+        Self { live, art: Default::default() }
+    }
+}
 
 struct Game {
     family: String,
@@ -147,12 +158,49 @@ impl LibraryProvider for Xbox {
             .collect())
     }
 
+    async fn owned(&self) -> anyhow::Result<Vec<GameEntry>> {
+        if !self.live.signed_in() {
+            return Ok(Vec::new());
+        }
+        let (titles, playtime) = self.live.library().await?;
+        let mut art = self.art.lock().unwrap();
+        Ok(titles
+            .into_iter()
+            .map(|t| {
+                art.insert(t.pfn.clone(), Artwork { cover: t.cover, hero: t.hero, logo: t.logo });
+                GameEntry {
+                    store: StoreId::Xbox,
+                    store_playtime_secs: playtime.get(&t.title_id).copied(),
+                    store_last_played: t.last_played,
+                    store_game_id: t.pfn,
+                    title: t.name,
+                    installed: false,
+                    install_dir: None,
+                }
+            })
+            .collect())
+    }
+
+    fn artwork(&self, store_game_id: &str) -> Artwork {
+        self.art.lock().unwrap().get(store_game_id).cloned().unwrap_or_default()
+    }
+
     /// Store apps start through the shell, as the Start menu starts them.
     fn launch(&self, store_game_id: &str) -> LaunchAction {
         match games(Some(store_game_id)).into_iter().next() {
             Some(g) => LaunchAction::Uri { uri: format!(r"shell:AppsFolder\{}!{}", g.family, g.app) },
             None => LaunchAction::Uri { uri: "msxbox://".into() },
         }
+    }
+
+    /// The game's Store page, which installs it (Game Pass games included).
+    fn install(&self, store_game_id: &str) -> Option<LaunchAction> {
+        Some(LaunchAction::Uri { uri: format!("ms-windows-store://pdp/?PFN={store_game_id}") })
+    }
+
+    /// Store apps are removed from Windows' installed apps list.
+    fn uninstall(&self, _store_game_id: &str) -> Option<LaunchAction> {
+        Some(LaunchAction::Uri { uri: "ms-settings:appsfeatures".into() })
     }
 }
 

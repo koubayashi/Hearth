@@ -455,6 +455,31 @@ impl Db {
         Ok(())
     }
 
+    /// Rewrites saved art addresses that need changing. `fix(url, slot)`
+    /// (slot is "cover", "hero" or "logo") returns the new address, or None
+    /// to keep it. Returns how many games changed.
+    pub fn rewrite_art(&self, fix: impl Fn(&str, &str) -> Option<String>) -> Result<usize> {
+        let mut changes = Vec::new();
+        {
+            let mut stmt = self.conn.prepare("SELECT id, cover, hero, logo FROM games")?;
+            let rows = stmt.query_map([], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, Option<String>>(3)?))
+            })?;
+            for row in rows {
+                let (id, cover, hero, logo) = row?;
+                let new = |url: &Option<String>, slot| url.as_deref().and_then(|u| fix(u, slot));
+                let (c, h, l) = (new(&cover, "cover"), new(&hero, "hero"), new(&logo, "logo"));
+                if c.is_some() || h.is_some() || l.is_some() {
+                    changes.push((id, c.or(cover), h.or(hero), l.or(logo)));
+                }
+            }
+        }
+        for (id, cover, hero, logo) in &changes {
+            self.conn.execute("UPDATE games SET cover = ?2, hero = ?3, logo = ?4 WHERE id = ?1", params![id, cover, hero, logo])?;
+        }
+        Ok(changes.len())
+    }
+
     /// Set artwork on a game directly (from matched store-page details).
     pub fn set_game_art_if_missing(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<()> {
         self.conn.execute(

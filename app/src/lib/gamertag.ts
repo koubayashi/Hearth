@@ -9,6 +9,7 @@ export function nameOptions(accounts: Accounts | null, customName: string): { so
   const out: { source: NameSource; name: string }[] = [];
   if (accounts?.steam) out.push({ source: "steam", name: accounts.steam });
   if (accounts?.epic) out.push({ source: "epic", name: accounts.epic });
+  if (accounts?.xbox) out.push({ source: "xbox", name: accounts.xbox });
   if (customName.trim()) out.push({ source: "custom", name: customName.trim() });
   return out;
 }

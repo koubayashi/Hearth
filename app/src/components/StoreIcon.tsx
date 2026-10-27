@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { StoreId } from "../lib/types";
 import { STORE_LABEL } from "../lib/types";
 
@@ -12,8 +13,10 @@ import { STORE_LABEL } from "../lib/types";
 //   EA      ea.com
 //   Ubisoft ubisoft.com
 // Xbox has no public vector logo (Microsoft asked Simple Icons to remove it,
-// and xbox.com ships only raster art), so it stays a drawn sphere-and-X mark,
-// as does the generic mark for games added by hand or from other sources.
+// and xbox.com ships only raster art), so it is drawn here in the same shape:
+// a solid sphere with the curved X cut out, the arms thin at the top and
+// wider where they leave the sphere at the bottom. Games added by hand or
+// from other sources get a generic drawn mark.
 
 const filled: Partial<Record<StoreId, string>> = {
   steam:
@@ -27,12 +30,6 @@ const filled: Partial<Record<StoreId, string>> = {
 };
 
 const drawn: Partial<Record<StoreId, React.ReactNode>> = {
-  xbox: (
-    <>
-      <circle cx="12" cy="12" r="9.6" />
-      <path d="M6 5.2c3.8 2.7 8.1 8.8 10.2 14.3M18 5.2c-3.8 2.7-8.1 8.8-10.2 14.3" />
-    </>
-  ),
   manual: (
     <>
       <path d="M4 8.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19V8.5" />
@@ -41,7 +38,28 @@ const drawn: Partial<Record<StoreId, React.ReactNode>> = {
   ),
 };
 
+/** The arms of the X, cut out of the sphere: each tapers along a curved centre
+ *  line, thin at the top and wide at the bottom; the right mirrors the left. */
+const XBOX_ARMS =
+  "M5.5 2.1L6.8 3.5L8 5L9.1 6.6L10.1 8.2L11.1 9.9L11.9 11.7L12.6 13.5L13.2 15.4L13.8 17.3L14.2 19.3L14.6 21.3L14.8 23.4L20.4 21.8L19.5 19.8L18.5 17.8L17.4 15.8L16.3 14L15.2 12.2L14 10.5L12.8 8.8L11.6 7.2L10.3 5.7L8.9 4.2L7.6 2.8L6.2 1.4ZM18.5 2.1L17.2 3.5L16 5L14.9 6.6L13.9 8.2L12.9 9.9L12.1 11.7L11.4 13.5L10.8 15.4L10.2 17.3L9.8 19.3L9.4 21.3L9.2 23.4L3.6 21.8L4.5 19.8L5.5 17.8L6.6 15.8L7.7 14L8.8 12.2L10 10.5L11.2 8.8L12.4 7.2L13.7 5.7L15.1 4.2L16.4 2.8L17.8 1.4Z";
+
+function XboxMark({ size }: { size: number }) {
+  // Each copy needs its own mask id; React's ids contain characters that
+  // don't belong in one.
+  const id = `xbox-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" role="img" aria-label={STORE_LABEL.xbox}>
+      <mask id={id}>
+        <circle cx="12" cy="12" r="11" fill="white" />
+        <path d={XBOX_ARMS} fill="black" />
+      </mask>
+      <circle cx="12" cy="12" r="11" mask={`url(#${id})`} />
+    </svg>
+  );
+}
+
 export function StoreIcon({ store, size = 16 }: { store: StoreId; size?: number }) {
+  if (store === "xbox") return <XboxMark size={size} />;
   const path = filled[store];
   return path ? (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" role="img" aria-label={STORE_LABEL[store]}>

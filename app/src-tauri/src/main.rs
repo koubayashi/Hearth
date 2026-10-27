@@ -13,6 +13,7 @@ mod saves;
 mod tracking;
 mod tray;
 mod ways;
+mod xbox_account;
 
 use std::sync::{Arc, Mutex};
 
@@ -27,6 +28,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 pub(crate) struct AppState {
     pub(crate) db: Mutex<Db>,
     epic: Arc<Epic>,
+    pub(crate) xbox: Arc<hub_providers::xbox_live::XboxLive>,
     steam: Arc<Steam>,
     pub(crate) metadata: hub_providers::metadata::Metadata,
     pub(crate) folders: Arc<folders::FolderProvider>,
@@ -159,6 +161,8 @@ struct Accounts {
     steam: Option<String>,
     /// "session", "api_key", or null when Hearth can only see installed games.
     steam_auth: Option<&'static str>,
+    /// The Xbox gamertag when signed in to Xbox.
+    xbox: Option<String>,
 }
 
 #[tauri::command]
@@ -171,6 +175,7 @@ fn accounts(state: State<AppState>) -> Accounts {
             SteamAuth::Session { .. } => "session",
             SteamAuth::ApiKey { .. } => "api_key",
         }),
+        xbox: state.xbox.signed_in().then(|| state.xbox.gamertag().unwrap_or_else(|| "your Xbox account".into())),
     }
 }
 
@@ -262,6 +267,12 @@ fn open_auth_window(
                     .map(|(_, v)| v.into_owned())
                     .unwrap_or_default();
                 on_body(handle.clone(), body);
+                return false;
+            }
+            // Microsoft puts the code in the address it redirects to, and
+            // that page has nothing to read: hand over the address itself.
+            if url.as_str().starts_with(capture) && url.query_pairs().any(|(k, _)| k == "code") {
+                on_body(handle.clone(), url.to_string());
                 return false;
             }
             true
@@ -551,6 +562,10 @@ pub(crate) fn sync_all(app: AppHandle) {
                     epic_sign_in_silently(&app);
                     Vec::new()
                 }
+                Err(e) if store == hub_core::StoreId::Xbox && e.to_string() == hub_providers::xbox_live::SESSION_EXPIRED => {
+                    xbox_account::give_up(&app);
+                    Vec::new()
+                }
                 Err(e) => {
                     let _ = app.emit("sync-error", format!("{e:#}"));
                     Vec::new()
@@ -601,6 +616,8 @@ fn main() {
             let db = Db::open(&dir.join("library.db"))?;
             // Re-check games that had no store match last time.
             let _ = db.clear_detail_misses();
+            // Xbox art saved before it was asked for at a sensible size.
+            let _ = db.rewrite_art(hub_providers::xbox_live::sized);
 
             let session = secrets::load("epic").and_then(|s| serde_json::from_str(&s).ok());
             let handle = app.handle().clone();
@@ -622,6 +639,7 @@ fn main() {
                 .or_else(|| secrets::load("steam-api-key").map(|key| SteamAuth::ApiKey { key }));
             let steam = Arc::new(Steam::detect(steam_auth));
             let folders = Arc::new(Mutex::new(hub_providers::folders::Folders::new(folders::load(&dir))));
+            let xbox = xbox_account::load(app.handle());
             app.manage(AppState {
                 db: Mutex::new(db),
                 // Stores first, so the folder scan knows which folders they already own.
@@ -629,9 +647,10 @@ fn main() {
                     steam.clone(),
                     epic.clone(),
                     Arc::new(hub_providers::gog::Gog::detect()),
-                    Arc::new(hub_providers::xbox::Xbox),
+                    Arc::new(hub_providers::xbox::Xbox::new(xbox.clone())),
                     folders.clone(),
                 ],
+                xbox,
                 folders,
                 saves: Default::default(),
                 sgdb: Arc::new(hub_providers::sgdb::SteamGridDb::new(secrets::load("sgdb-key"))),
@@ -658,6 +677,7 @@ fn main() {
             }
 
             keep_epic_alive(app.handle().clone());
+            xbox_account::keep_alive(app.handle().clone());
             drives::watch(app.handle().clone());
             autobackup::watch(app.handle().clone());
             tracking::recover(app.handle());
@@ -695,6 +715,8 @@ fn main() {
             sync_now,
             epic_sign_in,
             epic_sign_out,
+            xbox_account::xbox_sign_in,
+            xbox_account::xbox_sign_out,
             now_playing,
             steam_set_api_key,
             steam_sign_in,

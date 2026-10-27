@@ -180,6 +180,37 @@ function EpicRow({ accounts }: { accounts: Accounts | null }) {
   );
 }
 
+/** Microsoft account sign-in for the Xbox games you've played and their playtime. */
+function XboxRow({ accounts }: { accounts: Accounts | null }) {
+  const signedIn = !!accounts?.xbox;
+  return (
+    <div className="setting">
+      <div className="text">
+        <b>
+          <StoreIcon store="xbox" size={15} /> Xbox
+        </b>
+        {signedIn ? (
+          <SignedIn name={accounts!.xbox!} detail="Games you've played on Xbox or PC, with Xbox playtime." />
+        ) : (
+          <span>
+            Installed games show up without signing in. Sign in with your Microsoft account for the games you've played
+            and Xbox playtime. Games you've never started don't show.
+          </span>
+        )}
+      </div>
+      {signedIn ? (
+        <button className="btn" data-nav onClick={() => api.xboxSignOut()}>
+          Sign out
+        </button>
+      ) : (
+        <button className="btn btn-primary" data-nav disabled={api.demo} onClick={() => api.xboxSignIn()}>
+          Sign in
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Optional SteamGridDB key for community covers and backgrounds. */
 function SgdbRow({ accounts }: { accounts: Accounts | null }) {
   const [key, setKey] = useState("");
@@ -338,6 +369,7 @@ function NameSetting({ accounts }: { accounts: Accounts | null }) {
   const choices: { source: NameSource; label: string; available: boolean }[] = [
     { source: "steam", label: "Steam", available: !!accounts?.steam },
     { source: "epic", label: "Epic", available: !!accounts?.epic },
+    { source: "xbox", label: "Xbox", available: !!accounts?.xbox },
     { source: "custom", label: "Your own", available: true },
     { source: "off", label: "None", available: true },
   ];
@@ -763,10 +795,11 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
           <div className="setting-group glass">
             <SteamRow accounts={accounts} />
             <EpicRow accounts={accounts} />
+            <XboxRow accounts={accounts} />
             <div className="setting">
               <div className="text">
                 <b>
-                  <StoreIcon store="gog" size={14} /> GOG and <StoreIcon store="xbox" size={14} /> Xbox
+                  <StoreIcon store="gog" size={15} /> GOG
                 </b>
                 <span>Installed games are found on their own, no sign-in needed. Games you own but haven't installed don't show yet.</span>
               </div>
