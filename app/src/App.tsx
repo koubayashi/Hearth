@@ -57,11 +57,7 @@ export function App() {
   const clearToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
-    const q = { install: "all" as const, stores: [], search: null };
-    Promise.all([
-      api.listGames({ ...q, hidden_only: false }),
-      api.listGames({ ...q, hidden_only: true }),
-    ]).then(([lib, hid]) => setCounts({ library: lib.length, hidden: hid.length }));
+    api.gameCounts().then(setCounts);
   }, [version]);
 
   const toggleHidden = async (g: Game) => {

@@ -12,6 +12,7 @@ const backend = isTauri()
   ? {
       demo: false,
       listGames: (query: LibraryQuery) => invoke<Game[]>("list_games", { query }),
+      gameCounts: () => invoke<{ library: number; hidden: number }>("game_counts"),
       getGame: (id: number) => invoke<Game | null>("get_game", { id }),
       setHidden: (id: number, hidden: boolean) => invoke<void>("set_hidden", { id, hidden }),
       setFavorite: (id: number, favorite: boolean) =>

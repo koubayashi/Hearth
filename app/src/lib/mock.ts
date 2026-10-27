@@ -294,6 +294,9 @@ export const mockBackend = {
       // Copies, like the real IPC boundary, so UI state never aliases the store.
       .map((g) => structuredClone(g));
   },
+  async gameCounts() {
+    return { library: games.filter((g) => !g.hidden).length, hidden: games.filter((g) => g.hidden).length };
+  },
   async getGame(id: number) {
     const g = games.find((g) => g.id === id);
     return g ? structuredClone(g) : null;

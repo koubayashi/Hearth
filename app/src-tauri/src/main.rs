@@ -60,6 +60,24 @@ fn list_games(state: State<AppState>, query: LibraryQuery) -> CmdResult<Vec<Game
     lock(&state.db).list_games(&query).map_err(err)
 }
 
+/// How many games the library and Hidden hold, for the sidebar: the same
+/// queries as their views, without sending every game across to count them.
+#[derive(Serialize)]
+struct GameCounts {
+    library: usize,
+    hidden: usize,
+}
+
+#[tauri::command]
+fn game_counts(state: State<AppState>) -> CmdResult<GameCounts> {
+    let db = lock(&state.db);
+    let count = |hidden_only| {
+        let q = LibraryQuery { hidden_only, ..Default::default() };
+        db.list_games(&q).map(|g| g.len()).map_err(err)
+    };
+    Ok(GameCounts { library: count(false)?, hidden: count(true)? })
+}
+
 #[tauri::command]
 fn get_game(state: State<AppState>, id: i64) -> CmdResult<Option<Game>> {
     lock(&state.db).game(id).map_err(err)
@@ -659,6 +677,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             list_games,
+            game_counts,
             get_game,
             set_hidden,
             set_favorite,

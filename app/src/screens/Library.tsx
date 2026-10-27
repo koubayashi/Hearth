@@ -81,6 +81,9 @@ export function Library({
     setMenu({ game: g, x, y });
   };
 
+  // With nothing filtered, the shown list is also the unfiltered one (for the
+  // store chips and "Jump back in"), so one call does for both.
+  const unfiltered = install === "all" && stores.length === 0 && !search && !hiddenView && !scope?.status && scope?.collection == null;
   useEffect(() => {
     let live = true;
     api
@@ -95,6 +98,7 @@ export function Library({
       .then((g) => {
         if (!live) return;
         setGames(g);
+        if (unfiltered) setAll(g);
         setLoadError(null);
       })
       .catch((e) => live && setLoadError(String(e)));
@@ -103,10 +107,14 @@ export function Library({
     };
   }, [install, stores, search, hiddenView, version, scope?.status, scope?.collection]);
 
-  // Unfiltered list for the store chips and "Jump back in".
   useEffect(() => {
-    api.listGames({ install: "all", stores: [], search: null, hidden_only: false }).then(setAll);
-  }, [version]);
+    if (unfiltered) return;
+    let live = true;
+    api.listGames({ install: "all", stores: [], search: null, hidden_only: false }).then((g) => live && setAll(g));
+    return () => {
+      live = false;
+    };
+  }, [version, unfiltered]);
 
   const recent = useMemo(
     () =>
