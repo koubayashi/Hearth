@@ -246,11 +246,11 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
      same way at every size: a 2:3 cover as tall as the space left by the
      details (about 390px with margins) is (100dvh - 390px) * 2/3 wide, plus
      its side margins. A fixed allowance rather than the shown game's details,
-     so the wall never shifts when the selection changes. Up to 540px: wider
+     so the wall never shifts when the selection changes. Up to 480px: wider
      crowds the wall on a large screen, so a taller window gives the spare
      height to the art band and the description instead. 1440x900 keeps its
      388px. */
-  grid-template-columns: round(down, clamp(280px, min((100dvh - 390px) * 2 / 3 + 48px, 38vw), 540px), 1px) minmax(0, 1fr);
+  grid-template-columns: round(down, clamp(280px, min((100dvh - 390px) * 2 / 3 + 48px, 38vw), 480px), 1px) minmax(0, 1fr);
   /* One row, the window's height: content scrolls inside it instead of stretching it. */
   grid-template-rows: minmax(0, 1fr);
 }
