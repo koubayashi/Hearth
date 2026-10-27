@@ -261,6 +261,16 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Every game's id, most recently played first (so their details come first).
+    pub fn game_ids(&self) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id FROM games g
+              ORDER BY (SELECT MAX(e.store_last_played) FROM store_entries e WHERE e.game_id = g.id) DESC NULLS LAST, g.id",
+        )?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// Games with no cover yet, with one of their store entries.
     pub fn games_missing_cover(&self) -> Result<Vec<i64>> {
         let mut stmt = self.conn.prepare("SELECT id FROM games WHERE cover IS NULL")?;

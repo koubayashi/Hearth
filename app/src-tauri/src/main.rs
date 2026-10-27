@@ -605,6 +605,7 @@ pub(crate) fn sync_all(app: AppHandle) {
         refresh_art(&app).await;
         saves::refresh(&app).await;
         let _ = app.emit("library-changed", ());
+        details::prefetch(&app).await;
     });
 }
 

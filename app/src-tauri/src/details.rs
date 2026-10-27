@@ -21,16 +21,42 @@ fn game(app: &AppHandle, id: i64) -> CmdResult<Game> {
         .ok_or_else(|| "That game is no longer in your library".to_string())
 }
 
+/// The saved details if they are still current: `Some(None)` is a saved
+/// "Steam doesn't have it", `None` means ask Steam.
+fn saved(app: &AppHandle, id: i64) -> CmdResult<Option<Option<GameDetails>>> {
+    let Some((json, checked)) = lock(&app.state::<AppState>().db).details(id).map_err(err)? else { return Ok(None) };
+    // Details saved before the description was kept are fetched once more.
+    let current = json.as_deref().is_none_or(|j| j.contains("\"summary\""));
+    let fresh = current && now() - checked < if json.is_some() { HIT_TTL } else { MISS_TTL };
+    Ok(fresh.then(|| json.and_then(|j| serde_json::from_str(&j).ok())))
+}
+
+/// Fetches details for every game that has none current, most recently played
+/// first, so selecting a game reads them from disk instead of waiting on Steam
+/// (as Playnite fetches metadata when it imports a game). One request a second
+/// keeps well under Steam's store limit; it runs after each library refresh,
+/// and a second refresh while it runs doesn't start another.
+pub async fn prefetch(app: &AppHandle) {
+    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let ids = lock(&app.state::<AppState>().db).game_ids().unwrap_or_default();
+    for id in ids {
+        if !matches!(saved(app, id), Ok(None)) {
+            continue;
+        }
+        let _ = game_details(app.clone(), id).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
 #[tauri::command]
 pub async fn game_details(app: AppHandle, id: i64) -> CmdResult<Option<GameDetails>> {
     let state = app.state::<AppState>();
-    if let Some((json, checked)) = lock(&state.db).details(id).map_err(err)? {
-        // Details saved before the description was kept are fetched once more.
-        let current = json.as_deref().is_none_or(|j| j.contains("\"summary\""));
-        let fresh = current && now() - checked < if json.is_some() { HIT_TTL } else { MISS_TTL };
-        if fresh {
-            return Ok(json.and_then(|j| serde_json::from_str(&j).ok()));
-        }
+    if let Some(details) = saved(&app, id)? {
+        return Ok(details);
     }
 
     let g = game(&app, id)?;
