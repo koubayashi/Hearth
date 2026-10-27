@@ -133,6 +133,8 @@ export interface GameDetails {
   metacritic: number | null;
   metacritic_url: string | null;
   recommendations: number | null;
+  /** Steam's one-paragraph description, as plain text. */
+  summary?: string | null;
 }
 
 export interface InstallInfo {

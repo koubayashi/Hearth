@@ -26,6 +26,10 @@ pub struct GameDetails {
     pub metacritic_url: Option<String>,
     /// Number of Steam reviews recommending the game.
     pub recommendations: Option<u64>,
+    /// Steam's one-paragraph description, as plain text. Missing from
+    /// details cached before it was kept (they are fetched again).
+    #[serde(default)]
+    pub summary: Option<String>,
 }
 
 pub struct Metadata {
@@ -206,6 +210,7 @@ struct Details {
     metacritic: Option<Metacritic>,
     recommendations: Option<Recommendations>,
     release_date: Option<ReleaseDate>,
+    short_description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -234,6 +239,33 @@ struct ReleaseDate {
     date: Option<String>,
 }
 
+/// Steam's short descriptions are HTML: tags dropped, entities decoded,
+/// spaces collapsed.
+fn plain_text(html: &str) -> String {
+    let mut text = String::with_capacity(html.len());
+    let mut in_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' if in_tag => {
+                in_tag = false;
+                text.push(' ');
+            }
+            c if !in_tag => text.push(c),
+            _ => {}
+        }
+    }
+    let text = text
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&");
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn parse_details(body: &serde_json::Value, app_id: u64) -> Option<GameDetails> {
     let entry = body.get(app_id.to_string())?;
     if entry.get("success")?.as_bool() != Some(true) {
@@ -259,6 +291,7 @@ fn parse_details(body: &serde_json::Value, app_id: u64) -> Option<GameDetails> {
         metacritic: d.metacritic.as_ref().map(|m| m.score),
         metacritic_url: d.metacritic.and_then(|m| m.url),
         recommendations: d.recommendations.map(|r| r.total),
+        summary: d.short_description.as_deref().map(plain_text).filter(|s| !s.is_empty()),
     })
 }
 
@@ -303,7 +336,8 @@ mod tests {
               "categories":[{"id":2},{"id":1},{"id":9},{"id":28},{"id":18},{"id":23},{"id":22},{"id":62}],
               "metacritic":{"score":72,"url":"https://www.metacritic.com/game/pc/f1-24"},
               "recommendations":{"total":15643},
-              "release_date":{"coming_soon":false,"date":"May 31, 2024"}}}}"#,
+              "release_date":{"coming_soon":false,"date":"May 31, 2024"},
+              "short_description":"Be the last piece of the puzzle in &quot;F1® 24&quot;.<br> Race &amp; win."}}}"#,
         )
         .unwrap();
         let d = parse_details(&body, 2488620).unwrap();
@@ -313,6 +347,7 @@ mod tests {
         assert_eq!(d.features, ["Single-player", "Multiplayer", "Co-op", "Full controller support", "Cloud saves", "Achievements"]);
         assert_eq!(d.metacritic, Some(72));
         assert_eq!(d.recommendations, Some(15643));
+        assert_eq!(d.summary.as_deref(), Some("Be the last piece of the puzzle in \"F1® 24\". Race & win."));
     }
 
     #[test]

@@ -184,6 +184,7 @@ export const mockBackend = {
       metacritic: 70 + (id % 25),
       metacritic_url: null,
       recommendations: 120000,
+      summary: "Defy the god of the dead as you hack and slash out of the Underworld in this rogue-like dungeon crawler from the creators of Bastion and Transistor.",
     };
   },
   async installInfo(id: number, _refresh: boolean): Promise<InstallInfo | null> {

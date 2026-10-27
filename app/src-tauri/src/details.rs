@@ -25,7 +25,9 @@ fn game(app: &AppHandle, id: i64) -> CmdResult<Game> {
 pub async fn game_details(app: AppHandle, id: i64) -> CmdResult<Option<GameDetails>> {
     let state = app.state::<AppState>();
     if let Some((json, checked)) = lock(&state.db).details(id).map_err(err)? {
-        let fresh = now() - checked < if json.is_some() { HIT_TTL } else { MISS_TTL };
+        // Details saved before the description was kept are fetched once more.
+        let current = json.as_deref().is_none_or(|j| j.contains("\"summary\""));
+        let fresh = current && now() - checked < if json.is_some() { HIT_TTL } else { MISS_TTL };
         if fresh {
             return Ok(json.and_then(|j| serde_json::from_str(&j).ok()));
         }
