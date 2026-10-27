@@ -6,7 +6,7 @@ use std::path::Path;
 use hub_core::{Game, StoreId};
 use hub_launch::LaunchAction;
 use hub_providers::metadata::GameDetails;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{err, lock, now, AppState, CmdResult};
 
@@ -25,8 +25,12 @@ fn game(app: &AppHandle, id: i64) -> CmdResult<Game> {
 /// "Steam doesn't have it", `None` means ask Steam.
 fn saved(app: &AppHandle, id: i64) -> CmdResult<Option<Option<GameDetails>>> {
     let Some((json, checked)) = lock(&app.state::<AppState>().db).details(id).map_err(err)? else { return Ok(None) };
-    // Details saved before the description was kept are fetched once more.
-    let current = json.as_deref().is_none_or(|j| j.contains("\"summary\""));
+    // Details saved before the description was kept are fetched once more, and
+    // so are ones without a description saved before the store and GOG
+    // fallbacks existed (2026-10-28), so those games get a chance at one.
+    const FALLBACKS_SINCE: i64 = 1793142976;
+    let described = json.as_deref().is_some_and(|j| j.contains("\"summary\":\""));
+    let current = json.as_deref().is_none_or(|j| j.contains("\"summary\"")) && (described || checked >= FALLBACKS_SINCE);
     let fresh = current && now() - checked < if json.is_some() { HIT_TTL } else { MISS_TTL };
     Ok(fresh.then(|| json.and_then(|j| serde_json::from_str(&j).ok())))
 }
@@ -75,6 +79,17 @@ pub async fn game_details(app: AppHandle, id: i64) -> CmdResult<Option<GameDetai
     };
     let json = details.as_ref().and_then(|d| serde_json::to_string(d).ok());
     lock(&state.db).set_details(id, json.as_deref(), now()).map_err(err)?;
+
+    // Descriptions: Steam's, else the game's own store's (saved during the
+    // library refresh), else GOG's catalogue by title as a last resort.
+    let has_summary = details.as_ref().is_some_and(|d| d.summary.is_some());
+    if !has_summary && g.description.is_none() {
+        if let Ok(Some(text)) = state.metadata.gog_description(&g.title).await {
+            if lock(&state.db).set_game_description(id, &text).is_ok() {
+                let _ = app.emit("library-changed", ());
+            }
+        }
+    }
     Ok(details)
 }
 

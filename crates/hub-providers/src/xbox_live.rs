@@ -110,6 +110,8 @@ pub struct PlayedTitle {
     pub cover: Option<String>,
     pub hero: Option<String>,
     pub logo: Option<String>,
+    /// The Store's description, as plain text.
+    pub description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -135,6 +137,14 @@ struct Title {
     images: Vec<Image>,
     #[serde(default)]
     display_image: Option<String>,
+    #[serde(default)]
+    detail: Option<TitleDetail>,
+}
+
+#[derive(Deserialize)]
+struct TitleDetail {
+    #[serde(default)]
+    description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -167,6 +177,11 @@ fn played_titles(history: TitleHistory) -> Vec<PlayedTitle> {
                 cover: fit(image(&["Poster", "BoxArt"]).or_else(|| t.display_image.as_deref().map(https)), "cover"),
                 hero: fit(image(&["SuperHeroArt", "TitledHeroArt", "Screenshot"]), "hero"),
                 logo: fit(image(&["Logo"]), "logo"),
+                description: t
+                    .detail
+                    .and_then(|d| d.description)
+                    .map(|d| crate::metadata::plain_text(&d))
+                    .filter(|d| !d.is_empty()),
                 last_played: t.title_history.and_then(|h| h.last_time_played).as_deref().and_then(unix_from_iso),
                 title_id: t.title_id,
                 name: t.name,

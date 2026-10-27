@@ -48,6 +48,12 @@ pub trait LibraryProvider: Send + Sync {
         Artwork::default()
     }
 
+    /// The store's own description of a game, as plain text, when it has one.
+    /// Shown when Steam has none.
+    fn description(&self, _store_game_id: &str) -> Option<String> {
+        None
+    }
+
     fn launch(&self, store_game_id: &str) -> LaunchAction;
 
     fn install(&self, _store_game_id: &str) -> Option<LaunchAction> {

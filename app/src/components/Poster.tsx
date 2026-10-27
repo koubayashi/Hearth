@@ -156,7 +156,8 @@ export const Poster = forwardRef<
         </div>
         {/* Only shown when the window is tall enough to have room for it (see
             .poster-summary): it fills height that would otherwise stretch the art. */}
-        {details?.summary && <p className="poster-summary">{details.summary}</p>}
+        {/* Steam's description first, else the store's or GOG's. */}
+        {(details?.summary || game.description) && <p className="poster-summary">{details?.summary || game.description}</p>}
 
         {(game.hidden || game.status || (details && ((showScores && details.metacritic != null) || details.genres.length > 0))) && (
           <div className="facts">

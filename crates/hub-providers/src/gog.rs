@@ -139,6 +139,10 @@ impl LibraryProvider for Gog {
             .unwrap_or_default()
     }
 
+    fn description(&self, store_game_id: &str) -> Option<String> {
+        self.web.product(store_game_id)?.description
+    }
+
     /// Galaxy's page for the game, which installs it; without Galaxy, the
     /// GOG account's games page, where the installers are.
     fn install(&self, store_game_id: &str) -> Option<LaunchAction> {

@@ -113,6 +113,12 @@ struct CatalogEntry {
     cover: Option<String>,
     hero: Option<String>,
     logo: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    /// Fetched since descriptions were kept; older cache entries are fetched
+    /// once more.
+    #[serde(default)]
+    described: bool,
 }
 
 pub type SessionHook = Box<dyn Fn(Option<&Session>) + Send + Sync>;
@@ -310,7 +316,7 @@ impl Epic {
     async fn fill_catalog(&self, s: &Session, ids: &[EpicId]) {
         let missing: Vec<&EpicId> = {
             let cat = self.catalog.lock().unwrap();
-            ids.iter().filter(|i| !cat.contains_key(&i.catalog_item_id)).collect()
+            ids.iter().filter(|i| !cat.get(&i.catalog_item_id).is_some_and(|c| c.described)).collect()
         };
         if missing.is_empty() {
             return;
@@ -388,6 +394,11 @@ impl LibraryProvider for Epic {
         cat.get(&id.catalog_item_id)
             .map(|c| Artwork { cover: c.cover.clone(), hero: c.hero.clone(), logo: c.logo.clone() })
             .unwrap_or_default()
+    }
+
+    fn description(&self, store_game_id: &str) -> Option<String> {
+        let id = EpicId::decode(store_game_id)?;
+        self.catalog.lock().unwrap().get(&id.catalog_item_id)?.description.clone()
     }
 
     fn launch(&self, store_game_id: &str) -> LaunchAction {
@@ -479,6 +490,8 @@ struct PlaytimeItem {
 struct CatalogItem {
     title: String,
     #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
     key_images: Vec<KeyImage>,
     #[serde(default)]
     categories: Vec<Category>,
@@ -513,6 +526,8 @@ fn catalog_entry(item: &CatalogItem) -> CatalogEntry {
         cover: img(&["DieselGameBoxTall", "OfferImageTall", "Thumbnail"]),
         hero: img(&["DieselGameBox", "OfferImageWide", "DieselStoreFrontWide"]),
         logo: img(&["DieselGameBoxLogo"]),
+        description: item.description.as_deref().map(crate::metadata::plain_text).filter(|d| !d.is_empty()),
+        described: true,
     }
 }
 

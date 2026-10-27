@@ -490,6 +490,43 @@ impl Db {
         Ok(changes.len())
     }
 
+    /// A store's description for the game behind one of its entries, if the
+    /// game has none yet.
+    pub fn set_description_if_missing(&self, store: StoreId, store_game_id: &str, description: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE games SET description = ?3
+             WHERE description IS NULL
+               AND id = (SELECT game_id FROM store_entries WHERE store = ?1 AND store_game_id = ?2)",
+            params![store.as_str(), store_game_id, description],
+        )?;
+        Ok(())
+    }
+
+    /// Re-checks saved descriptions: `fix(title, description)` returns the
+    /// text to keep, or None to clear it. Returns how many changed.
+    pub fn rewrite_descriptions(&self, fix: impl Fn(&str, &str) -> Option<String>) -> Result<usize> {
+        let rows: Vec<(i64, String, String)> = {
+            let mut stmt = self.conn.prepare("SELECT id, title, description FROM games WHERE description IS NOT NULL")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let mut changed = 0;
+        for (id, title, old) in rows {
+            let new = fix(&title, &old);
+            if new.as_deref() != Some(old.as_str()) {
+                self.conn.execute("UPDATE games SET description = ?2 WHERE id = ?1", params![id, new])?;
+                changed += 1;
+            }
+        }
+        Ok(changed)
+    }
+
+    /// A description found for a game directly (GOG's catalogue, by title).
+    pub fn set_game_description(&self, game_id: i64, description: &str) -> Result<()> {
+        self.conn.execute("UPDATE games SET description = ?2 WHERE id = ?1", params![game_id, description])?;
+        Ok(())
+    }
+
     /// Set artwork on a game directly (from matched store-page details).
     pub fn set_game_art_if_missing(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<()> {
         self.conn.execute(

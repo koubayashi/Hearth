@@ -80,6 +80,12 @@ pub struct Product {
     /// The games database has been asked for art (found or not).
     #[serde(default)]
     pub art_checked: bool,
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Fetched since descriptions were kept; older cache entries are fetched
+    /// once more.
+    #[serde(default)]
+    pub described: bool,
 }
 
 #[derive(Deserialize)]
@@ -88,6 +94,16 @@ struct ApiProduct {
     title: String,
     #[serde(default)]
     game_type: String,
+    #[serde(default)]
+    description: Option<ApiDescription>,
+}
+
+#[derive(Deserialize)]
+struct ApiDescription {
+    #[serde(default)]
+    lead: String,
+    #[serde(default)]
+    full: String,
 }
 
 #[derive(Deserialize)]
@@ -249,15 +265,24 @@ impl GogWeb {
     pub async fn describe(&self, ids: &[String]) {
         let unknown: Vec<String> = {
             let c = self.catalog.lock().unwrap();
-            ids.iter().filter(|id| !c.contains_key(*id)).cloned().collect()
+            ids.iter().filter(|id| !c.get(*id).is_some_and(|p| p.described)).cloned().collect()
         };
         for batch in unknown.chunks(50) {
-            let url = format!("https://api.gog.com/products?ids={}", batch.join(","));
+            let url = format!("https://api.gog.com/products?ids={}&expand=description", batch.join(","));
             let Ok(res) = self.http.get(url).send().await else { continue };
             let Ok(products) = res.json::<Vec<ApiProduct>>().await else { continue };
             let mut c = self.catalog.lock().unwrap();
             for p in products {
-                c.insert(p.id.to_string(), Product { title: p.title, is_game: p.game_type == "game", ..Default::default() });
+                let description = p
+                    .description
+                    .map(|d| crate::metadata::plain_text(if d.lead.trim().is_empty() { &d.full } else { &d.lead }))
+                    .filter(|d| !d.is_empty());
+                // Art already found is kept; only the text is new.
+                let old = c.remove(&p.id.to_string()).unwrap_or_default();
+                c.insert(
+                    p.id.to_string(),
+                    Product { title: p.title, is_game: p.game_type == "game", description, described: true, ..old },
+                );
             }
         }
         let need_art: Vec<String> = {

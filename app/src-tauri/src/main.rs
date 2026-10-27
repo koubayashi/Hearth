@@ -597,6 +597,10 @@ pub(crate) fn sync_all(app: AppHandle) {
                     art.hero.as_deref(),
                     art.logo.as_deref(),
                 );
+                let described = provider.description(&g.store_game_id);
+                if let Some(d) = described.and_then(|d| hub_providers::metadata::useful_description(&g.title, &d)) {
+                    let _ = db.set_description_if_missing(store, &g.store_game_id, &d);
+                }
             }
         }
         *lock(&state.syncing) = false;
@@ -628,6 +632,8 @@ fn main() {
             let _ = db.clear_detail_misses();
             // Xbox art saved before it was asked for at a sensible size.
             let _ = db.rewrite_art(hub_providers::xbox_live::sized);
+            // Store descriptions saved before they were checked for content.
+            let _ = db.rewrite_descriptions(hub_providers::metadata::useful_description);
 
             let session = secrets::load("epic").and_then(|s| serde_json::from_str(&s).ok());
             let handle = app.handle().clone();

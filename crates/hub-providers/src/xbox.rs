@@ -111,11 +111,12 @@ fn app_id(package: &Package, config: &GameConfig) -> String {
 pub struct Xbox {
     pub live: std::sync::Arc<crate::xbox_live::XboxLive>,
     art: std::sync::Mutex<std::collections::HashMap<String, crate::Artwork>>,
+    descriptions: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl Xbox {
     pub fn new(live: std::sync::Arc<crate::xbox_live::XboxLive>) -> Self {
-        Self { live, art: Default::default() }
+        Self { live, art: Default::default(), descriptions: Default::default() }
     }
 }
 
@@ -164,10 +165,14 @@ impl LibraryProvider for Xbox {
         }
         let (titles, playtime) = self.live.library().await?;
         let mut art = self.art.lock().unwrap();
+        let mut descriptions = self.descriptions.lock().unwrap();
         Ok(titles
             .into_iter()
             .map(|t| {
                 art.insert(t.pfn.clone(), Artwork { cover: t.cover, hero: t.hero, logo: t.logo });
+                if let Some(d) = t.description {
+                    descriptions.insert(t.pfn.clone(), d);
+                }
                 GameEntry {
                     store: StoreId::Xbox,
                     store_playtime_secs: playtime.get(&t.title_id).copied(),
@@ -183,6 +188,10 @@ impl LibraryProvider for Xbox {
 
     fn artwork(&self, store_game_id: &str) -> Artwork {
         self.art.lock().unwrap().get(store_game_id).cloned().unwrap_or_default()
+    }
+
+    fn description(&self, store_game_id: &str) -> Option<String> {
+        self.descriptions.lock().unwrap().get(store_game_id).cloned()
     }
 
     /// Store apps start through the shell, as the Start menu starts them.

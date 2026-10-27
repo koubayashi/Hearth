@@ -104,6 +104,57 @@ impl Metadata {
         Ok(None)
     }
 
+    /// A description from GOG's public catalogue, for a game neither Steam nor
+    /// its own store describes. Only the same game counts (editions match,
+    /// sequels don't, as on Steam). No sign-in needed.
+    pub async fn gog_description(&self, title: &str) -> anyhow::Result<Option<String>> {
+        #[derive(Deserialize)]
+        struct Search {
+            #[serde(default)]
+            products: Vec<Hit>,
+        }
+        #[derive(Deserialize)]
+        struct Hit {
+            id: String,
+            title: String,
+        }
+        #[derive(Deserialize)]
+        struct Product {
+            description: Option<Description>,
+        }
+        #[derive(Deserialize)]
+        struct Description {
+            #[serde(default)]
+            lead: String,
+            #[serde(default)]
+            full: String,
+        }
+        let search: Search = self
+            .http
+            .get("https://catalog.gog.com/v1/catalog")
+            .query(&[("query", format!("like:{title}").as_str()), ("limit", "10"), ("productType", "in:game")])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
+            .context("searching GOG's catalogue")?;
+        let items: Vec<SearchItem> =
+            search.products.into_iter().filter_map(|h| Some(SearchItem { id: h.id.parse().ok()?, name: h.title })).collect();
+        let Some(id) = best_match(title, &items) else { return Ok(None) };
+        let product: Product = self
+            .http
+            .get(format!("https://api.gog.com/products/{id}"))
+            .query(&[("expand", "description")])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
+            .context("reading GOG's description")?;
+        Ok(product.description.map(|d| plain_text(if d.lead.trim().is_empty() { &d.full } else { &d.lead })).filter(|s| !s.is_empty()))
+    }
+
     /// Steam store search results: (app id, name).
     pub async fn search_store(&self, term: &str) -> anyhow::Result<Vec<(u64, String)>> {
         Ok(self.search(term).await?.into_iter().map(|i| (i.id, i.name)).collect())
@@ -239,9 +290,26 @@ struct ReleaseDate {
     date: Option<String>,
 }
 
+/// A store's description, if it says anything: the Xbox Store's privacy
+/// notice is dropped from the start, and text that is only the title (as
+/// Epic's catalogue often has) or a few words doesn't count, so the next
+/// source gets a turn.
+pub fn useful_description(title: &str, text: &str) -> Option<String> {
+    const NOTICES: &[&str] = &[
+        "This game allows multiplayer play and is not subject to Xbox Live Family Settings.",
+        "Microsoft shares User IDs and gamertags.",
+    ];
+    let mut text = text.trim();
+    while let Some(rest) = NOTICES.iter().find_map(|n| text.strip_prefix(n)) {
+        text = rest.trim_start();
+    }
+    let same = |a: &str, b: &str| base_title(a) == base_title(b);
+    (text.chars().count() >= 40 && !same(text, title)).then(|| text.to_string())
+}
+
 /// Steam's short descriptions are HTML: tags dropped, entities decoded,
 /// spaces collapsed.
-fn plain_text(html: &str) -> String {
+pub fn plain_text(html: &str) -> String {
     let mut text = String::with_capacity(html.len());
     let mut in_tag = false;
     for c in html.chars() {
@@ -348,6 +416,14 @@ mod tests {
         assert_eq!(d.metacritic, Some(72));
         assert_eq!(d.recommendations, Some(15643));
         assert_eq!(d.summary.as_deref(), Some("Be the last piece of the puzzle in \"F1® 24\". Race & win."));
+    }
+
+    #[test]
+    fn store_descriptions_must_say_something() {
+        assert_eq!(useful_description("HITMAN", "HITMAN"), None);
+        assert_eq!(useful_description("Thief", "Stealth."), None);
+        let xbox = "This game allows multiplayer play and is not subject to Xbox Live Family Settings. Microsoft shares User IDs and gamertags. Hundreds of dragons are waiting for you to build them a home.";
+        assert_eq!(useful_description("Dragon Mania Legends", xbox).as_deref(), Some("Hundreds of dragons are waiting for you to build them a home."));
     }
 
     #[test]
