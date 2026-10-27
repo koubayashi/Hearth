@@ -13,9 +13,9 @@ import { STORE_LABEL } from "../lib/types";
 //   EA      ea.com
 //   Ubisoft ubisoft.com
 // Xbox has no public vector logo (Microsoft asked Simple Icons to remove it,
-// and xbox.com ships only raster art), so it is drawn here in the same shape:
-// a solid sphere with the curved X cut out, the arms thin at the top and
-// wider where they leave the sphere at the bottom. Games added by hand or
+// and xbox.com ships only raster art), so it is drawn here: a ring with the
+// curved X inside it, the arms thin at the top and wider where they meet the
+// ring at the bottom. Games added by hand or
 // from other sources get a generic drawn mark.
 
 const filled: Partial<Record<StoreId, string>> = {
@@ -38,22 +38,22 @@ const drawn: Partial<Record<StoreId, React.ReactNode>> = {
   ),
 };
 
-/** The arms of the X, cut out of the sphere: each tapers along a curved centre
- *  line, thin at the top and wide at the bottom; the right mirrors the left. */
+/** The X inside the ring: each arm tapers along a curved centre line, thin at
+ *  the top and wider at the bottom; the right mirrors the left. */
 const XBOX_ARMS =
-  "M5.5 2.1L6.8 3.5L8 5L9.1 6.6L10.1 8.2L11.1 9.9L11.9 11.7L12.6 13.5L13.2 15.4L13.8 17.3L14.2 19.3L14.6 21.3L14.8 23.4L20.4 21.8L19.5 19.8L18.5 17.8L17.4 15.8L16.3 14L15.2 12.2L14 10.5L12.8 8.8L11.6 7.2L10.3 5.7L8.9 4.2L7.6 2.8L6.2 1.4ZM18.5 2.1L17.2 3.5L16 5L14.9 6.6L13.9 8.2L12.9 9.9L12.1 11.7L11.4 13.5L10.8 15.4L10.2 17.3L9.8 19.3L9.4 21.3L9.2 23.4L3.6 21.8L4.5 19.8L5.5 17.8L6.6 15.8L7.7 14L8.8 12.2L10 10.5L11.2 8.8L12.4 7.2L13.7 5.7L15.1 4.2L16.4 2.8L17.8 1.4Z";
+  "M3.8 3.3L5.3 4.7L6.7 6.1L8 7.5L9.3 9L10.6 10.5L11.8 12.1L13 13.7L14.1 15.3L15.1 17L16.2 18.7L17.1 20.4L18.1 22.2L21.3 20.2L20.1 18.5L18.9 16.8L17.6 15.2L16.3 13.6L15 12L13.6 10.5L12.2 9.1L10.8 7.6L9.3 6.2L7.8 4.9L6.3 3.6L4.7 2.3ZM19.3 2.3L17.7 3.6L16.2 4.9L14.7 6.2L13.2 7.6L11.8 9.1L10.4 10.5L9 12L7.7 13.6L6.4 15.2L5.1 16.8L3.9 18.5L2.7 20.2L5.9 22.2L6.9 20.4L7.8 18.7L8.9 17L9.9 15.3L11 13.7L12.2 12.1L13.4 10.5L14.7 9L16 7.5L17.3 6.1L18.7 4.7L20.2 3.3Z";
 
 function XboxMark({ size }: { size: number }) {
-  // Each copy needs its own mask id; React's ids contain characters that
+  // Each copy needs its own clip id; React's ids contain characters that
   // don't belong in one.
   const id = `xbox-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" role="img" aria-label={STORE_LABEL.xbox}>
-      <mask id={id}>
-        <circle cx="12" cy="12" r="11" fill="white" />
-        <path d={XBOX_ARMS} fill="black" />
-      </mask>
-      <circle cx="12" cy="12" r="11" mask={`url(#${id})`} />
+      <clipPath id={id}>
+        <circle cx="12" cy="12" r="10.6" />
+      </clipPath>
+      <circle cx="12" cy="12" r="10.6" fill="none" stroke="currentColor" strokeWidth={2} />
+      <path d={XBOX_ARMS} clipPath={`url(#${id})`} />
     </svg>
   );
 }
