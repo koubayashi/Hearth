@@ -57,7 +57,18 @@ const seeds: Seed[] = [
   ["Hi-Fi Rush", 1817230, "xbox", false, 0, null],
 ];
 
-const games: Game[] = seeds.map(([title, appid, store, installed, hours, daysAgo], i) => ({
+// ?games=2000 repeats the seeds (numbered) to test a large library.
+const demoCount = typeof location !== "undefined" ? Number(new URLSearchParams(location.search).get("games")) || 0 : 0;
+const allSeeds: Seed[] =
+  demoCount > seeds.length
+    ? Array.from({ length: demoCount }, (_, i) => {
+        const [title, ...rest] = seeds[i % seeds.length];
+        const round = Math.floor(i / seeds.length);
+        return [round ? `${title} ${round + 1}` : title, ...rest];
+      })
+    : seeds;
+
+const games: Game[] = allSeeds.map(([title, appid, store, installed, hours, daysAgo], i) => ({
   id: i + 1,
   title,
   favorite: i % 7 === 0,

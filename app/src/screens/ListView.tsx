@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { api } from "../lib/api";
 import type { Game, NowPlaying, Via } from "../lib/types";
 import { defaultWay } from "../lib/ways";
@@ -15,6 +16,10 @@ import { StoreMatch } from "../components/StoreMatch";
 import { WaysToPlay } from "../components/WaysToPlay";
 
 type Group = { id: string; title: string; games: Game[] };
+/** The list is virtualized as one run of group headings and game rows. */
+type Item = { kind: "group"; group: Group; open: boolean } | { kind: "row"; game: Game };
+const ROW_H = 38;
+const GROUP_H = 31;
 
 /**
  * The library as a list of titles beside a full detail page for the selected
@@ -100,6 +105,37 @@ export function ListView({
     });
   const backToRow = () => focused && document.querySelector<HTMLElement>(`.lv-row[data-game="${focused.id}"]`)?.focus();
 
+  // Only the rows on screen exist, so 2,000+ games load, search and move at
+  // once. The selected row is always kept, even scrolled away, so focus and
+  // "back to the list" still find it.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const items = useMemo<Item[]>(
+    () =>
+      groups.flatMap((group) => {
+        const open = !closed.has(group.id);
+        return [{ kind: "group", group, open } as Item, ...(open ? group.games.map((game) => ({ kind: "row", game }) as Item) : [])];
+      }),
+    [groups, closed],
+  );
+  const selectedAt = useMemo(
+    () => (focused ? items.findIndex((it) => it.kind === "row" && it.game.id === focused.id) : -1),
+    [items, focused],
+  );
+  const v = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => (items[i].kind === "group" ? GROUP_H : ROW_H),
+    getItemKey: (i) => {
+      const it = items[i];
+      return it.kind === "group" ? `group-${it.group.id}` : it.game.id;
+    },
+    overscan: 12,
+    rangeExtractor: (range) => {
+      const shown = defaultRangeExtractor(range);
+      return selectedAt < 0 || shown.includes(selectedAt) ? shown : [...shown, selectedAt].sort((a, b) => a - b);
+    },
+  });
+
   const count = games?.length ?? 0;
 
   return (
@@ -152,7 +188,7 @@ export function ListView({
             </button>
           </div>
         </div>
-        <div className="lv-scroll">
+        <div className="lv-scroll" ref={scrollRef}>
           {loadError && (
             <p className="lv-note" role="alert">
               Couldn't load your library. {loadError}
@@ -163,59 +199,73 @@ export function ListView({
               {search ? "No games match." : hiddenView ? "Nothing hidden. Games you hide land here." : "Your library is empty. Connect a store in Settings."}
             </p>
           )}
-          {groups.map((grp) => {
-            const open = !closed.has(grp.id);
-            return (
-              <section key={grp.id} aria-label={grp.title}>
-                <button className="lv-group" data-nav aria-expanded={open} onClick={() => toggleGroup(grp.id)}>
-                  <Icon name="chevronRight" size={14} />
-                  {grp.title}
-                  <small>{grp.games.length}</small>
+          <div className="lv-items" style={{ height: v.getTotalSize() }}>
+            {v.getVirtualItems().map((vi) => {
+              const it = items[vi.index];
+              const place = { transform: `translateY(${vi.start}px)` };
+              if (it.kind === "group") {
+                const grp = it.group;
+                return (
+                  <button
+                    key={vi.key}
+                    ref={v.measureElement}
+                    data-index={vi.index}
+                    style={place}
+                    className="lv-group"
+                    data-nav
+                    aria-expanded={it.open}
+                    onClick={() => toggleGroup(grp.id)}
+                  >
+                    <Icon name="chevronRight" size={14} />
+                    {grp.title}
+                    <small>{grp.games.length}</small>
+                  </button>
+                );
+              }
+              const g = it.game;
+              const isPlaying = playing.some((p) => p.game_id === g.id);
+              return (
+                <button
+                  key={vi.key}
+                  ref={v.measureElement}
+                  data-index={vi.index}
+                  style={place}
+                  className={`lv-row${g.installed ? "" : " dim"}`}
+                  data-nav
+                  data-game={g.id}
+                  aria-current={focused?.id === g.id ? "true" : undefined}
+                  onFocus={() => onFocusGame(g)}
+                  onClick={() => onFocusGame(g)}
+                  onDoubleClick={() => onPrimary(g)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      onFocusGame(g);
+                      playRef.current?.focus();
+                    } else if (isMenuKey(e)) {
+                      e.preventDefault();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      openMenu(g, r.left + 40, r.bottom);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    openMenu(g, e.clientX, e.clientY);
+                  }}
+                >
+                  <span className="lv-thumb">
+                    <Art src={g.cover ?? g.hero} title="" />
+                  </span>
+                  <span className="lv-name">{g.title}</span>
+                  {isPlaying ? (
+                    <span className="lv-live" title="Playing now" />
+                  ) : (
+                    g.favorite && <Icon name="star" size={13} className="lv-fav" />
+                  )}
                 </button>
-                {open &&
-                  grp.games.map((g) => {
-                    const isPlaying = playing.some((p) => p.game_id === g.id);
-                    return (
-                      <button
-                        key={g.id}
-                        className={`lv-row${g.installed ? "" : " dim"}`}
-                        data-nav
-                        data-game={g.id}
-                        aria-current={focused?.id === g.id ? "true" : undefined}
-                        onFocus={() => onFocusGame(g)}
-                        onClick={() => onFocusGame(g)}
-                        onDoubleClick={() => onPrimary(g)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            onFocusGame(g);
-                            playRef.current?.focus();
-                          } else if (isMenuKey(e)) {
-                            e.preventDefault();
-                            const r = e.currentTarget.getBoundingClientRect();
-                            openMenu(g, r.left + 40, r.bottom);
-                          }
-                        }}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          openMenu(g, e.clientX, e.clientY);
-                        }}
-                      >
-                        <span className="lv-thumb">
-                          <Art src={g.cover ?? g.hero} title="" />
-                        </span>
-                        <span className="lv-name">{g.title}</span>
-                        {isPlaying ? (
-                          <span className="lv-live" title="Playing now" />
-                        ) : (
-                          g.favorite && <Icon name="star" size={13} className="lv-fav" />
-                        )}
-                      </button>
-                    );
-                  })}
-              </section>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </aside>
 

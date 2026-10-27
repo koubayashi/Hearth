@@ -86,6 +86,12 @@ export function Console({
   const row = lists[current];
   const at = Math.min(index, Math.max(0, row.length - 1));
   const game = row[at] ?? null;
+  // Only the tiles that can be on screen exist: a few behind the selection
+  // (so they slide out rather than vanish) and enough after it to fill the
+  // widest screen at the smallest tile size. A move touches a dozen tiles,
+  // not the whole shelf.
+  const first = Math.max(0, at - 3);
+  const last = at + Math.ceil(window.innerWidth / 112) + 2;
 
   // Keep the same game selected when the library refreshes under us.
   const selectedId = useRef<number | null>(null);
@@ -195,42 +201,48 @@ export function Console({
         }}
       >
         <div className="cx-track" style={{ "--at": at } as React.CSSProperties}>
-          {row.map((g, i) => (
-            <button
-              key={g.id}
-              className={`cx-tile${i === at ? " on" : i > at ? " after" : ""}${g.installed ? "" : " dim"}`}
-              role="option"
-              aria-selected={i === at}
-              aria-label={g.title}
-              data-nav
-              data-index={i}
-              tabIndex={i === at ? 0 : -1}
-              onFocus={() => setIndex(i)}
-              onClick={() => (i === at ? playRef.current?.focus() : move(i))}
-              onDoubleClick={() => onPrimary(g)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-                  e.preventDefault();
-                  move(at + (e.key === "ArrowRight" ? 1 : -1));
-                } else if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  playRef.current?.focus();
-                } else if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  document.querySelector<HTMLElement>(".cx-tab[aria-current]")?.focus();
-                } else if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (!g.offline_drive) onPrimary(g);
-                } else if (isMenuKey(e)) {
-                  e.preventDefault();
-                  setMenu(moreRef.current?.getBoundingClientRect() ?? e.currentTarget.getBoundingClientRect());
-                }
-              }}
-            >
-              <Art src={g.cover ?? g.hero} title={g.title} />
-              {playing.some((p) => p.game_id === g.id) && <span className="cx-live" title="Playing now" />}
-            </button>
-          ))}
+          {row.slice(first, last).map((g, n) => {
+            const i = first + n;
+            return (
+              <button
+                key={g.id}
+                className={`cx-tile${i === at ? " on" : i > at ? " after" : ""}${g.installed ? "" : " dim"}`}
+                style={{ "--i": i } as React.CSSProperties}
+                role="option"
+                aria-selected={i === at}
+                aria-label={g.title}
+                aria-posinset={i + 1}
+                aria-setsize={row.length}
+                data-nav
+                data-index={i}
+                tabIndex={i === at ? 0 : -1}
+                onFocus={() => setIndex(i)}
+                onClick={() => (i === at ? playRef.current?.focus() : move(i))}
+                onDoubleClick={() => onPrimary(g)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    move(at + (e.key === "ArrowRight" ? 1 : -1));
+                  } else if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    playRef.current?.focus();
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    document.querySelector<HTMLElement>(".cx-tab[aria-current]")?.focus();
+                  } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (!g.offline_drive) onPrimary(g);
+                  } else if (isMenuKey(e)) {
+                    e.preventDefault();
+                    setMenu(moreRef.current?.getBoundingClientRect() ?? e.currentTarget.getBoundingClientRect());
+                  }
+                }}
+              >
+                <Art src={g.cover ?? g.hero} title={g.title} />
+                {playing.some((p) => p.game_id === g.id) && <span className="cx-live" title="Playing now" />}
+              </button>
+            );
+          })}
           {games && row.length === 0 && (
             <p className="cx-empty">
               {current === "recent" ? "Games you play show up here." : current === "installed" ? "No games installed." : "Your library is empty. Connect a store in Settings."}
