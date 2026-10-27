@@ -40,10 +40,10 @@ const drawn: Partial<Record<StoreId, React.ReactNode>> = {
 
 /** The X inside the ring, drawn for what makes the Xbox X recognisable: the
  *  arms cross above the centre, curve from heading inwards to falling steeply
- *  (so the opening below is a pointed arch), and flare from a hairline at the
- *  top to wide where they meet the ring. The right arm mirrors the left. */
+ *  (so the opening below is a pointed arch), and flare from solid at the top to
+ *  wide where they meet the ring. The right arm mirrors the left. */
 const XBOX_ARMS =
-  "M3.8 3.4L5 4.2L6.2 5.1L7.3 6L8.4 7.1L9.3 8.1L10.2 9.2L11 10.4L11.8 11.6L12.4 12.9L13 14.2L13.5 15.6L13.9 17L14.3 18.5L14.6 20L14.8 21.6L15 23.2L19.5 22.3L19 20.6L18.3 19L17.7 17.4L16.9 15.9L16.1 14.4L15.3 13L14.4 11.7L13.5 10.5L12.5 9.3L11.4 8.2L10.3 7.2L9.2 6.2L8 5.2L6.8 4.4L5.5 3.5L4.2 2.7ZM19.8 2.7L18.5 3.5L17.2 4.4L16 5.2L14.8 6.2L13.7 7.2L12.6 8.2L11.5 9.3L10.5 10.5L9.6 11.7L8.7 13L7.9 14.4L7.1 15.9L6.3 17.4L5.7 19L5 20.6L4.5 22.3L9 23.2L9.2 21.6L9.4 20L9.7 18.5L10.1 17L10.5 15.6L11 14.2L11.6 12.9L12.2 11.6L13 10.4L13.8 9.2L14.7 8.1L15.6 7.1L16.7 6L17.8 5.1L19 4.2L20.2 3.4Z";
+  "M3.5 3.9L4.7 4.8L5.8 5.6L6.9 6.6L7.9 7.6L8.8 8.6L9.6 9.7L10.4 10.9L11.1 12.1L11.7 13.3L12.3 14.6L12.8 16L13.2 17.3L13.6 18.8L13.9 20.3L14.1 21.8L14.3 23.4L20.2 22.2L19.7 20.5L19 18.8L18.4 17.1L17.6 15.6L16.8 14.1L16 12.7L15.1 11.3L14.1 10.1L13.1 8.8L12 7.7L10.9 6.6L9.7 5.6L8.5 4.7L7.2 3.8L5.8 3L4.5 2.2ZM19.5 2.2L18.2 3L16.8 3.8L15.5 4.7L14.3 5.6L13.1 6.6L12 7.7L10.9 8.8L9.9 10.1L8.9 11.3L8 12.7L7.2 14.1L6.4 15.6L5.6 17.1L5 18.8L4.3 20.5L3.8 22.2L9.7 23.4L9.9 21.8L10.1 20.3L10.4 18.8L10.8 17.3L11.2 16L11.7 14.6L12.3 13.3L12.9 12.1L13.6 10.9L14.4 9.7L15.2 8.6L16.1 7.6L17.1 6.6L18.2 5.6L19.3 4.8L20.5 3.9Z";
 
 function XboxMark({ size }: { size: number }) {
   // Each copy needs its own clip id; React's ids contain characters that
