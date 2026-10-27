@@ -16,7 +16,7 @@ export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }
   const accounts = useAccounts();
   const picked = pickName(accounts, p);
   const current = p.nameSource === "off" ? "off" : picked?.source;
-  const label: Record<string, string> = { steam: "Steam", epic: "Epic", xbox: "Xbox", custom: "Your own" };
+  const label: Record<string, string> = { steam: "Steam", epic: "Epic", xbox: "Xbox", gog: "GOG", custom: "Your own" };
   const names = [
     ...nameOptions(accounts, p.customName).map((o) => ({ source: o.source, label: label[o.source] })),
     { source: "off" as const, label: "None" },

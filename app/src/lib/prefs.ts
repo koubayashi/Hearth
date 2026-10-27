@@ -5,8 +5,8 @@ export type Mode = "dark" | "light";
 /** How the library is laid out: a cover wall beside the poster, or a list of
  *  titles beside a detail page. */
 export type LibraryView = "covers" | "list";
-/** Where the console's name comes from. "auto" picks Steam, then Epic, then the Xbox gamertag. */
-export type NameSource = "auto" | "steam" | "epic" | "xbox" | "custom" | "off";
+/** Where the console's name comes from. "auto" picks Steam, then Epic, Xbox, GOG. */
+export type NameSource = "auto" | "steam" | "epic" | "xbox" | "gog" | "custom" | "off";
 
 export interface Prefs {
   tone: Tone;

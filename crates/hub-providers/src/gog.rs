@@ -1,6 +1,6 @@
 //! GOG: games installed by GOG Galaxy or by GOG's offline installers, which
-//! both record each game in the registry. No sign-in, so only installed games;
-//! owned games and playtime from Galaxy's own database aren't read yet.
+//! both record each game in the registry; signed in, the account's other games
+//! come from [`crate::gog_web`]. Playtime isn't available.
 //!
 //! Untested against a real install: the format follows GOG's installers and
 //! the one stale entry on the development PC.
@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use hub_core::{GameEntry, StoreId};
 use hub_launch::LaunchAction;
 
-use crate::LibraryProvider;
+use crate::{Artwork, LibraryProvider};
 
 /// One game as GOG's installer recorded it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,11 +52,13 @@ impl GogInstall {
 pub struct Gog {
     /// GalaxyClient.exe, when GOG Galaxy is installed.
     galaxy: Option<PathBuf>,
+    /// The GOG account, for games owned but not installed.
+    pub web: std::sync::Arc<crate::gog_web::GogWeb>,
 }
 
 impl Gog {
-    pub fn detect() -> Self {
-        Self { galaxy: galaxy_exe() }
+    pub fn detect(web: std::sync::Arc<crate::gog_web::GogWeb>) -> Self {
+        Self { galaxy: galaxy_exe(), web }
     }
 
     fn find(&self, id: &str) -> Option<GogInstall> {
@@ -104,6 +106,47 @@ impl LibraryProvider for Gog {
     fn uninstall(&self, store_game_id: &str) -> Option<LaunchAction> {
         let exe = self.find(store_game_id)?.uninstaller.filter(|u| u.is_file())?;
         Some(LaunchAction::Process { exe, args: Vec::new(), working_dir: None })
+    }
+
+    /// Every game on the account once signed in; DLC is left out.
+    async fn owned(&self) -> anyhow::Result<Vec<GameEntry>> {
+        if !self.web.signed_in() {
+            return Ok(Vec::new());
+        }
+        let ids = self.web.owned_ids().await?;
+        self.web.describe(&ids).await;
+        Ok(ids
+            .into_iter()
+            .filter_map(|id| {
+                let p = self.web.product(&id).filter(|p| p.is_game)?;
+                Some(GameEntry {
+                    store: StoreId::Gog,
+                    store_game_id: id,
+                    title: p.title,
+                    installed: false,
+                    install_dir: None,
+                    store_playtime_secs: None,
+                    store_last_played: None,
+                })
+            })
+            .collect())
+    }
+
+    fn artwork(&self, store_game_id: &str) -> Artwork {
+        self.web
+            .product(store_game_id)
+            .map(|p| Artwork { cover: p.cover, hero: p.hero, logo: p.logo })
+            .unwrap_or_default()
+    }
+
+    /// Galaxy's page for the game, which installs it; without Galaxy, the
+    /// GOG account's games page, where the installers are.
+    fn install(&self, store_game_id: &str) -> Option<LaunchAction> {
+        let uri = match self.galaxy {
+            Some(_) => format!("goggalaxy://openGameView/{store_game_id}"),
+            None => "https://www.gog.com/account".into(),
+        };
+        Some(LaunchAction::Uri { uri })
     }
 }
 

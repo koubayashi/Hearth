@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { pickName, possessive } from "./gamertag";
 import type { Accounts } from "./types";
 
-const both: Accounts = { steam: "ExamplePersona", epic: "EpicExample", sgdb: false, steam_auth: null, xbox: null };
+const both: Accounts = { steam: "ExamplePersona", epic: "EpicExample", sgdb: false, steam_auth: null, xbox: null, gog: null };
 const epicOnly: Accounts = { ...both, steam: null };
 
 describe("pickName", () => {

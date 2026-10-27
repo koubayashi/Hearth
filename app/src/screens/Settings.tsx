@@ -211,6 +211,34 @@ function XboxRow({ accounts }: { accounts: Accounts | null }) {
   );
 }
 
+/** GOG sign-in for every game the account owns. */
+function GogRow({ accounts }: { accounts: Accounts | null }) {
+  const signedIn = !!accounts?.gog;
+  return (
+    <div className="setting">
+      <div className="text">
+        <b>
+          <StoreIcon store="gog" size={15} /> GOG
+        </b>
+        {signedIn ? (
+          <SignedIn name={accounts!.gog!} detail="Every game you own on GOG. GOG doesn't share playtime." />
+        ) : (
+          <span>Installed games show up without signing in. Sign in for the rest of your GOG library.</span>
+        )}
+      </div>
+      {signedIn ? (
+        <button className="btn" data-nav onClick={() => api.gogSignOut()}>
+          Sign out
+        </button>
+      ) : (
+        <button className="btn btn-primary" data-nav disabled={api.demo} onClick={() => api.gogSignIn()}>
+          Sign in
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Optional SteamGridDB key for community covers and backgrounds. */
 function SgdbRow({ accounts }: { accounts: Accounts | null }) {
   const [key, setKey] = useState("");
@@ -370,6 +398,7 @@ function NameSetting({ accounts }: { accounts: Accounts | null }) {
     { source: "steam", label: "Steam", available: !!accounts?.steam },
     { source: "epic", label: "Epic", available: !!accounts?.epic },
     { source: "xbox", label: "Xbox", available: !!accounts?.xbox },
+    { source: "gog", label: "GOG", available: !!accounts?.gog },
     { source: "custom", label: "Your own", available: true },
     { source: "off", label: "None", available: true },
   ];
@@ -796,14 +825,7 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
             <SteamRow accounts={accounts} />
             <EpicRow accounts={accounts} />
             <XboxRow accounts={accounts} />
-            <div className="setting">
-              <div className="text">
-                <b>
-                  <StoreIcon store="gog" size={15} /> GOG
-                </b>
-                <span>Installed games are found on their own, no sign-in needed. Games you own but haven't installed don't show yet.</span>
-              </div>
-            </div>
+            <GogRow accounts={accounts} />
           </div>
         </section>
 

@@ -5,6 +5,7 @@ pub mod epic;
 pub mod epic_logs;
 pub mod folders;
 pub mod gog;
+pub mod gog_web;
 pub mod metadata;
 pub mod saves;
 pub mod secrets;

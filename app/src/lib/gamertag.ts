@@ -10,6 +10,7 @@ export function nameOptions(accounts: Accounts | null, customName: string): { so
   if (accounts?.steam) out.push({ source: "steam", name: accounts.steam });
   if (accounts?.epic) out.push({ source: "epic", name: accounts.epic });
   if (accounts?.xbox) out.push({ source: "xbox", name: accounts.xbox });
+  if (accounts?.gog) out.push({ source: "gog", name: accounts.gog });
   if (customName.trim()) out.push({ source: "custom", name: customName.trim() });
   return out;
 }

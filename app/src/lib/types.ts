@@ -111,6 +111,8 @@ export interface Accounts {
   steam_auth: "session" | "api_key" | null;
   /** Gamertag when signed in to Xbox. */
   xbox: string | null;
+  /** Username when signed in to GOG. */
+  gog: string | null;
 }
 
 export interface NowPlaying {

@@ -9,6 +9,7 @@ mod drives;
 mod errors;
 mod folders;
 mod fullscreen_fix;
+mod gog_account;
 mod saves;
 mod tracking;
 mod tray;
@@ -29,6 +30,7 @@ pub(crate) struct AppState {
     pub(crate) db: Mutex<Db>,
     epic: Arc<Epic>,
     pub(crate) xbox: Arc<hub_providers::xbox_live::XboxLive>,
+    pub(crate) gog: Arc<hub_providers::gog_web::GogWeb>,
     steam: Arc<Steam>,
     pub(crate) metadata: hub_providers::metadata::Metadata,
     pub(crate) folders: Arc<folders::FolderProvider>,
@@ -163,6 +165,8 @@ struct Accounts {
     steam_auth: Option<&'static str>,
     /// The Xbox gamertag when signed in to Xbox.
     xbox: Option<String>,
+    /// The GOG username when signed in to GOG.
+    gog: Option<String>,
 }
 
 #[tauri::command]
@@ -176,6 +180,7 @@ fn accounts(state: State<AppState>) -> Accounts {
             SteamAuth::ApiKey { .. } => "api_key",
         }),
         xbox: state.xbox.signed_in().then(|| state.xbox.gamertag().unwrap_or_else(|| "your Xbox account".into())),
+        gog: state.gog.signed_in().then(|| state.gog.username().unwrap_or_else(|| "your GOG account".into())),
     }
 }
 
@@ -566,6 +571,10 @@ pub(crate) fn sync_all(app: AppHandle) {
                     xbox_account::give_up(&app);
                     Vec::new()
                 }
+                Err(e) if store == hub_core::StoreId::Gog && e.to_string() == hub_providers::gog_web::SESSION_EXPIRED => {
+                    gog_account::give_up(&app);
+                    Vec::new()
+                }
                 Err(e) => {
                     let _ = app.emit("sync-error", format!("{e:#}"));
                     Vec::new()
@@ -640,17 +649,19 @@ fn main() {
             let steam = Arc::new(Steam::detect(steam_auth));
             let folders = Arc::new(Mutex::new(hub_providers::folders::Folders::new(folders::load(&dir))));
             let xbox = xbox_account::load(app.handle());
+            let gog = gog_account::load(app.handle(), &dir);
             app.manage(AppState {
                 db: Mutex::new(db),
                 // Stores first, so the folder scan knows which folders they already own.
                 providers: vec![
                     steam.clone(),
                     epic.clone(),
-                    Arc::new(hub_providers::gog::Gog::detect()),
+                    Arc::new(hub_providers::gog::Gog::detect(gog.clone())),
                     Arc::new(hub_providers::xbox::Xbox::new(xbox.clone())),
                     folders.clone(),
                 ],
                 xbox,
+                gog,
                 folders,
                 saves: Default::default(),
                 sgdb: Arc::new(hub_providers::sgdb::SteamGridDb::new(secrets::load("sgdb-key"))),
@@ -678,6 +689,7 @@ fn main() {
 
             keep_epic_alive(app.handle().clone());
             xbox_account::keep_alive(app.handle().clone());
+            gog_account::keep_alive(app.handle().clone());
             drives::watch(app.handle().clone());
             autobackup::watch(app.handle().clone());
             tracking::recover(app.handle());
@@ -717,6 +729,8 @@ fn main() {
             epic_sign_out,
             xbox_account::xbox_sign_in,
             xbox_account::xbox_sign_out,
+            gog_account::gog_sign_in,
+            gog_account::gog_sign_out,
             now_playing,
             steam_set_api_key,
             steam_sign_in,

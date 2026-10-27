@@ -139,6 +139,7 @@ export const mockBackend = {
     steam: "Demo player",
     steam_auth: demoSignedIn ? "session" : null,
     xbox: demoSignedIn ? "DemoGamertag" : null,
+    gog: null,
   }),
   async steamSetApiKey(_key: string): Promise<number> {
     throw new Error("Demo library: add your key in the desktop app");
@@ -153,6 +154,8 @@ export const mockBackend = {
   async epicSignOut() {},
   async xboxSignIn() {},
   async xboxSignOut() {},
+  async gogSignIn() {},
+  async gogSignOut() {},
   nowPlaying: async (): Promise<NowPlaying[]> => [],
   // A few months of evening sessions on a handful of games, deterministic.
   async playSessions(): Promise<PlaySession[]> {
