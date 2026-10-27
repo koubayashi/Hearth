@@ -52,8 +52,12 @@ function XboxMark({ size }: { size: number }) {
         <circle cx="186.2" cy="186.3" r="172" fill="white" />
         <path transform="translate(-1.5706619 12.357467)" d={XBOX_SPHERE} fill="black" />
       </mask>
-      <circle cx="186.2" cy="186.3" r="172" mask={`url(#${id})`} />
-      <circle cx="186.2" cy="186.3" r="172.2" fill="none" stroke="currentColor" strokeWidth={28} />
+      {/* The X sits well inside the ring, like the Xbox button on a controller:
+          touching it, the small notch above the X was lost at icon size. */}
+      <g transform="translate(186.2 186.3) scale(0.74) translate(-186.2 -186.3)">
+        <circle cx="186.2" cy="186.3" r="172" mask={`url(#${id})`} />
+      </g>
+      <circle cx="186.2" cy="186.3" r="173.2" fill="none" stroke="currentColor" strokeWidth={26} />
     </svg>
   );
 }
