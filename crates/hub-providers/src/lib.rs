@@ -4,12 +4,14 @@
 pub mod epic;
 pub mod epic_logs;
 pub mod folders;
+pub mod gog;
 pub mod metadata;
 pub mod saves;
 pub mod secrets;
 pub mod sgdb;
 pub mod steam;
 pub mod vdf;
+pub mod xbox;
 
 use async_trait::async_trait;
 use hub_core::{GameEntry, StoreId};

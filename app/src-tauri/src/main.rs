@@ -607,7 +607,13 @@ fn main() {
             app.manage(AppState {
                 db: Mutex::new(db),
                 // Stores first, so the folder scan knows which folders they already own.
-                providers: vec![steam.clone(), epic.clone(), folders.clone()],
+                providers: vec![
+                    steam.clone(),
+                    epic.clone(),
+                    Arc::new(hub_providers::gog::Gog::detect()),
+                    Arc::new(hub_providers::xbox::Xbox),
+                    folders.clone(),
+                ],
                 folders,
                 saves: Default::default(),
                 sgdb: Arc::new(hub_providers::sgdb::SteamGridDb::new(secrets::load("sgdb-key"))),

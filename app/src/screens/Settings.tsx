@@ -763,6 +763,14 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
           <div className="setting-group glass">
             <SteamRow accounts={accounts} />
             <EpicRow accounts={accounts} />
+            <div className="setting">
+              <div className="text">
+                <b>
+                  <StoreIcon store="gog" size={14} /> GOG and <StoreIcon store="xbox" size={14} /> Xbox
+                </b>
+                <span>Installed games are found on their own, no sign-in needed. Games you own but haven't installed don't show yet.</span>
+              </div>
+            </div>
           </div>
         </section>
 
