@@ -9,7 +9,7 @@ import { Art } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
 import { Icon } from "../components/Icon";
-import { useGameInfo } from "../components/Poster";
+import { useGameInfo } from "../lib/gameInfo";
 import { StoreIcon } from "../components/StoreIcon";
 import { ArtworkPicker } from "../components/ArtworkPicker";
 import { StoreMatch } from "../components/StoreMatch";

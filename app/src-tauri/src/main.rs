@@ -747,6 +747,7 @@ fn main() {
             epic_submit_code,
             details::game_details,
             details::install_info,
+            details::saved_game_info,
             details::open_install_folder,
             details::open_store_page,
             folders::game_folders,

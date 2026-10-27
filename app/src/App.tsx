@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { preloadGameInfo } from "./lib/gameInfo";
 import { api } from "./lib/api";
 import type { Game, GameStatus, NowPlaying, Via } from "./lib/types";
 import { chosenWay } from "./lib/ways";
@@ -58,6 +59,8 @@ export function App() {
 
   useEffect(() => {
     api.gameCounts().then(setCounts);
+    // Every game's panel details, ready before a game is selected.
+    void preloadGameInfo();
   }, [version]);
 
   const toggleHidden = async (g: Game) => {

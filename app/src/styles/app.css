@@ -290,7 +290,9 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   padding-top: var(--space-3);
   /* Size container: the cover can shrink to whichever of width or height runs out first. */
   container-type: size;
-  animation: fade var(--dur-slow) var(--ease-out);
+  /* A quick fade between games: long enough to soften the change, short
+     enough not to read as loading (480ms did). */
+  animation: fade var(--dur-fast) var(--ease-out);
 }
 .poster-cover img, .poster-cover .art-fallback {
   width: min(100cqw - 48px, (100cqh - 24px) * 2 / 3); height: auto; aspect-ratio: 2 / 3; object-fit: cover;

@@ -133,6 +133,42 @@ pub struct InstallInfo {
     pub bytes: Option<i64>,
 }
 
+/// What the game panel shows beyond the game itself, for one game.
+#[derive(serde::Serialize)]
+pub struct SavedInfo {
+    pub id: i64,
+    pub details: Option<GameDetails>,
+    pub install: Option<InstallInfo>,
+}
+
+/// Every game's saved details and install info, from disk only, in one call.
+/// The panel keeps them in memory so selecting a game draws it whole in the
+/// first frame; asking per selection left the panel filling in piece by piece.
+#[tauri::command]
+pub fn saved_game_info(app: AppHandle) -> CmdResult<Vec<SavedInfo>> {
+    let state = app.state::<AppState>();
+    let db = lock(&state.db);
+    let games = db.list_games(&Default::default()).map_err(err)?;
+    Ok(games
+        .into_iter()
+        .map(|g| {
+            let details = db
+                .details(g.id)
+                .ok()
+                .flatten()
+                .and_then(|(json, _)| json)
+                .and_then(|j| serde_json::from_str(&j).ok());
+            let install = g
+                .entries
+                .iter()
+                .find(|e| e.installed)
+                .and_then(|e| e.install_dir.clone())
+                .map(|path| InstallInfo { path, bytes: db.install_size(g.id).ok().flatten() });
+            SavedInfo { id: g.id, details, install }
+        })
+        .collect())
+}
+
 /// Where the game is installed and how big the folder is. The size is measured
 /// once (off the UI thread) and cached; `refresh` measures it again.
 #[tauri::command]

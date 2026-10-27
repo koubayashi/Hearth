@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Game, GameDetails, InstallInfo, Via } from "../lib/types";
+import type { Game, Via } from "../lib/types";
 import { defaultWay } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatPlaytime, releaseYear } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
+import { useGameInfo } from "../lib/gameInfo";
 import { Art } from "./Art";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
@@ -12,32 +13,6 @@ import { StoreMatch } from "./StoreMatch";
 import { ArtworkPicker } from "./ArtworkPicker";
 import { GameMenu, type PanelAction } from "./GameMenu";
 import { WaysToPlay } from "./WaysToPlay";
-
-/** Store-page details and install info for a game, loaded when it's selected. */
-export function useGameInfo(game: Game | null, nonce: number) {
-  const [details, setDetails] = useState<GameDetails | null>(null);
-  const [install, setInstall] = useState<InstallInfo | null>(null);
-  const id = game?.id ?? null;
-  const installed = game?.installed ?? false;
-
-  useEffect(() => {
-    setDetails(null);
-    setInstall(null);
-    if (id === null) return;
-    let live = true;
-    // A short pause so scrolling through covers doesn't fire a lookup per cover.
-    const t = setTimeout(() => {
-      api.gameDetails(id).then((d) => live && setDetails(d)).catch(() => {});
-      if (installed) api.installInfo(id, false).then((i) => live && setInstall(i)).catch(() => {});
-    }, 180);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [id, installed, nonce]);
-
-  return { details, install };
-}
 
 function scoreTone(score: number) {
   return score >= 75 ? "good" : score >= 50 ? "mixed" : "bad";

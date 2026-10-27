@@ -192,6 +192,11 @@ export const mockBackend = {
     const dir = g?.entries.find((e) => e.installed)?.install_dir;
     return dir ? { path: dir, bytes: 1_000_000_000 * (8 + (id % 90)) } : null;
   },
+  async savedGameInfo() {
+    return Promise.all(
+      games.map(async (g) => ({ id: g.id, details: await this.gameDetails(g.id), install: await this.installInfo(g.id, false) })),
+    );
+  },
   async openInstallFolder(_id: number) {},
   async openStorePage(_id: number) {},
   async setStatus(id: number, status: GameStatus | null) {
