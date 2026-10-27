@@ -7,6 +7,12 @@ export const legacy = (src: string) =>
     "cdn.cloudflare.steamstatic.com/steam/apps",
   );
 
+/** Art that has to load fades in over its frame's plain background; art
+ *  already in the cache (scrolling back, switching views) shows at once. */
+const fadeInIfLoading = (img: HTMLImageElement | null) => {
+  if (img && !img.complete) img.dataset.loading = "";
+};
+
 export function Art({ src, title, className }: { src: string | null; title: string; className?: string }) {
   const [attempt, setAttempt] = useState(0);
   const urls = src ? [...new Set([src, legacy(src)])] : [];
@@ -15,12 +21,17 @@ export function Art({ src, title, className }: { src: string | null; title: stri
   }
   return (
     <img
+      ref={fadeInIfLoading}
       className={className}
       src={urls[attempt]}
       alt=""
       loading="lazy"
       decoding="async"
       draggable={false}
+      onLoad={(e) => {
+        const img = e.currentTarget;
+        if ("loading" in img.dataset) img.classList.add("art-in");
+      }}
       onError={() => setAttempt((a) => a + 1)}
     />
   );

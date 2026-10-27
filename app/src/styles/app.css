@@ -142,6 +142,8 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   text-align: center; font: 600 var(--text-sm) / 1.3 var(--font-display); color: var(--ink-2);
   background: linear-gradient(160deg, var(--base-2), var(--base));
 }
+/* Art that had to load fades in over its frame's background (see Art.tsx). */
+.art-in { animation: fade var(--dur-med) var(--ease-out); }
 
 .empty { padding: var(--space-7) 0; color: var(--ink-2); max-width: 46ch; }
 .empty h3 { font: 600 var(--text-lg) var(--font-display); color: var(--ink); margin-bottom: 6px; }

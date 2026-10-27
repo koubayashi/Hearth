@@ -1,0 +1,41 @@
+/* Windows display settings Hearth follows: "Transparency effects" off and
+   contrast themes. Imported last so these win over the views' own rules. */
+
+/* ---------- transparency effects off: solid surfaces, no blur ---------- */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-tone] { --glass: var(--base-2); --glass-strong: var(--base-2); }
+  *, *::before, *::after { backdrop-filter: none !important; }
+}
+
+/* ---------- contrast themes ----------
+   Windows' colours replace Hearth's and shadows are dropped, so everything
+   marked by the accent, a tinted background or a shadow ring gets a system
+   colour outline or fill instead. */
+@media (forced-colors: active) {
+  /* Ambient light from the art would tint the theme's own background. Game
+     art itself stays: it's the content, and text over it gets backplates. */
+  .backdrop, .cover-halo, .lit::before, .cx-tile.on::before { display: none; }
+
+  /* Where you are: the lit cover, the console tile, the selected row and tabs. */
+  .lit .cover-art, .lit .frame, .cx-tile.on { outline: 3px solid Highlight; outline-offset: 2px; }
+  .cx-tile.on:focus { outline-color: CanvasText; }
+  .lv-row[aria-current="true"], .nav[aria-current="page"], .settings-index button[aria-current="true"],
+  .shelf[aria-selected="true"] {
+    outline: 2px solid Highlight; outline-offset: -2px;
+  }
+  .cx-tab[aria-current="page"]::after { background: Highlight; forced-color-adjust: none; }
+
+  /* On or off: pressed buttons, switches, the status picker. */
+  .seg button[aria-pressed="true"], .chip[aria-pressed="true"], .swatch[aria-pressed="true"],
+  .icon-btn[aria-pressed="true"], .cx-icon[aria-pressed="true"], .menu .status-pick button[aria-checked="true"] {
+    forced-color-adjust: none; background: Highlight; color: HighlightText;
+  }
+  .switch { forced-color-adjust: none; background: Canvas; border: 1px solid ButtonText; }
+  .switch::after { background: ButtonText; top: 2px; left: 2px; }
+  .switch[aria-checked="true"] { background: Highlight; border-color: Highlight; }
+  .switch[aria-checked="true"]::after { background: HighlightText; }
+
+  /* Main actions are filled with the accent and have no border of their own. */
+  .primary, .lv-play, .cx-play { border: 1px solid ButtonText; }
+  .primary:disabled, .lv-play:disabled, .cx-play:disabled { border-color: GrayText; color: GrayText; }
+}
