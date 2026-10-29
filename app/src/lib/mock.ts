@@ -244,9 +244,10 @@ export const mockBackend = {
   async backupExport(_path: string, _prefs: string): Promise<void> {
     throw new Error("Demo library: backups work in the desktop app");
   },
-  async backupRestore(_path: string): Promise<{ prefs: string | null; created_at: number | null }> {
+  async backupRestore(_path: string): Promise<{ prefs: string | null; created_at: number | null; ways: { name: string; path: string; args: string }[] }> {
     throw new Error("Demo library: backups work in the desktop app");
   },
+  async restoreWays(_keep: boolean) {},
   async openSgdbKeyPage() {},
   // Demo choices reuse the library's own art so the picker can be designed.
   async artworkOptions(_id: number, kind: ArtKind): Promise<ArtOption[]> {

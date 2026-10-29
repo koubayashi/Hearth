@@ -48,7 +48,9 @@ impl Db {
     }
 
     fn init(conn: Connection) -> Result<Self> {
-        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
+        // trusted_schema off: a library file from elsewhere (a restored
+        // backup) can't run functions from inside its own schema.
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA trusted_schema = OFF;")?;
         let version: usize = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
             conn.execute_batch(sql)?;
@@ -86,10 +88,55 @@ impl Db {
         Ok(())
     }
 
+    /// Makes a restored backup safe to use as the library. A backup is a
+    /// file anyone with access to its folder (often a synced cloud folder)
+    /// could have made, so nothing in it may run anything by itself:
+    /// - triggers and views go (Hearth's own schema has none), so the file
+    ///   can't rewrite what Hearth writes;
+    /// - folder games count as not installed until the folder scan finds
+    ///   their program again, so Play never starts a program only the backup
+    ///   names;
+    /// - ways to play are taken out and returned, for the user to confirm
+    ///   before they go back ([`Db::put_back_launch_options`]).
+    pub fn quarantine_restored(&self) -> Result<Vec<LaunchOption>> {
+        let foreign: Vec<(String, String)> = {
+            let mut stmt = self.conn.prepare("SELECT type, name FROM sqlite_master WHERE type IN ('trigger', 'view')")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        for (kind, name) in foreign {
+            let kind = if kind == "trigger" { "TRIGGER" } else { "VIEW" };
+            self.conn.execute_batch(&format!("DROP {kind} IF EXISTS \"{}\";", name.replace('"', "\"\"")))?;
+        }
+        self.conn.execute("UPDATE store_entries SET installed = 0 WHERE store = ?1", [StoreId::Manual.as_str()])?;
+        let ways = {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, game_id, name, path, args, working_dir, is_default FROM launch_options ORDER BY id",
+            )?;
+            let rows = stmt.query_map([], launch_option_row)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        self.conn.execute("DELETE FROM launch_options", [])?;
+        Ok(ways)
+    }
+
+    /// Puts back ways to play the user confirmed after a restore, as they were.
+    pub fn put_back_launch_options(&self, ways: &[LaunchOption]) -> Result<()> {
+        for w in ways {
+            self.conn.execute(
+                "INSERT OR REPLACE INTO launch_options (id, game_id, name, path, args, working_dir, is_default)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![w.id, w.game_id, w.name, w.path, w.args, w.working_dir, w.is_default],
+            )?;
+        }
+        Ok(())
+    }
+
     /// The settings stored in a backup, after checking it is one Hearth can open.
     pub fn read_backup(path: &Path) -> Result<HashMap<String, String>> {
         let c = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|_| DbError::NotABackup)?;
+        c.execute_batch("PRAGMA trusted_schema = OFF;").map_err(|_| DbError::NotABackup)?;
         let version: usize = c.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(|_| DbError::NotABackup)?;
         if version == 0 {
             return Err(DbError::NotABackup);
@@ -1089,6 +1136,34 @@ mod tests {
             .map(|c| format!("{c}:\\"))
             .find(|d| !Path::new(d).exists())
             .expect("a free drive letter")
+    }
+
+    #[test]
+    fn a_restored_backup_runs_nothing_by_itself() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, r"C:\Games\X\x.exe", "X", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        let way = db.save_launch_option(None, id, "Server", r"C:\Tools\start.cmd", "-x", None).unwrap();
+        db.set_default_launch(id, Some(way)).unwrap();
+        db.conn
+            .execute_batch(
+                "CREATE TRIGGER planted AFTER UPDATE ON games BEGIN UPDATE launch_options SET path = 'evil'; END;
+                 CREATE VIEW planted_view AS SELECT 1;",
+            )
+            .unwrap();
+
+        let ways = db.quarantine_restored().unwrap();
+        let schema: i64 =
+            db.conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type IN ('trigger', 'view')", [], |r| r.get(0)).unwrap();
+        assert_eq!(schema, 0, "planted triggers and views are gone");
+        let g = db.game(id).unwrap().unwrap();
+        assert!(!g.installed, "folder games wait for the scan");
+        assert!(g.launch_options.is_empty(), "ways to play wait for the user");
+
+        db.put_back_launch_options(&ways).unwrap();
+        let back = db.game(id).unwrap().unwrap().launch_options;
+        assert_eq!(back.len(), 1);
+        assert!(back[0].is_default && back[0].path == r"C:\Tools\start.cmd");
     }
 
     #[test]

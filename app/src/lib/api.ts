@@ -45,7 +45,8 @@ const backend = isTauri()
       reportError: (message: string) => invoke<void>("report_error", { message }),
       openErrorLog: () => invoke<void>("open_error_log"),
       backupRestore: (path: string) =>
-        invoke<{ prefs: string | null; created_at: number | null }>("backup_restore", { path }),
+        invoke<{ prefs: string | null; created_at: number | null; ways: { name: string; path: string; args: string }[] }>("backup_restore", { path }),
+      restoreWays: (keep: boolean) => invoke<void>("restore_ways", { keep }),
       gameDetails: (id: number) => invoke<GameDetails | null>("game_details", { id }),
       installInfo: (id: number, refresh: boolean) => invoke<InstallInfo | null>("install_info", { id, refresh }),
       savedGameInfo: () => invoke<{ id: number; details: GameDetails | null; install: InstallInfo | null }[]>("saved_game_info"),

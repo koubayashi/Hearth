@@ -5,8 +5,9 @@
 //! sign-ins, which stay in Windows Credential Manager.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
-use hub_core::Db;
+use hub_core::{Db, LaunchOption};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -43,6 +44,8 @@ pub struct Restored {
     prefs: Option<String>,
     /// When the backup was made (unix seconds).
     created_at: Option<i64>,
+    /// Ways to play the backup holds, set aside until the user confirms them.
+    ways: Vec<WayToConfirm>,
 }
 
 #[tauri::command]
@@ -68,10 +71,14 @@ pub fn backup_restore(app: AppHandle, path: String) -> CmdResult<Restored> {
             let _ = std::fs::remove_file(dir.join(name));
         }
         let opened = std::fs::rename(&incoming, &live).map_err(err).and_then(|_| Db::open(&live).map_err(err));
-        match opened {
-            Ok(restored) => {
+        match opened.and_then(|restored| {
+            let ways = restored.quarantine_restored().map_err(err)?;
+            Ok((restored, ways))
+        }) {
+            Ok((restored, ways)) => {
                 let _ = restored.forget_backup_meta();
                 *db = restored;
+                *lock(&app.state::<PendingWays>().0) = ways;
             }
             Err(e) => {
                 // Put the library back as it was.
@@ -89,8 +96,38 @@ pub fn backup_restore(app: AppHandle, path: String) -> CmdResult<Restored> {
     crate::tracking::log(&app, &format!("backup: restored {path}"));
     let _ = app.emit("library-changed", ());
     sync_all(app.clone());
+    let ways = lock(&app.state::<PendingWays>().0)
+        .iter()
+        .map(|w| WayToConfirm { name: w.name.clone(), path: w.path.clone(), args: w.args.clone() })
+        .collect();
     Ok(Restored {
         prefs: meta.get("prefs").cloned(),
         created_at: meta.get("created_at").and_then(|t| t.parse().ok()),
+        ways,
     })
+}
+
+/// Ways to play from a restored backup, held back until the user confirms
+/// them: each runs a program, and the backup file may not be theirs.
+/// Lost (so dropped) if Hearth closes first.
+#[derive(Default)]
+pub struct PendingWays(Mutex<Vec<LaunchOption>>);
+
+#[derive(Serialize)]
+pub struct WayToConfirm {
+    name: String,
+    path: String,
+    args: String,
+}
+
+/// The user's answer about a restored backup's ways to play.
+#[tauri::command]
+pub fn restore_ways(app: AppHandle, keep: bool) -> CmdResult<()> {
+    let ways = std::mem::take(&mut *lock(&app.state::<PendingWays>().0));
+    if keep && !ways.is_empty() {
+        lock(&app.state::<AppState>().db).put_back_launch_options(&ways).map_err(err)?;
+        let _ = app.emit("library-changed", ());
+    }
+    crate::tracking::log(&app, &format!("backup: {} {} restored ways to play", if keep { "kept" } else { "dropped" }, ways.len()));
+    Ok(())
 }

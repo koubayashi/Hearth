@@ -689,6 +689,7 @@ fn main() {
         .manage(tracking::Tracking::default())
         .manage(autobackup::AutoBackup::default())
         .manage(updates::Updates::default())
+        .manage(backup::PendingWays::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -811,6 +812,7 @@ fn main() {
             play_sessions,
             backup::backup_export,
             backup::backup_restore,
+            backup::restore_ways,
             autobackup::auto_backup_status,
             updates::update_ready,
             updates::install_update,
