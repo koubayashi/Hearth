@@ -7,3 +7,22 @@ app/src-tauri/gen/
 .impeccable/review/
 .impeccable/build/
 .impeccable/questions/
+*.tsbuildinfo
+
+# Secrets: the updater signing key lives in ~/.tauri, sign-ins in Credential
+# Manager. These catch a copy that wanders into the repo.
+.env
+.env.*
+*.key
+*.key.pub
+*.pem
+*.pfx
+*.p12
+.claude/settings.local.json
+
+# Library data and backups (playtime, folders, account names)
+*.db
+*.db-wal
+*.db-shm
+*.db.incoming
+*.hearthbackup
