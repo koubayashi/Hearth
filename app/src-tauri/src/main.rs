@@ -37,7 +37,15 @@ pub(crate) struct AppState {
     pub(crate) sgdb: Arc<hub_providers::sgdb::SteamGridDb>,
     pub(crate) saves: hub_providers::saves::Saves,
     providers: Vec<Arc<dyn LibraryProvider>>,
-    syncing: Mutex<bool>,
+    syncing: Mutex<SyncState>,
+}
+
+/// Whether a library sync is running, and whether another was asked for
+/// meanwhile (a renewed sign-in mid-sync), so that one runs after it.
+#[derive(Default)]
+struct SyncState {
+    busy: bool,
+    again: bool,
 }
 
 pub(crate) type CmdResult<T> = Result<T, String>;
@@ -537,13 +545,23 @@ async fn refresh_steam_art(app: &AppHandle) {
 pub(crate) fn sync_all(app: AppHandle) {
     {
         let state = app.state::<AppState>();
-        let mut busy = lock(&state.syncing);
-        if *busy {
+        let mut sync = lock(&state.syncing);
+        if sync.busy {
+            sync.again = true;
             return;
         }
-        *busy = true;
+        sync.busy = true;
+    }
+    /// Clears `busy` however the sync ends, even by a panic, which would
+    /// otherwise leave the library never syncing again until a restart.
+    struct Busy(AppHandle);
+    impl Drop for Busy {
+        fn drop(&mut self) {
+            lock(&self.0.state::<AppState>().syncing).busy = false;
+        }
     }
     tauri::async_runtime::spawn(async move {
+        let busy = Busy(app.clone());
         let state = app.state::<AppState>();
         let _ = app.emit("sync-started", ());
         for provider in state.providers.clone() {
@@ -603,7 +621,16 @@ pub(crate) fn sync_all(app: AppHandle) {
                 }
             }
         }
-        *lock(&state.syncing) = false;
+        // Cleared here by hand (with `again`); the guard must not clear it
+        // again later, when a new sync may have set it.
+        let again = std::mem::take(&mut *lock(&state.syncing)).again;
+        std::mem::forget(busy);
+        if again {
+            // The follow-up sync does the artwork and the rest; doing them
+            // here too would run two of each side by side.
+            sync_all(app.clone());
+            return;
+        }
         tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
         refresh_art(&app).await;
@@ -675,7 +702,7 @@ fn main() {
                 steam,
                 metadata: Default::default(),
                 epic,
-                syncing: Mutex::new(false),
+                syncing: Default::default(),
             });
 
             if let Some(window) = app.get_webview_window("main") {
