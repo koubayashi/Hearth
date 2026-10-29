@@ -31,8 +31,11 @@ export const Poster = forwardRef<
     onBack: () => void;
     /** Open a picker from outside (the right-click menu). */
     request?: { action: PanelAction; nonce: number } | null;
+    /** Just the cover, no wide art or halo: the hidden view, which must not
+     *  look like the library. */
+    plain?: boolean;
   }
->(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack, request }, primaryRef) {
+>(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack, request, plain = false }, primaryRef) {
   // Where the "More options" button sits while its menu is open.
   const [menu, setMenu] = useState<DOMRect | null>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -70,7 +73,7 @@ export const Poster = forwardRef<
 
   return (
     <aside
-      className={`poster${game.hero ? " has-hero" : ""}${blurPosterArt ? " soft-art" : ""}`}
+      className={`poster${game.hero && !plain ? " has-hero" : ""}${blurPosterArt ? " soft-art" : ""}`}
       aria-label={`${game.title} details`}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
@@ -106,7 +109,7 @@ export const Poster = forwardRef<
             wherever the cover sits, instead of a haze over the whole panel. */}
         {/* The wide hero art fills whatever height is spare above the cover;
             without one, a soft halo of the cover's colours instead. */}
-        {game.hero ? (
+        {plain ? null : game.hero ? (
           <div className="poster-hero" aria-hidden>
             <Art src={game.hero} title="" />
           </div>

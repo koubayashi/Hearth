@@ -8,6 +8,7 @@ import { Art } from "../components/Art";
 import { CoverGrid, isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
 import { Icon } from "../components/Icon";
+import { HiddenBar } from "../components/HiddenBar";
 import { Poster } from "../components/Poster";
 import { StoreIcon } from "../components/StoreIcon";
 
@@ -29,6 +30,7 @@ export interface LibraryScope {
 
 export function Library({
   hiddenView,
+  onLeaveHidden,
   scope,
   version,
   focused,
@@ -42,6 +44,8 @@ export function Library({
   /** Scroll this game into view once the library has loaded (opened from Stats). */
   revealId?: number | null;
   hiddenView: boolean;
+  /** Leaves the hidden view. */
+  onLeaveHidden?: () => void;
   scope?: LibraryScope;
   /** Bumped by the parent whenever library data changes. */
   version: number;
@@ -219,6 +223,7 @@ export function Library({
         onToggleFavorite={onToggleFavorite}
         onBack={backToFocused}
         request={panel}
+        plain={hiddenView}
       />
       )}
       {menu && (
@@ -287,6 +292,7 @@ export function Library({
       </div>
 
     <div className="scroll" ref={scrollRef}>
+      {hiddenView && onLeaveHidden && <HiddenBar count={games?.length ?? null} onBack={onLeaveHidden} />}
       {scope?.header}
       <div className="page">
         <div>

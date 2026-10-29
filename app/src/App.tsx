@@ -50,6 +50,20 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [prefs.consoleMode]);
+  // Escape leaves the hidden view, once nothing nearer used it: the game
+  // panel, a menu or a dialog, or a search box clearing itself.
+  useEffect(() => {
+    if (route !== "hidden") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if ((e.target as HTMLElement | null)?.closest("input, textarea")) return;
+      if (document.querySelector('[role="menu"], [role="dialog"]')) return;
+      setRoute("library");
+      setFocused(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [route]);
   const [counts, setCounts] = useState<Partial<Record<Route, number>>>({});
 
   const refresh = () => setVersion((v) => v + 1);
@@ -108,8 +122,9 @@ export function App() {
   }, []);
 
   const libraryLike = route === "library" || route === "hidden";
+  const leaveHidden = () => (setRoute("library"), setFocused(null));
   // Pages that show the selected game's art behind them.
-  const showsArt = libraryLike || route === "collections";
+  const showsArt = route === "library" || route === "collections";
 
   if (prefs.consoleMode) {
     return (
@@ -142,6 +157,7 @@ export function App() {
             <ListView
               key={route}
               hiddenView={route === "hidden"}
+              onLeaveHidden={leaveHidden}
               version={version}
               focused={focused}
               playing={playing}
@@ -155,6 +171,7 @@ export function App() {
             <Library
               key={route}
               hiddenView={route === "hidden"}
+              onLeaveHidden={leaveHidden}
               revealId={route === "library" ? revealId : null}
               version={version}
               focused={focused}
@@ -194,7 +211,9 @@ export function App() {
               />
             </div>
           )}
-          {route === "settings" && <Settings onPeek={setPeek} />}
+          {route === "settings" && (
+            <Settings onPeek={setPeek} hiddenCount={counts.hidden ?? 0} onShowHidden={() => (setRoute("hidden"), setFocused(null), setPeek(false))} />
+          )}
         </main>
       </div>
       <Toast toast={toast} onDone={clearToast} />

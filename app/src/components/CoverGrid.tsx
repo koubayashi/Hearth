@@ -5,6 +5,7 @@ import { STORE_LABEL } from "../lib/types";
 import { usePrefs } from "../lib/prefs";
 import { formatGamePlaytime } from "../lib/format";
 import { Art } from "./Art";
+import { Icon } from "./Icon";
 import { StoreBadges } from "./StoreIcon";
 
 const GAP = 22;
@@ -107,7 +108,7 @@ export function CoverGrid({
               data-nav
               data-game={g.id}
               className={`cover ${g.installed ? "" : "out"} ${g.id === focusedId ? "lit" : ""}`}
-              aria-label={`${g.title}, ${g.entries.map((e) => STORE_LABEL[e.store]).join(" and ")}${g.installed ? "" : ", not installed"}`}
+              aria-label={`${g.title}, ${g.entries.map((e) => STORE_LABEL[e.store]).join(" and ")}${g.installed ? "" : ", not installed"}${g.hidden ? ", hidden" : ""}`}
               onFocus={() => onFocusGame(g)}
               onClick={() => onFocusGame(g)}
               onDoubleClick={() => onActivate(g)}
@@ -130,6 +131,11 @@ export function CoverGrid({
               <span className="cover-art">
                 <Art src={g.cover} title={g.title} />
                 {showStoreIcons && <StoreBadges stores={g.entries.map((e) => e.store)} />}
+                {g.hidden && (
+                  <span className="hidden-mark" title="Hidden">
+                    <Icon name="hidden" size={13} />
+                  </span>
+                )}
               </span>
               <span className="cover-title">{g.title}</span>
               <span className="cover-meta">

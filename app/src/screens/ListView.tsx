@@ -9,6 +9,7 @@ import { Art } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
 import { Icon } from "../components/Icon";
+import { HiddenBar } from "../components/HiddenBar";
 import { useGameInfo } from "../lib/gameInfo";
 import { StoreIcon } from "../components/StoreIcon";
 import { ArtworkPicker } from "../components/ArtworkPicker";
@@ -27,6 +28,7 @@ const GROUP_H = 31;
  */
 export function ListView({
   hiddenView,
+  onLeaveHidden,
   version,
   focused,
   playing,
@@ -36,6 +38,8 @@ export function ListView({
   onToggleFavorite,
 }: {
   hiddenView: boolean;
+  /** Leaves the hidden view. */
+  onLeaveHidden?: () => void;
   version: number;
   focused: Game | null;
   playing: NowPlaying[];
@@ -71,7 +75,7 @@ export function ListView({
 
   const groups = useMemo<Group[]>(() => {
     const list = games ?? [];
-    if (hiddenView) return [{ id: "hidden", title: "Hidden", games: list }];
+    if (hiddenView) return [{ id: "hidden", title: "Hidden games", games: list }];
     return [
       { id: "installed", title: "Installed", games: list.filter((g) => g.installed) },
       { id: "offline", title: "Drive not connected", games: list.filter((g) => !g.installed && g.offline_drive) },
@@ -139,7 +143,7 @@ export function ListView({
   const count = games?.length ?? 0;
 
   return (
-    <div className="listview">
+    <div className={`listview${hiddenView ? " hidden-view" : ""}`}>
       {menu && (
         <GameMenu
           game={menu.game}
@@ -167,6 +171,7 @@ export function ListView({
       )}
 
       <aside className="lv-side glass" aria-label="Games">
+        {hiddenView && onLeaveHidden && <HiddenBar count={games?.length ?? null} onBack={onLeaveHidden} />}
         <div className="lv-tools">
           <label className={`search ${search ? "has-value" : ""}`} title="Search">
             <Icon name="search" size={16} />
@@ -259,6 +264,8 @@ export function ListView({
                   <span className="lv-name">{g.title}</span>
                   {isPlaying ? (
                     <span className="lv-live" title="Playing now" />
+                  ) : g.hidden ? (
+                    <Icon name="hidden" size={13} className="lv-hidden" />
                   ) : (
                     g.favorite && <Icon name="star" size={13} className="lv-fav" />
                   )}
@@ -272,6 +279,7 @@ export function ListView({
       {focused ? (
         <Detail
           game={focused}
+          plain={hiddenView}
           nonce={nonce}
           playRef={playRef}
           playingSince={playing.find((p) => p.game_id === focused.id)?.started_at ?? null}
@@ -292,6 +300,7 @@ export function ListView({
 function Detail({
   game,
   nonce,
+  plain,
   playRef,
   playingSince,
   onPrimary,
@@ -304,6 +313,8 @@ function Detail({
   onWays: (anchor: DOMRect) => void;
   game: Game;
   nonce: number;
+  /** No wide art: the hidden view. */
+  plain: boolean;
   playRef: React.RefObject<HTMLButtonElement | null>;
   playingSince: number | null;
   onPrimary: (g: Game, via?: Via) => void;
@@ -332,8 +343,8 @@ function Detail({
       }}
     >
       {/* Keyed, so the art fades in for each game; the rest stays put and keeps focus. */}
-      <div className={`lv-hero${game.hero ? "" : " no-art"}`} key={game.id}>
-        {game.hero ? <Art src={game.hero} title="" /> : <div className="lv-hero-blank" />}
+      <div className={`lv-hero${game.hero && !plain ? "" : " no-art"}`} key={game.id}>
+        {game.hero && !plain ? <Art src={game.hero} title="" /> : <div className="lv-hero-blank" />}
         <div className="lv-hero-title">
           {game.logo && !logoFailed ? (
             <img src={game.logo} alt={game.title} draggable={false} onError={() => setLogoFailed(true)} />

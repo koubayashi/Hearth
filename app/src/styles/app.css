@@ -855,3 +855,70 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   overflow-wrap: anywhere;
 }
 .crash-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+
+/* Hidden view: a different room from the library. A banner says where you
+   are and how to leave, every game carries the eye-off mark, the rail shows
+   "Hidden games" under Library, and no game art glows behind it. */
+.hidden-bar {
+  display: flex; align-items: center; gap: var(--space-4); margin: var(--space-2) 0 var(--space-5);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-panel);
+  background: var(--glass-strong); border: 1px dashed var(--line-strong);
+}
+.hidden-bar-icon {
+  flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%;
+  background: var(--line); color: var(--ink);
+}
+.hidden-bar .text { flex: 1; min-width: 0; }
+.hidden-bar .text b { display: flex; align-items: baseline; gap: var(--space-2); font: 600 var(--text-lg) var(--font-display); }
+.hidden-bar .text b small { font: 500 var(--text-sm) var(--font-text); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.hidden-bar .text span { color: var(--ink-2); font-size: var(--text-sm); }
+.hidden-bar .btn { flex: none; padding-left: 8px; }
+/* In the list layout it heads the narrow sidebar: stacked, ruled off from the search. */
+.lv-side .hidden-bar {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2) var(--space-3);
+  margin: 6px; padding: var(--space-3);
+}
+.lv-side .hidden-bar .btn { grid-column: 1 / -1; justify-self: start; }
+
+.hidden-mark {
+  position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--glass-strong); color: var(--ink); box-shadow: 0 0 0 1px var(--line);
+}
+.lv-hidden { flex: none; color: var(--ink-3); }
+
+/* Rail: the hidden view's place under Library. It unfolds from Library and
+   folds back into it (the same path both ways), joined to it by a tree line,
+   with the accent edge that marks "you are here" elsewhere in Hearth. */
+.nav[data-parent] { color: var(--ink); }
+.nav[data-parent]:not(:hover) { background: none; }
+.nav-sub-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-med) var(--ease-out); }
+.nav-sub-wrap[data-open] { grid-template-rows: 1fr; }
+.nav-sub-clip { min-height: 0; overflow: hidden; padding-top: 2px; }
+.nav-sub {
+  position: relative; margin-left: 34px; padding: 7px 6px 7px 10px; gap: 9px; font-size: var(--text-sm); cursor: default;
+  opacity: 0; transform: translateY(-8px);
+  transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out), background var(--dur-fast);
+}
+.nav-sub-wrap[data-open] .nav-sub { opacity: 1; transform: none; }
+.nav-sub::before {
+  content: ""; position: absolute; left: -12px; top: -6px; width: 9px; height: calc(50% + 6px);
+  border-left: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); border-bottom-left-radius: 6px;
+}
+.nav.nav-sub[aria-current="page"] {
+  color: var(--ink); background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 2px 0 var(--accent);
+}
+.nav-sub small { margin-left: auto; }
+.nav-sub-close {
+  all: unset; flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-left: 2px;
+  border-radius: 50%; color: var(--ink-2); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast);
+}
+.nav-sub-close:hover { background: var(--line-strong); color: var(--ink); }
+.nav-sub-close:active { background: var(--line-strong); transform: scale(0.92); }
+.nav-sub-close:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+/* Hidden view art: muted to grey, the look of things put away. The game you
+   pick or point at keeps its colour, so the room never reads as disabled.
+   No wide art or halo here at all (the panels leave them out): art behind
+   the games is what makes a page read as the library. */
+.hidden-view .cover:not(.lit):not(:hover) .cover-art img { filter: grayscale(1); opacity: 0.8; }
+.hidden-view .lv-row:not([aria-current]):not(:hover) .lv-thumb { filter: grayscale(1); }

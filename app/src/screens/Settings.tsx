@@ -861,7 +861,15 @@ function Startup() {
   );
 }
 
-export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void }) {
+export function Settings({
+  onPeek = () => {},
+  hiddenCount = 0,
+  onShowHidden = () => {},
+}: {
+  onPeek?: (on: boolean) => void;
+  hiddenCount?: number;
+  onShowHidden?: () => void;
+}) {
   const p = usePrefs();
   const accounts = useAccounts();
   return (
@@ -1043,6 +1051,19 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
             />
           </div>
           <SgdbRow accounts={accounts} />
+          <div className="setting">
+            <div className="text">
+              <b>Hidden games</b>
+              <span>
+                {hiddenCount === 0
+                  ? "Nothing hidden. Hide a game from its menu to keep it out of the library."
+                  : `${hiddenCount} ${hiddenCount === 1 ? "game" : "games"} kept out of the library. Bring one back from its menu.`}
+              </span>
+            </div>
+            <button className="btn" data-nav disabled={hiddenCount === 0} onClick={onShowHidden}>
+              Show
+            </button>
+          </div>
         </div>
         </section>
 
