@@ -15,6 +15,9 @@ pub use poll::ProcessScanner;
 pub const GRACE_SECS: i64 = 15;
 /// Sessions shorter than this are launch hiccups, not play.
 pub const MIN_SESSION_SECS: i64 = 30;
+/// Longer than this between two looks (polls are every 5s) means the PC was
+/// asleep; the gap isn't counted.
+pub const MAX_GAP_SECS: i64 = 120;
 
 /// Helper processes that live in game folders but don't mean you're playing.
 const IGNORED_EXES: &[&str] = &[
@@ -99,6 +102,13 @@ impl Tracker {
         seen.dedup();
 
         let mut events = Vec::new();
+        // A long silence means the PC slept (or Hearth stalled) with the game
+        // open: that time wasn't play. The session ends when it was last seen,
+        // and one still running starts a new session now.
+        let stale: Vec<i64> = self.active.iter().filter(|(_, a)| now - a.last_seen > MAX_GAP_SECS).map(|(id, _)| *id).collect();
+        for id in stale {
+            events.extend(self.end(id));
+        }
         for id in &seen {
             match self.active.get_mut(id) {
                 Some(a) => a.last_seen = now,
@@ -184,12 +194,31 @@ mod tests {
         assert_eq!(t.observe([launcher.as_path()], 1000), [Event::Started { game_id: 2, at: 1000 }]);
         // Launcher exits, game starts 10s later: still the same session.
         assert!(t.observe([], 1005).is_empty());
-        assert!(t.observe([game.as_path()], 1010).is_empty());
-        assert!(t.observe([game.as_path()], 4600).is_empty());
+        for now in (1010..=4600).step_by(5) {
+            assert!(t.observe([game.as_path()], now).is_empty());
+        }
         assert!(t.observe([], 4605).is_empty());
         assert_eq!(
             t.observe([], 4620),
             [Event::Ended(Session { game_id: 2, started_at: 1000, ended_at: 4600 })]
+        );
+    }
+
+    #[test]
+    fn sleep_with_the_game_open_is_not_playtime() {
+        let mut t = tracker();
+        let game = p(r"D:\Games\Epic Games\RedDeadRedemption2\RDR2.exe");
+        for now in (1000..=1600).step_by(5) {
+            t.observe([game.as_path()], now);
+        }
+        // The PC slept for 8 hours; the game is still open when it wakes.
+        let woke = 1600 + 8 * 3600;
+        assert_eq!(
+            t.observe([game.as_path()], woke),
+            [
+                Event::Ended(Session { game_id: 2, started_at: 1000, ended_at: 1600 }),
+                Event::Started { game_id: 2, at: woke },
+            ]
         );
     }
 
@@ -200,8 +229,9 @@ mod tests {
         t.observe([hitman.as_path()], 0);
         assert!(t.observe([], 20).is_empty(), "a 0s blip is not a session");
 
-        t.observe([hitman.as_path()], 100);
-        t.observe([hitman.as_path()], 700);
+        for now in (100..=700).step_by(5) {
+            t.observe([hitman.as_path()], now);
+        }
         assert_eq!(t.flush(), [Event::Ended(Session { game_id: 1, started_at: 100, ended_at: 700 })]);
         assert!(t.running().is_empty());
     }

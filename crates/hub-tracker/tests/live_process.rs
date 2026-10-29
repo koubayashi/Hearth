@@ -22,15 +22,15 @@ fn detects_a_game_started_from_its_folder() {
 
     let started = tracker.observe(scanner.exes().iter().map(|p| p.as_path()), 1_000);
     assert_eq!(started, [Event::Started { game_id: 42, at: 1_000 }]);
-    assert!(tracker.observe(scanner.exes().iter().map(|p| p.as_path()), 1_300).is_empty());
+    assert!(tracker.observe(scanner.exes().iter().map(|p| p.as_path()), 1_100).is_empty());
 
     child.kill().unwrap();
     child.wait().unwrap();
-    let ended = tracker.observe(scanner.exes().iter().map(|p| p.as_path()), 1_400);
+    let ended = tracker.observe(scanner.exes().iter().map(|p| p.as_path()), 1_200);
     std::fs::remove_dir_all(&dir).ok();
 
     match ended.as_slice() {
-        [Event::Ended(s)] => assert_eq!((s.game_id, s.started_at, s.ended_at), (42, 1_000, 1_300)),
+        [Event::Ended(s)] => assert_eq!((s.game_id, s.started_at, s.ended_at), (42, 1_000, 1_100)),
         other => panic!("expected one ended session, got {other:?}"),
     }
 }
