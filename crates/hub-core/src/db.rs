@@ -1209,6 +1209,32 @@ mod tests {
     }
 
     #[test]
+    fn a_deleted_folder_game_keeps_its_place_and_playtime() {
+        let mut db = Db::open_in_memory().unwrap();
+        let exe = "D:/Games/BLACKWOOD/Blackwood.exe";
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, exe, "Blackwood", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        db.record_session(id, 1000, 4600, SessionSource::Tracker).unwrap();
+
+        // The folder is deleted: the next scan no longer finds it.
+        db.sync_store(StoreId::Manual, &[], 0).unwrap();
+        let g = db.game(id).unwrap().unwrap();
+        assert!(!g.installed);
+        assert_eq!(g.playtime_secs, 3600);
+        assert_eq!(g.last_played, Some(4600));
+        assert_eq!(db.list_games(&LibraryQuery::default()).unwrap().len(), 1, "still in the library");
+        assert_eq!(db.sessions().unwrap().len(), 1, "still in stats");
+
+        // Installed again somewhere else: the same game, with its playtime.
+        let moved = "E:/Games/Blackwood/Blackwood.exe";
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, moved, "Blackwood", true)], 0).unwrap();
+        let games = db.list_games(&LibraryQuery::default()).unwrap();
+        assert_eq!(games.len(), 1);
+        assert!(games[0].installed);
+        assert_eq!(games[0].playtime_secs, 3600);
+    }
+
+    #[test]
     fn running_sessions_survive_a_restart() {
         let mut db = Db::open_in_memory().unwrap();
         db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "x", "Blackwood", true)], 0).unwrap();

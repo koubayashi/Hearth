@@ -134,6 +134,8 @@ fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdRe
         .entries
         .iter()
         .find(|e| e.installed && !e.offline)
+        // Nothing installed: install from a store, not from a deleted folder.
+        .or_else(|| game.entries.iter().find(|e| e.store != hub_core::StoreId::Manual))
         .or(game.entries.first())
         .ok_or("This game has no store to launch it from")?;
     let provider = state
@@ -143,6 +145,11 @@ fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdRe
         .ok_or_else(|| format!("{} isn't supported yet", entry.store.as_str()))?;
     let action = if entry.installed && !entry.offline {
         provider.launch(&entry.store_game_id)
+    } else if entry.store == hub_core::StoreId::Manual {
+        return Err(format!(
+            "{}'s folder is gone. Put it back in a game folder Hearth watches to play it.",
+            game.title
+        ));
     } else {
         provider
             .install(&entry.store_game_id)

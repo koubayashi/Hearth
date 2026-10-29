@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import type { Collection, Game, GameStatus, Via } from "../lib/types";
-import { defaultWay, storeName } from "../lib/ways";
-import { STATUSES, STORE_LABEL } from "../lib/types";
+import { defaultWay, folderGone, storeName } from "../lib/ways";
+import { STATUSES } from "../lib/types";
 import { Icon, type IconName } from "./Icon";
 
 export type PanelAction = "artwork" | "match" | "ways";
@@ -69,7 +69,7 @@ export function GameMenu({
     };
   }, [onClose]);
 
-  const store = STORE_LABEL[game.entries[0]?.store ?? "manual"];
+  const store = storeName(game);
   const run = (f: () => void) => () => {
     onClose();
     f();
@@ -134,6 +134,11 @@ export function GameMenu({
             <button role="menuitem" disabled>
               <Icon name="folder" />
               Drive {game.offline_drive} not connected
+            </button>
+          ) : folderGone(game) ? (
+            <button role="menuitem" disabled>
+              <Icon name="folder" />
+              Not installed
             </button>
           ) : (
             item(
@@ -205,10 +210,16 @@ function PlayView({
       <div className="menu-label">Play button uses the ticked one</div>
       {choice(
         "store",
-        game.offline_drive ? `${store}: drive ${game.offline_drive} not connected` : game.installed ? `Play with ${store}` : `Install from ${store}`,
+        game.offline_drive
+          ? `${store}: drive ${game.offline_drive} not connected`
+          : game.installed
+            ? `Play with ${store}`
+            : storeName(game) === "Manual"
+              ? "Game folder: not installed"
+              : `Install from ${store}`,
         fallback === null,
         { kind: "store" },
-        !!game.offline_drive,
+        !!game.offline_drive || (!game.installed && storeName(game) === "Manual"),
       )}
       {game.launch_options.map((o) => choice(String(o.id), `Play with ${o.name}`, o.is_default, { kind: "option", id: o.id }))}
       <hr />

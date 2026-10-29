@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { Collection, Game, NowPlaying, Via } from "../lib/types";
-import { defaultWay } from "../lib/ways";
+import { defaultWay, folderGone, FOLDER_GONE_HINT } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatLastPlayed, formatPlaytime, inSentence } from "../lib/format";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
@@ -328,7 +328,7 @@ export function Console({
                         document.querySelector<HTMLElement>(".cx-tab[aria-current]")?.focus();
                       } else if (e.key === "Enter") {
                         e.preventDefault();
-                        if (!g.offline_drive) onPrimary(g);
+                        if (!g.offline_drive && !folderGone(g)) onPrimary(g);
                       } else if (isMenuKey(e)) {
                         e.preventDefault();
                         setMenu(moreRef.current?.getBoundingClientRect() ?? e.currentTarget.getBoundingClientRect());
@@ -380,12 +380,15 @@ export function Console({
                   ref={playRef}
                   className="cx-play"
                   data-nav
-                  disabled={!!game.offline_drive}
+                  disabled={!!game.offline_drive || folderGone(game)}
+                  title={folderGone(game) ? FOLDER_GONE_HINT : undefined}
                   onClick={() => onPrimary(game)}
                 >
-                  <Icon name={game.offline_drive ? "folder" : game.installed || defaultWay(game) ? "play" : "download"} size={22} />
+                  <Icon name={game.offline_drive || folderGone(game) ? "folder" : game.installed || defaultWay(game) ? "play" : "download"} size={22} />
                   {game.offline_drive ? (
                     "Drive not connected"
+                  ) : folderGone(game) ? (
+                    "Not installed"
                   ) : defaultWay(game) ? (
                     <>
                       Play <small className="via">{defaultWay(game)!.name}</small>

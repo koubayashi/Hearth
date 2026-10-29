@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { Game, Via } from "../lib/types";
-import { defaultWay } from "../lib/ways";
+import { defaultWay, folderGone, FOLDER_GONE_HINT, storeName } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatPlaytime, releaseYear } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
@@ -63,7 +63,7 @@ export const Poster = forwardRef<
   // Only while the library loads: the frame holds its place, quietly.
   if (!game) return <aside className="poster" aria-hidden />;
 
-  const installStore = STORE_LABEL[game.entries[0]?.store ?? "manual"];
+  const installStore = storeName(game);
   const year = releaseYear(details?.release_date ?? null);
   const studio = details?.developers[0];
   const byline = [year, studio].filter(Boolean).join(" · ");
@@ -229,6 +229,11 @@ export const Poster = forwardRef<
             >
               <Icon name="folder" size={16} />
               Drive not connected
+            </button>
+          ) : folderGone(game) ? (
+            <button ref={primaryRef} className="primary" data-nav disabled title={FOLDER_GONE_HINT}>
+              <Icon name="folder" size={16} />
+              Not installed
             </button>
           ) : (
             <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>

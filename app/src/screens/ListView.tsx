@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { api } from "../lib/api";
 import type { Game, NowPlaying, Via } from "../lib/types";
-import { defaultWay } from "../lib/ways";
+import { defaultWay, folderGone, FOLDER_GONE_HINT } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatPlaytime } from "../lib/format";
 import { Art } from "../components/Art";
@@ -348,6 +348,11 @@ function Detail({
           <button ref={playRef} className="lv-play" data-nav disabled title={`Connect drive ${game.offline_drive} to play.`}>
             <Icon name="folder" size={18} />
             Drive not connected
+          </button>
+        ) : folderGone(game) ? (
+          <button ref={playRef} className="lv-play" data-nav disabled title={FOLDER_GONE_HINT}>
+            <Icon name="folder" size={18} />
+            Not installed
           </button>
         ) : (
           <button ref={playRef} className={`lv-play${game.installed ? "" : " install"}`} data-nav onClick={() => onPrimary(game)}>

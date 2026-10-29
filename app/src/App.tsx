@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { preloadGameInfo } from "./lib/gameInfo";
 import { api } from "./lib/api";
 import type { Game, GameStatus, NowPlaying, Via } from "./lib/types";
-import { chosenWay } from "./lib/ways";
-import { STORE_LABEL } from "./lib/types";
+import { chosenWay, storeName } from "./lib/ways";
 import { Rail, type Route } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
 import { Toast, type ToastMsg } from "./components/Toast";
@@ -77,7 +76,7 @@ export function App() {
     refresh();
   };
   const primary = async (g: Game, via?: Via) => {
-    const store = STORE_LABEL[g.entries[0]?.store ?? "manual"];
+    const store = storeName(g);
     const way = chosenWay(g, via);
     if (api.demo) {
       say(way ? `Demo library: would start ${g.title} with ${way.name}` : `Demo library: ${g.installed ? "launching" : "installing"} works in the desktop app`);
