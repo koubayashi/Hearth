@@ -14,6 +14,8 @@ use std::sync::Mutex;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
+use crate::Locked;
+
 const CLIENT_ID: &str = "46899977096215655";
 const CLIENT_SECRET: &str = "9d85c43b1482497dbbce61f6e4aa173a433796eeae2ca8c5f6129f2dc4de46d9";
 /// Where GOG sends the browser after sign-in, with `&code=…`.
@@ -160,25 +162,25 @@ impl GogWeb {
     }
 
     pub fn signed_in(&self) -> bool {
-        self.session.lock().unwrap().is_some()
+        self.session.locked().is_some()
     }
 
     pub fn username(&self) -> Option<String> {
-        self.session.lock().unwrap().as_ref().and_then(|s| s.username.clone())
+        self.session.locked().as_ref().and_then(|s| s.username.clone())
     }
 
     pub fn forget(&self) {
-        *self.session.lock().unwrap() = None;
+        *self.session.locked() = None;
         (self.on_session)(None);
     }
 
     fn store(&self, s: Session) {
         (self.on_session)(Some(&s));
-        *self.session.lock().unwrap() = Some(s);
+        *self.session.locked() = Some(s);
     }
 
     pub fn product(&self, id: &str) -> Option<Product> {
-        self.catalog.lock().unwrap().get(id).cloned()
+        self.catalog.locked().get(id).cloned()
     }
 
     /// Trades the one-time code for a session, then reads the username.
@@ -225,19 +227,33 @@ impl GogWeb {
     /// renewal means the sign-in is gone (SESSION_EXPIRED); anything else
     /// (offline) keeps it for next time.
     async fn access(&self) -> anyhow::Result<Session> {
-        let Some(s) = self.session.lock().unwrap().clone() else { bail!("Not signed in to GOG") };
+        let Some(s) = self.session.locked().clone() else { bail!("Not signed in to GOG") };
         if s.expires_at_unix - now() > 120 {
             return Ok(s);
         }
         let _turn = self.renewing.lock().await;
-        if let Some(c) = self.session.lock().unwrap().clone() {
-            if c.refresh_token != s.refresh_token {
-                return Ok(c);
-            }
+        match self.session.locked().clone() {
+            Some(c) if c.refresh_token != s.refresh_token => return Ok(c),
+            None => bail!("Not signed in to GOG"),
+            _ => {}
         }
-        let fresh = self.token(&format!("grant_type=refresh_token&refresh_token={}", encode(&s.refresh_token)), s.username).await?;
-        self.store(fresh.clone());
+        let fresh = self.token(&format!("grant_type=refresh_token&refresh_token={}", encode(&s.refresh_token)), s.username.clone()).await?;
+        if !self.replace(&s.refresh_token, &fresh) {
+            bail!("Not signed in to GOG");
+        }
         Ok(fresh)
+    }
+
+    /// Saves a renewed session, unless the user signed out (or signed in
+    /// again) while it was being fetched: a sign-out must stay a sign-out.
+    fn replace(&self, stale_refresh: &str, fresh: &Session) -> bool {
+        let mut current = self.session.locked();
+        if current.as_ref().is_none_or(|c| c.refresh_token != stale_refresh) {
+            return false;
+        }
+        (self.on_session)(Some(fresh));
+        *current = Some(fresh.clone());
+        true
     }
 
     pub async fn keep_alive(&self) -> anyhow::Result<()> {
@@ -266,14 +282,14 @@ impl GogWeb {
     /// until the next sync rather than failing the sync.
     pub async fn describe(&self, ids: &[String]) {
         let unknown: Vec<String> = {
-            let c = self.catalog.lock().unwrap();
+            let c = self.catalog.locked();
             ids.iter().filter(|id| !c.get(*id).is_some_and(|p| p.described)).cloned().collect()
         };
         for batch in unknown.chunks(50) {
             let url = format!("https://api.gog.com/products?ids={}&expand=description", batch.join(","));
             let Ok(res) = self.http.get(url).send().await else { continue };
             let Ok(products) = res.json::<Vec<ApiProduct>>().await else { continue };
-            let mut c = self.catalog.lock().unwrap();
+            let mut c = self.catalog.locked();
             for p in products {
                 let description = p
                     .description
@@ -288,7 +304,7 @@ impl GogWeb {
             }
         }
         let need_art: Vec<String> = {
-            let c = self.catalog.lock().unwrap();
+            let c = self.catalog.locked();
             ids.iter().filter(|id| c.get(*id).is_some_and(|p| p.is_game && !p.art_checked)).cloned().collect()
         };
         for id in need_art {
@@ -298,7 +314,7 @@ impl GogWeb {
                 Ok(_) => None,
                 Err(_) => continue,
             };
-            let mut c = self.catalog.lock().unwrap();
+            let mut c = self.catalog.locked();
             if let Some(p) = c.get_mut(&id) {
                 if let Some(g) = game {
                     p.cover = image(g.vertical_cover);
@@ -308,7 +324,7 @@ impl GogWeb {
                 p.art_checked = true;
             }
         }
-        let json = serde_json::to_string(&*self.catalog.lock().unwrap());
+        let json = serde_json::to_string(&*self.catalog.locked());
         if let Ok(json) = json {
             let _ = std::fs::write(&self.catalog_file, json);
         }

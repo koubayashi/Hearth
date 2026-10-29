@@ -15,7 +15,7 @@ use hub_core::{GameEntry, StoreId};
 use hub_launch::LaunchAction;
 use serde::{Deserialize, Serialize};
 
-use crate::{Artwork, LibraryProvider};
+use crate::{Artwork, LibraryProvider, Locked};
 
 const CLIENT_ID: &str = "34a02cf8f4414e29b15921876da36f9a";
 /// base64("34a02cf8f4414e29b15921876da36f9a:daafbccc737745039dffe53d94fc76cf"),
@@ -168,12 +168,12 @@ impl Epic {
     }
 
     pub fn account_name(&self) -> Option<String> {
-        self.session.lock().unwrap().as_ref().map(|s| s.display_name.clone().unwrap_or_else(|| s.account_id.clone()))
+        self.session.locked().as_ref().map(|s| s.display_name.clone().unwrap_or_else(|| s.account_id.clone()))
     }
 
     /// Forgets the session locally and revokes it on Epic's side.
     pub async fn sign_out(&self) {
-        let old = self.session.lock().unwrap().take();
+        let old = self.session.locked().take();
         (self.on_session)(None);
         if let Some(s) = old {
             let url = format!(
@@ -190,7 +190,7 @@ impl Epic {
     }
 
     fn drop_session(&self) {
-        *self.session.lock().unwrap() = None;
+        *self.session.locked() = None;
         (self.on_session)(None);
     }
 
@@ -230,14 +230,14 @@ impl Epic {
 
     fn store(&self, s: Session) {
         (self.on_session)(Some(&s));
-        *self.session.lock().unwrap() = Some(s);
+        *self.session.locked() = Some(s);
     }
 
     /// Renews the session ahead of time so the refresh token never ages out
     /// while Hearth runs. Returns
     /// when the refresh token now expires, or None if nothing was due.
     pub async fn keep_alive(&self) -> anyhow::Result<Option<i64>> {
-        let Some(s) = self.session.lock().unwrap().clone() else { return Ok(None) };
+        let Some(s) = self.session.locked().clone() else { return Ok(None) };
         let soon = now() + 45 * 60;
         let refresh_due = s.refresh_expires_at_unix != 0 && s.refresh_expires_at_unix < now() + 3 * 3600;
         if s.expires_at_unix > soon && !refresh_due {
@@ -252,20 +252,26 @@ impl Epic {
     /// spending the (now replaced) token again.
     async fn renew(&self, stale: &Session) -> anyhow::Result<Session> {
         let _turn = self.renewing.lock().await;
-        let current = self.session.lock().unwrap().clone();
+        let current = self.session.locked().clone();
         match current {
             Some(c) if c.refresh_token != stale.refresh_token => return Ok(c),
             None => bail!("Not signed in to Epic"),
             _ => {}
         }
         let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &stale.refresh_token)]).await?;
-        self.store(fresh.clone());
+        // Signed out (or in again) while Epic answered: a sign-out must stay one.
+        let mut current = self.session.locked();
+        if current.as_ref().is_none_or(|c| c.refresh_token != stale.refresh_token) {
+            bail!("Not signed in to Epic");
+        }
+        (self.on_session)(Some(&fresh));
+        *current = Some(fresh.clone());
         Ok(fresh)
     }
 
     /// A valid access token, refreshing it when it is about to expire.
     async fn access(&self) -> anyhow::Result<Option<Session>> {
-        let Some(s) = self.session.lock().unwrap().clone() else { return Ok(None) };
+        let Some(s) = self.session.locked().clone() else { return Ok(None) };
         if s.expires_at_unix - now() > 120 {
             return Ok(Some(s));
         }
@@ -284,13 +290,17 @@ impl Epic {
     }
 
     async fn library_records(&self, s: &Session) -> anyhow::Result<Vec<LibraryRecord>> {
+        // Far more pages than any library has; a cursor Epic keeps repeating
+        // would otherwise loop forever.
+        const MAX_PAGES: usize = 200;
         let mut out = Vec::new();
         let mut url = LIBRARY_URL.to_string();
-        loop {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..MAX_PAGES {
             let page: LibraryPage = self.get(&url, s).await?;
             out.extend(page.records);
             match page.response_metadata.and_then(|m| m.next_cursor) {
-                Some(c) if !c.is_empty() => url = format!("{LIBRARY_URL}&cursor={c}"),
+                Some(c) if !c.is_empty() && seen.insert(c.clone()) => url = format!("{LIBRARY_URL}&cursor={}", encode(&c)),
                 _ => break,
             }
         }
@@ -315,7 +325,7 @@ impl Epic {
     /// Fetch catalog details for items we haven't seen, 8 at a time, and cache them.
     async fn fill_catalog(&self, s: &Session, ids: &[EpicId]) {
         let missing: Vec<&EpicId> = {
-            let cat = self.catalog.lock().unwrap();
+            let cat = self.catalog.locked();
             ids.iter().filter(|i| !cat.get(&i.catalog_item_id).is_some_and(|c| c.described)).collect()
         };
         if missing.is_empty() {
@@ -328,7 +338,7 @@ impl Epic {
             let batch = futures::future::join_all(chunk.iter().map(|id| self.fetch_catalog(s, id))).await;
             fetched.extend(batch.into_iter().flatten());
         }
-        let mut cat = self.catalog.lock().unwrap();
+        let mut cat = self.catalog.locked();
         cat.extend(fetched);
         if let Ok(json) = serde_json::to_string(&*cat) {
             let _ = std::fs::write(&self.catalog_cache, json);
@@ -370,7 +380,7 @@ impl LibraryProvider for Epic {
         let playtime = self.playtime(&s).await.unwrap_or_default();
         let played = self.last_played();
 
-        let cat = self.catalog.lock().unwrap();
+        let cat = self.catalog.locked();
         Ok(ids
             .into_iter()
             .filter_map(|id| {
@@ -390,7 +400,7 @@ impl LibraryProvider for Epic {
 
     fn artwork(&self, store_game_id: &str) -> Artwork {
         let Some(id) = EpicId::decode(store_game_id) else { return Artwork::default() };
-        let cat = self.catalog.lock().unwrap();
+        let cat = self.catalog.locked();
         cat.get(&id.catalog_item_id)
             .map(|c| Artwork { cover: c.cover.clone(), hero: c.hero.clone(), logo: c.logo.clone() })
             .unwrap_or_default()
@@ -398,7 +408,7 @@ impl LibraryProvider for Epic {
 
     fn description(&self, store_game_id: &str) -> Option<String> {
         let id = EpicId::decode(store_game_id)?;
-        self.catalog.lock().unwrap().get(&id.catalog_item_id)?.description.clone()
+        self.catalog.locked().get(&id.catalog_item_id)?.description.clone()
     }
 
     fn launch(&self, store_game_id: &str) -> LaunchAction {
@@ -411,6 +421,16 @@ impl LibraryProvider for Epic {
     fn install(&self, store_game_id: &str) -> Option<LaunchAction> {
         EpicId::decode(store_game_id).map(|id| LaunchAction::Uri { uri: id.launcher_uri("install") })
     }
+}
+
+/// Percent-encodes a query value (Epic's cursors are base64, with `+/=`).
+fn encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 fn now() -> i64 {

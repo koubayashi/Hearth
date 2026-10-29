@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use hub_core::{GameEntry, StoreId};
 use hub_launch::LaunchAction;
 
-use crate::{Artwork, LibraryProvider};
+use crate::{Artwork, LibraryProvider, Locked};
 
 /// A Store package as Windows records it for the current user.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,8 +164,8 @@ impl LibraryProvider for Xbox {
             return Ok(Vec::new());
         }
         let (titles, playtime) = self.live.library().await?;
-        let mut art = self.art.lock().unwrap();
-        let mut descriptions = self.descriptions.lock().unwrap();
+        let mut art = self.art.locked();
+        let mut descriptions = self.descriptions.locked();
         Ok(titles
             .into_iter()
             .map(|t| {
@@ -187,11 +187,11 @@ impl LibraryProvider for Xbox {
     }
 
     fn artwork(&self, store_game_id: &str) -> Artwork {
-        self.art.lock().unwrap().get(store_game_id).cloned().unwrap_or_default()
+        self.art.locked().get(store_game_id).cloned().unwrap_or_default()
     }
 
     fn description(&self, store_game_id: &str) -> Option<String> {
-        self.descriptions.lock().unwrap().get(store_game_id).cloned()
+        self.descriptions.locked().get(store_game_id).cloned()
     }
 
     /// Store apps start through the shell, as the Start menu starts them.

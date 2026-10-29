@@ -14,6 +14,8 @@ use anyhow::{bail, Context};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::Locked;
+
 const CLIENT_ID: &str = "38cd2fa8-66fd-4760-afb2-405eb65d5b0c";
 const SCOPE: &str = "Xboxlive.signin Xboxlive.offline_access";
 /// Where Microsoft sends the browser after sign-in, with `?code=…`.
@@ -283,28 +285,33 @@ impl XboxLive {
     }
 
     pub fn signed_in(&self) -> bool {
-        self.session.lock().unwrap().is_some()
+        self.session.locked().is_some()
     }
 
     pub fn gamertag(&self) -> Option<String> {
-        self.session.lock().unwrap().as_ref().and_then(|s| s.gamertag.clone())
+        self.session.locked().as_ref().and_then(|s| s.gamertag.clone())
     }
 
     pub fn forget(&self) {
-        *self.session.lock().unwrap() = None;
+        *self.session.locked() = None;
         (self.on_session)(None);
     }
 
     fn store(&self, s: Session) {
         (self.on_session)(Some(&s));
-        *self.session.lock().unwrap() = Some(s);
+        *self.session.locked() = Some(s);
     }
 
     /// Trades the one-time code for a session, then reads the gamertag.
     pub async fn sign_in(&self, code: &str) -> anyhow::Result<()> {
         let s = self.token(&[("grant_type", "authorization_code"), ("code", code)], None).await?;
         self.store(s);
-        self.xsts().await?;
+        // An account Xbox won't accept (no Xbox profile) isn't a sign-in:
+        // keeping it would show "signed in" while every sync fails.
+        if let Err(e) = self.xsts().await {
+            self.forget();
+            return Err(e);
+        }
         Ok(())
     }
 
@@ -331,19 +338,33 @@ impl XboxLive {
     /// rejected renewal means the sign-in itself is gone (SESSION_EXPIRED);
     /// anything else (offline) keeps it for next time.
     async fn access(&self) -> anyhow::Result<Session> {
-        let Some(s) = self.session.lock().unwrap().clone() else { bail!("Not signed in to Xbox") };
+        let Some(s) = self.session.locked().clone() else { bail!("Not signed in to Xbox") };
         if s.expires_at_unix - now() > 120 {
             return Ok(s);
         }
         let _turn = self.renewing.lock().await;
-        if let Some(c) = self.session.lock().unwrap().clone() {
-            if c.refresh_token != s.refresh_token {
-                return Ok(c);
-            }
+        match self.session.locked().clone() {
+            Some(c) if c.refresh_token != s.refresh_token => return Ok(c),
+            None => bail!("Not signed in to Xbox"),
+            _ => {}
         }
-        let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &s.refresh_token)], s.gamertag).await?;
-        self.store(fresh.clone());
+        let fresh = self.token(&[("grant_type", "refresh_token"), ("refresh_token", &s.refresh_token)], s.gamertag.clone()).await?;
+        if !self.replace(&s.refresh_token, &fresh) {
+            bail!("Not signed in to Xbox");
+        }
         Ok(fresh)
+    }
+
+    /// Saves a changed session, unless the user signed out (or signed in
+    /// again) meanwhile: a sign-out must stay a sign-out.
+    fn replace(&self, stale_refresh: &str, fresh: &Session) -> bool {
+        let mut current = self.session.locked();
+        if current.as_ref().is_none_or(|c| c.refresh_token != stale_refresh) {
+            return false;
+        }
+        (self.on_session)(Some(fresh));
+        *current = Some(fresh.clone());
+        true
     }
 
     /// Renews ahead of time, so a refresh token used at least every 90 days
@@ -379,9 +400,11 @@ impl XboxLive {
         let claims = xsts.display_claims.xui.into_iter().next().context("Xbox sent no account details")?;
         let xuid = claims.xid.context("Xbox sent no account id")?;
         if claims.gtg.is_some() && claims.gtg != s.gamertag {
-            let mut current = self.session.lock().unwrap().clone().unwrap_or(s);
-            current.gamertag = claims.gtg.clone();
-            self.store(current);
+            // Only onto the session that's still there, never a signed-out one.
+            if let Some(mut current) = self.session.locked().clone() {
+                current.gamertag = claims.gtg.clone();
+                self.replace(&current.refresh_token.clone(), &current);
+            }
         }
         Ok(Xsts { header: format!("XBL3.0 x={};{}", claims.uhs, xsts.token), xuid })
     }

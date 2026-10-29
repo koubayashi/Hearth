@@ -19,6 +19,18 @@ use async_trait::async_trait;
 use hub_core::{GameEntry, StoreId};
 use hub_launch::LaunchAction;
 
+/// Locks a mutex even if an earlier panic poisoned it, as the app does: one
+/// failed task must never leave a store's session or cache unreadable.
+pub(crate) trait Locked<T> {
+    fn locked(&self) -> std::sync::MutexGuard<'_, T>;
+}
+
+impl<T> Locked<T> for std::sync::Mutex<T> {
+    fn locked(&self) -> std::sync::MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
 /// Artwork URLs a store can supply directly, before the metadata service exists.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Artwork {
