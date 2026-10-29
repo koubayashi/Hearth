@@ -39,7 +39,7 @@ impl GogInstall {
         let exe = PathBuf::from(value("exe")?);
         Some(Self {
             title: value("gameName").or_else(|| value("startMenu")).unwrap_or_else(|| id.clone()),
-            args: value("launchParam").map(|a| a.split_whitespace().map(String::from).collect()).unwrap_or_default(),
+            args: value("launchParam").map(|a| split_args(&a)).unwrap_or_default(),
             working_dir: value("workingDir").map(PathBuf::from),
             uninstaller: value("uninstallCommand").map(PathBuf::from),
             id,
@@ -187,6 +187,31 @@ fn galaxy_exe() -> Option<PathBuf> {
     None
 }
 
+/// Splits a command line as Windows does for simple cases: on spaces, except
+/// inside double quotes, which are removed (`-config "My Settings.ini"`).
+fn split_args(line: &str) -> Vec<String> {
+    let (mut out, mut cur, mut quoted, mut any) = (Vec::new(), String::new(), false, false);
+    for c in line.chars() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                any = true;
+            }
+            c if c.is_whitespace() && !quoted => {
+                if any || !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+                any = false;
+            }
+            c => cur.push(c),
+        }
+    }
+    if any || !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,5 +259,6 @@ mod tests {
         v.retain(|(k, _)| *k != "launchParam");
         v.push(("launchParam", "-windowed  -skipintro"));
         assert_eq!(entry(&v).unwrap().args, ["-windowed", "-skipintro"]);
+        assert_eq!(split_args(r#"-config "My Settings.ini" -x"#), ["-config", "My Settings.ini", "-x"]);
     }
 }
