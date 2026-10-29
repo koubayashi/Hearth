@@ -1553,7 +1553,7 @@ dependencies = [
 
 [[package]]
 name = "hearth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "hub-core",
@@ -1649,7 +1649,7 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
 name = "hub-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rusqlite",
  "serde",
@@ -1659,7 +1659,7 @@ dependencies = [
 
 [[package]]
 name = "hub-launch"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -1667,7 +1667,7 @@ dependencies = [
 
 [[package]]
 name = "hub-providers"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1685,7 +1685,7 @@ dependencies = [
 
 [[package]]
 name = "hub-tracker"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sysinfo",
 ]
