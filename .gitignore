@@ -3,10 +3,8 @@ node_modules/
 app/dist/
 app/src-tauri/gen/
 *.log
-.impeccable/mocks/
-.impeccable/review/
-.impeccable/build/
-.impeccable/questions/
+# Design tool notes (impeccable), kept local
+.impeccable/
 *.tsbuildinfo
 
 # Secrets: the updater signing key lives in ~/.tauri, sign-ins in Credential
