@@ -14,14 +14,54 @@ use crate::LibraryProvider;
 /// How far below a chosen folder to look for games ("Games\AC\Assassin's Creed" is 2).
 const MAX_DEPTH: usize = 3;
 
-/// Executables that ship with games but aren't the game.
-const NOT_GAME_EXES: &[&str] = &[
-    "unins", "uninstall", "setup", "install", "redist", "vcredist", "vc_redist", "dxsetup",
-    "dxwebsetup", "dotnet", "directx", "crash", "bugsplat", "unitycrashhandler", "ueprereq",
-    "prereq", "quicksfv", "register", "detection", "testapp", "benchmark", "config", "settings",
-    "easyanticheat", "battleye", "beservice", "eac", "updater", "patch", "report", "helper",
-    "cefprocess", "webhelper", "touchup", "activation", "dxdiag", "vcrun", "oalinst", "physx",
+/// Executables that ship with games but aren't the game, by how their name
+/// starts (letters and digits only, so "vc_redist.x64" is "vcredistx64").
+/// Only names specific enough that no game starts with them.
+const NOT_GAME_PREFIXES: &[&str] = &[
+    "unins", "uninstall", "setup", "install", "redist", "vcredist", "dxsetup", "dxwebsetup",
+    "dotnet", "directx", "crashreport", "crashhandler", "crashpad", "crashsender", "bugsplat",
+    "unitycrashhandler", "ueprereq", "prereq", "quicksfv", "easyanticheat", "battleye",
+    "beservice", "cefprocess", "webhelper", "touchup", "dxdiag", "vcrun", "oalinst", "physx",
 ];
+
+/// Short words that mark a tool only as a whole word of the name
+/// ("Game Config.exe", "EAC_Launcher.exe"), never inside one: "eac" is in
+/// "Breach" and "patch" in "Dispatch".
+const NOT_GAME_WORDS: &[&str] = &[
+    "eac", "updater", "update", "patch", "patcher", "report", "helper", "config",
+    "configurator", "settings", "register", "registration", "detection", "testapp", "benchmark",
+    "activation", "launcherpatcher",
+];
+
+/// The words of a file name: split at punctuation, spaces, digits and
+/// lowercase-to-uppercase steps ("GameConfig_x64" is game, config, x, 64).
+fn words(name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut prev: Option<char> = None;
+    for c in name.chars() {
+        let split = !c.is_alphanumeric()
+            || prev.is_some_and(|p| (p.is_lowercase() && c.is_uppercase()) || (p.is_ascii_digit() != c.is_ascii_digit()));
+        if split && !cur.is_empty() {
+            out.push(std::mem::take(&mut cur).to_lowercase());
+        }
+        if c.is_alphanumeric() {
+            cur.push(c);
+        }
+        prev = Some(c);
+    }
+    if !cur.is_empty() {
+        out.push(cur.to_lowercase());
+    }
+    out
+}
+
+fn is_tool_exe(p: &Path) -> bool {
+    let name = file_stem(p);
+    let squashed = squash(&name.to_lowercase());
+    NOT_GAME_PREFIXES.iter().any(|bad| squashed.starts_with(bad))
+        || words(&name).iter().any(|w| NOT_GAME_WORDS.contains(&w.as_str()))
+}
 
 /// Folders inside a game that hold tools, never the game itself.
 const NOT_GAME_DIRS: &[&str] = &[
@@ -129,10 +169,7 @@ fn exes_in(dir: &Path) -> Vec<PathBuf> {
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe")))
-        .filter(|p| {
-            let s = stem(p);
-            !NOT_GAME_EXES.iter().any(|bad| s.contains(bad))
-        })
+        .filter(|p| !is_tool_exe(p))
         .collect();
     v.sort();
     v
@@ -320,6 +357,16 @@ mod tests {
                 ("Clair Obscur Expedition 33".into(), "Expedition33_Steam.exe".into()),
             ]
         );
+    }
+
+    #[test]
+    fn tool_words_only_count_as_whole_words() {
+        for game in ["Breach.exe", "CrashBandicoot.exe", "Dispatch.exe", "Peacemaker.exe", "Reporter Simulator.exe"] {
+            assert!(!is_tool_exe(Path::new(game)), "{game} is a game");
+        }
+        for tool in ["CrashReportClient.exe", "GameConfig.exe", "EAC_Launcher.exe", "vc_redist.x64.exe", "unins000.exe"] {
+            assert!(is_tool_exe(Path::new(tool)), "{tool} is a tool");
+        }
     }
 
     #[test]
