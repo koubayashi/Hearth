@@ -22,3 +22,8 @@ tauri-plugin-updater = "2"
 hub-tracker.workspace = true
 window-vibrancy = "0.6"
 tokio = { workspace = true }
+
+# Clearing the old shared profile's cookies (auth.rs). Same versions Tauri uses.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"

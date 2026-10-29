@@ -202,14 +202,16 @@ impl GogWeb {
 
     async fn token(&self, grant: &str, username: Option<String>) -> anyhow::Result<Session> {
         let url = format!("https://auth.gog.com/token?client_id={CLIENT_ID}&client_secret={CLIENT_SECRET}&{grant}");
-        let res = self.http.get(url).send().await?;
+        // The address holds the refresh token: errors must not carry it into
+        // the log or onto the screen.
+        let res = self.http.get(url).send().await.map_err(reqwest::Error::without_url)?;
         if matches!(res.status().as_u16(), 400 | 401) {
             bail!(SESSION_EXPIRED);
         }
         if !res.status().is_success() {
             bail!("GOG sign-in failed ({}). Try again later.", res.status());
         }
-        let t: TokenResponse = res.json().await?;
+        let t: TokenResponse = res.json().await.map_err(reqwest::Error::without_url)?;
         Ok(Session {
             access_token: t.access_token,
             refresh_token: t.refresh_token,

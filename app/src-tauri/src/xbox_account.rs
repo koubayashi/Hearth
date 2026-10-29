@@ -30,6 +30,7 @@ pub async fn xbox_sign_in(app: AppHandle) -> CmdResult<()> {
     open_auth_window(
         &app,
         "xbox-login",
+        crate::auth::Store::Xbox,
         "Sign in to Xbox",
         &xbox_live::login_url(),
         xbox_live::REDIRECT,
@@ -57,7 +58,7 @@ fn finish(app: AppHandle, code: String) {
             }
             Err(e) => {
                 let _ = app.emit("accounts-changed", ());
-                let _ = app.emit("sync-error", format!("{e:#}"));
+                let _ = app.emit("sync-error", crate::tracking::redact(&format!("{e:#}")));
             }
         }
     });
@@ -66,6 +67,7 @@ fn finish(app: AppHandle, code: String) {
 #[tauri::command]
 pub fn xbox_sign_out(app: AppHandle) -> CmdResult<()> {
     app.state::<AppState>().xbox.forget();
+    crate::auth::forget(&app, crate::auth::Store::Xbox);
     let _ = app.emit("accounts-changed", ());
     Ok(())
 }
@@ -74,6 +76,7 @@ pub fn xbox_sign_out(app: AppHandle) -> CmdResult<()> {
 pub fn give_up(app: &AppHandle) {
     tracking::log(app, "xbox: signed out (Microsoft rejected the saved sign-in)");
     app.state::<AppState>().xbox.forget();
+    crate::auth::forget(app, crate::auth::Store::Xbox);
     let _ = app.emit("accounts-changed", ());
     let _ = app.emit("sync-error", xbox_live::SESSION_EXPIRED);
 }

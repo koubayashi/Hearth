@@ -31,6 +31,7 @@ pub async fn gog_sign_in(app: AppHandle) -> CmdResult<()> {
     open_auth_window(
         &app,
         "gog-login",
+        crate::auth::Store::Gog,
         "Sign in to GOG",
         &gog_web::login_url(),
         gog_web::REDIRECT,
@@ -58,7 +59,7 @@ fn finish(app: AppHandle, code: String) {
             }
             Err(e) => {
                 let _ = app.emit("accounts-changed", ());
-                let _ = app.emit("sync-error", format!("{e:#}"));
+                let _ = app.emit("sync-error", crate::tracking::redact(&format!("{e:#}")));
             }
         }
     });
@@ -67,6 +68,7 @@ fn finish(app: AppHandle, code: String) {
 #[tauri::command]
 pub fn gog_sign_out(app: AppHandle) -> CmdResult<()> {
     app.state::<AppState>().gog.forget();
+    crate::auth::forget(&app, crate::auth::Store::Gog);
     let _ = app.emit("accounts-changed", ());
     Ok(())
 }
@@ -75,6 +77,7 @@ pub fn gog_sign_out(app: AppHandle) -> CmdResult<()> {
 pub fn give_up(app: &AppHandle) {
     tracking::log(app, "gog: signed out (GOG rejected the saved sign-in)");
     app.state::<AppState>().gog.forget();
+    crate::auth::forget(app, crate::auth::Store::Gog);
     let _ = app.emit("accounts-changed", ());
     let _ = app.emit("sync-error", gog_web::SESSION_EXPIRED);
 }

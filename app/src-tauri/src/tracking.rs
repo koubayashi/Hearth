@@ -41,8 +41,26 @@ pub fn log(app: &AppHandle, msg: &str) {
         let _ = std::fs::remove_file(&path);
     }
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-        let _ = writeln!(f, "{} {msg}", now());
+        let _ = writeln!(f, "{} {}", now(), redact(msg));
     }
+}
+
+/// Drops the query from every web address in a message. Some stores take
+/// their token in the address, and an error that quotes it must not put it
+/// in a plain-text log.
+pub fn redact(msg: &str) -> String {
+    let mut out = String::with_capacity(msg.len());
+    let mut rest = msg;
+    let next = |s: &str| [s.find("https://"), s.find("http://")].into_iter().flatten().min();
+    while let Some(at) = next(rest) {
+        out.push_str(&rest[..at]);
+        let url = &rest[at..];
+        let end = url.find(|c: char| c.is_whitespace() || c == ')' || c == '"').unwrap_or(url.len());
+        out.push_str(url[..end].split('?').next().unwrap_or(""));
+        rest = &url[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn title(app: &AppHandle, id: i64) -> String {
@@ -149,5 +167,16 @@ fn handle(app: &AppHandle, events: Vec<Event>) {
     let _ = app.emit("now-playing", &playing);
     if changed {
         let _ = app.emit("library-changed", ());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn logs_never_keep_tokens_from_addresses() {
+        let msg = "gog: couldn't renew yet (error sending request for url (https://auth.gog.com/token?client_id=1&refresh_token=SECRET))";
+        let clean = super::redact(msg);
+        assert!(!clean.contains("SECRET"));
+        assert!(clean.contains("https://auth.gog.com/token)"));
     }
 }

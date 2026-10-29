@@ -19,7 +19,7 @@ pub async fn sgdb_set_key(app: AppHandle, key: String) -> CmdResult<()> {
         return Err("That doesn't look like a SteamGridDB API key. Copy it from your SteamGridDB preferences.".into());
     }
     let state = app.state::<AppState>();
-    state.sgdb.check_key(&key).await.map_err(|e| format!("{e:#}"))?;
+    state.sgdb.check_key(&key).await.map_err(|e| crate::tracking::redact(&format!("{e:#}")))?;
     secrets::save("sgdb-key", Some(&key))?;
     state.sgdb.set_key(Some(key));
     let _ = app.emit("accounts-changed", ());
@@ -104,12 +104,12 @@ pub async fn artwork_options(app: AppHandle, id: i64, kind: ArtKind) -> CmdResul
     let r = match steam_app.and_then(|a| u64::try_from(a).ok()) {
         Some(app_id) => Some(GameRef::Steam(app_id)),
         // The user sees the pictures, so the closest title is fine here.
-        None => sgdb.closest_game(&title).await.map_err(|e| format!("{e:#}"))?.map(GameRef::Sgdb),
+        None => sgdb.closest_game(&title).await.map_err(|e| crate::tracking::redact(&format!("{e:#}")))?.map(GameRef::Sgdb),
     };
     let Some(r) = r else {
         return Ok(Vec::new());
     };
-    app.state::<AppState>().sgdb.images(r, kind).await.map_err(|e| format!("{e:#}"))
+    app.state::<AppState>().sgdb.images(r, kind).await.map_err(|e| crate::tracking::redact(&format!("{e:#}")))
 }
 
 /// The user picked a picture: it's theirs and is never replaced automatically.

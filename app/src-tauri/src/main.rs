@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artwork;
+mod auth;
 mod autobackup;
 mod backup;
 mod collections;
@@ -219,8 +220,10 @@ async fn steam_set_api_key(app: AppHandle, key: String) -> CmdResult<usize> {
     }
     let auth = SteamAuth::ApiKey { key };
     let steam = app.state::<AppState>().steam.clone();
-    let count = steam.check_auth(&auth).await.map_err(|e| format!("{e:#}"))?;
+    let count = steam.check_auth(&auth).await.map_err(|e| crate::tracking::redact(&format!("{e:#}")))?;
     save_steam_auth(&app, Some(auth));
+    // A key needs no website session: drop any left from signing in.
+    auth::forget(&app, auth::Store::Steam);
     sync_all(app);
     Ok(count)
 }
@@ -228,6 +231,7 @@ async fn steam_set_api_key(app: AppHandle, key: String) -> CmdResult<usize> {
 #[tauri::command]
 fn steam_sign_out(app: AppHandle) {
     save_steam_auth(&app, None);
+    auth::forget(&app, auth::Store::Steam);
 }
 
 /// Opens Steam's API key page in the default browser. Only this fixed URL.
@@ -242,12 +246,16 @@ fn sync_now(app: AppHandle) {
 }
 
 /// Opens a store's own sign-in page in a separate window that has no access
-/// to the app. When the page at `capture` loads, its text is handed back by
-/// navigating to a made-up host that is intercepted and never loaded.
-/// A hidden window reuses the saved browser session without showing anything.
+/// to the app, in that store's own browser profile ([`auth`]). When the page
+/// at `capture` loads, its text is handed back by navigating to a made-up
+/// host that is intercepted and never loaded, under a secret path only
+/// Hearth's script knows. A hidden window reuses the saved browser session
+/// without showing anything.
+#[allow(clippy::too_many_arguments)]
 fn open_auth_window(
     app: &AppHandle,
     label: &'static str,
+    store: auth::Store,
     title: &str,
     url: &str,
     capture: &'static str,
@@ -262,7 +270,14 @@ fn open_auth_window(
         return Ok(());
     }
     let handle = app.clone();
+    let profile = auth::profile(app, store).ok_or("No folder for the sign-in window")?;
+    let nonce = auth::nonce();
+    let answer_path = format!("/{nonce}");
+    let script = format!(
+        "location.replace('https://hearth.invalid/{nonce}?body=' + encodeURIComponent(document.body.innerText))"
+    );
     WebviewWindowBuilder::new(app, label, WebviewUrl::External(url.parse().map_err(err)?))
+        .data_directory(profile)
         .title(title)
         .inner_size(900.0, 860.0)
         .min_inner_size(480.0, 600.0)
@@ -282,12 +297,16 @@ fn open_auth_window(
         })
         .on_navigation(move |url| {
             if url.host_str() == Some("hearth.invalid") {
-                let body = url
-                    .query_pairs()
-                    .find(|(k, _)| k == "body")
-                    .map(|(_, v)| v.into_owned())
-                    .unwrap_or_default();
-                on_body(handle.clone(), body);
+                // Any page can navigate here; only the one carrying the
+                // secret is the store's answer.
+                if url.path() == answer_path {
+                    let body = url
+                        .query_pairs()
+                        .find(|(k, _)| k == "body")
+                        .map(|(_, v)| v.into_owned())
+                        .unwrap_or_default();
+                    on_body(handle.clone(), body);
+                }
                 return false;
             }
             // Microsoft puts the code in the address it redirects to, and
@@ -296,13 +315,19 @@ fn open_auth_window(
                 on_body(handle.clone(), url.to_string());
                 return false;
             }
-            true
+            if auth::allowed(store, url) {
+                return true;
+            }
+            // Help pages and other links leave the sign-in window for the
+            // real browser, where the address shows.
+            if url.scheme() == "https" {
+                let _ = hub_launch::run(&hub_launch::LaunchAction::Uri { uri: url.to_string() });
+            }
+            false
         })
         .on_page_load(move |window, payload| {
             if payload.event() == PageLoadEvent::Finished && payload.url().as_str().starts_with(capture) {
-                let _ = window.eval(
-                    "location.replace('https://hearth.invalid/?body=' + encodeURIComponent(document.body.innerText))",
-                );
+                let _ = window.eval(&script);
             }
         })
         .build()
@@ -322,7 +347,7 @@ fn close_window(app: &AppHandle, label: &str) {
 /// Sign in on Steam's real login page (password, Steam Guard or QR code).
 #[tauri::command]
 async fn steam_sign_in(app: AppHandle) -> CmdResult<()> {
-    open_auth_window(&app, "steam-login", "Sign in to Steam", steam::LOGIN_URL, steam::TOKEN_URL, true, |app, body| {
+    open_auth_window(&app, "steam-login", auth::Store::Steam, "Sign in to Steam", steam::LOGIN_URL, steam::TOKEN_URL, true, |app, body| {
         if let Some(token) = steam::token_from_body(&body) {
             close_window(&app, "steam-login");
             finish_steam_sign_in(app, token);
@@ -341,7 +366,7 @@ fn finish_steam_sign_in(app: AppHandle, token: String) {
                 sync_all(app);
             }
             Err(e) => {
-                let _ = app.emit("sync-error", format!("{e:#}"));
+                let _ = app.emit("sync-error", crate::tracking::redact(&format!("{e:#}")));
             }
         }
     });
@@ -350,7 +375,7 @@ fn finish_steam_sign_in(app: AppHandle, token: String) {
 /// Session tokens last about a day. The sign-in window keeps Steam's cookies,
 /// so a hidden window can usually fetch a fresh token without asking.
 fn steam_refresh_silently(app: &AppHandle) {
-    let _ = open_auth_window(app, "steam-refresh", "Steam", steam::TOKEN_URL, steam::TOKEN_URL, false, |app, body| {
+    let _ = open_auth_window(app, "steam-refresh", auth::Store::Steam, "Steam", steam::TOKEN_URL, steam::TOKEN_URL, false, |app, body| {
         close_window(&app, "steam-refresh");
         match steam::token_from_body(&body) {
             Some(token) => {
@@ -383,6 +408,7 @@ fn epic_sign_in_silently(app: &AppHandle) {
     let _ = open_auth_window(
         app,
         "epic-refresh",
+        auth::Store::Epic,
         "Epic Games",
         &url,
         "https://www.epicgames.com/id/api/redirect",
@@ -432,6 +458,7 @@ fn keep_epic_alive(app: AppHandle) {
 fn give_up_epic(app: &AppHandle, why: &str) {
     tracking::log(app, &format!("epic: signed out ({why})"));
     app.state::<AppState>().epic.forget();
+    auth::forget(app, auth::Store::Epic);
     let _ = app.emit("accounts-changed", ());
     let _ = app.emit("sync-error", epic::SESSION_EXPIRED);
 }
@@ -440,6 +467,7 @@ fn give_up_epic(app: &AppHandle, why: &str) {
 async fn epic_sign_out(app: AppHandle) -> CmdResult<()> {
     let epic = app.state::<AppState>().epic.clone();
     epic.sign_out().await;
+    auth::forget(&app, auth::Store::Epic);
     let _ = app.emit("accounts-changed", ());
     Ok(())
 }
@@ -452,6 +480,7 @@ async fn epic_sign_in(app: AppHandle) -> CmdResult<()> {
     open_auth_window(
         &app,
         "epic-login",
+        auth::Store::Epic,
         "Sign in to Epic Games",
         &url,
         "https://www.epicgames.com/id/api/redirect",
@@ -477,7 +506,7 @@ fn epic_open_browser() -> CmdResult<()> {
 async fn epic_submit_code(app: AppHandle, code: String) -> CmdResult<()> {
     let code = epic::clean_code(&code).map_err(err)?;
     let epic = app.state::<AppState>().epic.clone();
-    epic.sign_in(&code).await.map_err(|e| format!("{e:#}"))?;
+    epic.sign_in(&code).await.map_err(|e| crate::tracking::redact(&format!("{e:#}")))?;
     let _ = app.emit("accounts-changed", ());
     sync_all(app);
     Ok(())
@@ -492,7 +521,7 @@ fn finish_epic_sign_in(app: AppHandle, code: String) {
                 sync_all(app);
             }
             Err(e) => {
-                let _ = app.emit("sync-error", e.to_string());
+                let _ = app.emit("sync-error", crate::tracking::redact(&e.to_string()));
             }
         }
     });
@@ -602,7 +631,7 @@ pub(crate) fn sync_all(app: AppHandle) {
                     Vec::new()
                 }
                 Err(e) => {
-                    let _ = app.emit("sync-error", format!("{e:#}"));
+                    let _ = app.emit("sync-error", crate::tracking::redact(&format!("{e:#}")));
                     Vec::new()
                 }
             };
@@ -714,6 +743,17 @@ fn main() {
                 epic,
                 syncing: Default::default(),
             });
+
+            // Website sessions only for stores still signed in through them.
+            {
+                let state = app.state::<AppState>();
+                auth::forget_unused(app.handle(), |store| match store {
+                    auth::Store::Steam => matches!(state.steam.auth(), Some(SteamAuth::Session { .. })),
+                    auth::Store::Epic => state.epic.account_name().is_some(),
+                    auth::Store::Xbox => state.xbox.signed_in(),
+                    auth::Store::Gog => state.gog.signed_in(),
+                });
+            }
 
             if let Some(window) = app.get_webview_window("main") {
                 tray::style_main(&window);
