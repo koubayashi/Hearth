@@ -125,10 +125,15 @@ impl Steam {
                 ("steamid", steam_id),
                 ("include_appinfo", "1"),
                 ("include_played_free_games", "1"),
+                // Steam leaves out "unvetted" apps by default: small and newer
+                // games the account really owns.
+                ("skip_unvetted_apps", "0"),
                 ("format", "json"),
             ])
             .send()
-            .await?;
+            .await
+            // The address holds the token or key: keep it out of error messages.
+            .map_err(reqwest::Error::without_url)?;
         match (res.status().as_u16(), auth) {
             (200, _) => {}
             (401 | 403, SteamAuth::Session { .. }) => bail!(SESSION_EXPIRED),
@@ -137,7 +142,8 @@ impl Steam {
             }
             (code, _) => bail!("Steam's Web API returned {code}. Try again later."),
         }
-        let body: OwnedResponse = res.json().await.context("reading Steam's owned games")?;
+        let body: OwnedResponse =
+            res.json().await.map_err(reqwest::Error::without_url).context("reading Steam's owned games")?;
         Ok(body.response.games)
     }
 
