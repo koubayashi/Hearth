@@ -77,6 +77,9 @@ const backend = isTauri()
       onSyncStarted: on("sync-started"),
       onAutoBackup: on("auto-backup"),
       onSyncError: on("sync-error"),
+      updateReady: () => invoke<string | null>("update_ready"),
+      installUpdate: () => invoke<void>("install_update"),
+      onUpdateReady: on("update-ready"),
     }
   : mockBackend;
 

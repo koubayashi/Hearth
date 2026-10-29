@@ -1,0 +1,54 @@
+# Builds the Windows installer when a version tag (v0.2.0, ...) is pushed and
+# publishes it as a GitHub release, with the signed latest.json that installed
+# copies of Hearth check for updates.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+# Actions are pinned to commits, not tags: the updater signing key passes
+# through tauri-action, and a moved tag could hand it to someone who could then
+# ship updates every installed Hearth trusts. To bump one, look up the new
+# tag's commit: git ls-remote https://github.com/<owner>/<repo> <tag>
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - run: npm ci
+        working-directory: app
+
+      - run: cargo test --workspace --exclude hearth
+
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: app
+          tagName: ${{ github.ref_name }}
+          releaseName: Hearth ${{ github.ref_name }}
+          releaseBody: See the commits since the last release.
+          releaseDraft: false
+          prerelease: false

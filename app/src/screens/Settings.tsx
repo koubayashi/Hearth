@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { useStartWithWindows } from "../lib/autostart";
 import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
@@ -477,6 +478,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance" },
   { id: "library", label: "Library" },
   { id: "backup", label: "Backup" },
+  { id: "updates", label: "Updates" },
 ] as const;
 
 /**
@@ -780,6 +782,59 @@ function BackupSection() {
   );
 }
 
+function UpdatesSection() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [ready, setReady] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (isTauri()) getVersion().then(setVersion).catch(() => {});
+    const load = () => api.updateReady().then(setReady).catch(() => {});
+    load();
+    const off = api.onUpdateReady(load);
+    return () => void off.then((f) => f());
+  }, []);
+  const install = async () => {
+    setProblem(null);
+    setBusy(true);
+    try {
+      await api.installUpdate();
+    } catch (e) {
+      setProblem(String(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <section id="settings-updates">
+      <h2>Updates</h2>
+      <div className="setting-group glass">
+        <div className="setting">
+          <div className="text">
+            <b>{ready ? `Hearth ${ready} is ready` : version ? `Hearth ${version}` : "Hearth"}</b>
+            <span>
+              {ready
+                ? "Restart to install it. Takes a few seconds; your library stays as it is."
+                : import.meta.env.DEV
+                  ? "This is a development build, so it doesn't check for updates."
+                  : "New versions download in the background and wait here for a restart."}
+            </span>
+          </div>
+          {ready && (
+            <button className="btn btn-primary" data-nav disabled={busy} onClick={install}>
+              {busy ? "Restarting…" : "Restart to update"}
+            </button>
+          )}
+        </div>
+        {problem && (
+          <p className="note error" role="status">
+            {problem}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Startup() {
   const { enabled, toggle } = useStartWithWindows();
   return (
@@ -992,6 +1047,7 @@ export function Settings({ onPeek = () => {} }: { onPeek?: (on: boolean) => void
         </section>
 
         <BackupSection />
+        <UpdatesSection />
         </div>
       </div>
     </div>

@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Hearth",
-  "version": "0.1.0",
   "identifier": "dev.hearth.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -25,12 +24,36 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https://*.steamstatic.com https://*.steamgriddb.com https://*.epicgames.com https://*.unrealengine.com https://store-images.s-microsoft.com https://images.gog.com data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; img-src 'self' https://*.steamstatic.com https://*.steamgriddb.com https://*.epicgames.com https://*.unrealengine.com https://store-images.s-microsoft.com https://images.gog.com data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUwRTFFMjg4MkQzNkI5NTkKUldSWnVUWXRpT0xoNEZCUXBYMnBydCtHNldvY3lrSDdGWmhrTWErbGlsSi9DMGJORCtVVVUranYK",
+      "endpoints": [
+        "https://github.com/koubayashi/Hearth/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

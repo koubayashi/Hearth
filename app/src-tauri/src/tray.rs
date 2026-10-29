@@ -32,6 +32,7 @@ pub fn show_main(app: &AppHandle) {
 
 /// Mica needs Windows 11; on Windows 10 the CSS background shows instead.
 pub fn style_main(window: &tauri::WebviewWindow) {
+    crate::auth::forget_shared_cookies(window);
     crate::fullscreen_fix::install(window);
     #[cfg(target_os = "windows")]
     let _ = window_vibrancy::apply_mica(window, None);
@@ -39,18 +40,40 @@ pub fn style_main(window: &tauri::WebviewWindow) {
     let _ = window;
 }
 
-pub fn install(app: &AppHandle) -> tauri::Result<()> {
+/// The tray menu, with a restart item while a downloaded update waits.
+fn menu(app: &AppHandle, update: Option<&str>) -> tauri::Result<Menu<tauri::Wry>> {
     let open = MenuItem::with_id(app, "open", "Open Hearth", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Hearth", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quit])?;
+    match update {
+        Some(v) => {
+            let label = format!("Restart to update to {v}");
+            let update = MenuItem::with_id(app, "update", label, true, None::<&str>)?;
+            Menu::with_items(app, &[&open, &update, &quit])
+        }
+        None => Menu::with_items(app, &[&open, &quit]),
+    }
+}
 
+pub fn set_update(app: &AppHandle, version: Option<&str>) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
+    if let Ok(m) = menu(app, version) {
+        let _ = tray.set_menu(Some(m));
+    }
+}
+
+pub fn install(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(app.default_window_icon().cloned().expect("app icon"))
         .tooltip("Hearth")
-        .menu(&menu)
+        .menu(&menu(app, None)?)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main(app),
+            "update" => {
+                if let Err(e) = crate::updates::install(app) {
+                    tracking::log(app, &format!("update: install failed ({e})"));
+                }
+            }
             "quit" => {
                 tracking::flush(app);
                 app.exit(0);

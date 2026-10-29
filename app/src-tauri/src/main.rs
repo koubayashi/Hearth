@@ -13,6 +13,7 @@ mod gog_account;
 mod saves;
 mod tracking;
 mod tray;
+mod updates;
 mod ways;
 mod xbox_account;
 
@@ -650,6 +651,7 @@ pub(crate) fn sync_all(app: AppHandle) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -657,6 +659,7 @@ fn main() {
         ))
         .manage(tracking::Tracking::default())
         .manage(autobackup::AutoBackup::default())
+        .manage(updates::Updates::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -721,10 +724,16 @@ fn main() {
             // Start with Windows is on by default so the tracker always runs.
             // Done once; after that the Settings switch is the user's choice.
             let marker = dir.join("autostart-set");
-            if !marker.exists() {
+            {
                 use tauri_plugin_autostart::ManagerExt;
-                if app.autolaunch().enable().is_ok() {
-                    let _ = std::fs::write(&marker, "");
+                if !marker.exists() {
+                    if app.autolaunch().enable().is_ok() {
+                        let _ = std::fs::write(&marker, "");
+                    }
+                } else if !cfg!(debug_assertions) && app.autolaunch().is_enabled().unwrap_or(false) {
+                    // Point the entry at this exe: it may name a dev build, or
+                    // an install that has since moved.
+                    let _ = app.autolaunch().enable();
                 }
             }
 
@@ -733,6 +742,7 @@ fn main() {
             gog_account::keep_alive(app.handle().clone());
             drives::watch(app.handle().clone());
             autobackup::watch(app.handle().clone());
+            updates::watch(app.handle().clone());
             tracking::recover(app.handle());
             tracking::start(app.handle().clone());
             sync_all(app.handle().clone());
@@ -762,6 +772,8 @@ fn main() {
             backup::backup_export,
             backup::backup_restore,
             autobackup::auto_backup_status,
+            updates::update_ready,
+            updates::install_update,
             autobackup::auto_backup_set,
             autobackup::save_prefs_snapshot,
             accounts,

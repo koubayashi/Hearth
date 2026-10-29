@@ -291,6 +291,11 @@ export const mockBackend = {
   onSyncStarted: noop,
   onAutoBackup: noop,
   onSyncError: noop,
+  async updateReady(): Promise<string | null> {
+    return null;
+  },
+  async installUpdate() {},
+  onUpdateReady: noop,
   async listGames(q: LibraryQuery): Promise<Game[]> {
     const search = q.search ? norm(q.search) : "";
     return games
