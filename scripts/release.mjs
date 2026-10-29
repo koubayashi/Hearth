@@ -12,7 +12,8 @@ if (!/^\d+\.\d+\.\d+$/.test(version ?? "")) {
   process.exit(1);
 }
 const run = (cmd) => execSync(cmd, { stdio: "inherit" });
-if (execSync("git status --porcelain").toString().trim()) {
+// Untracked files are fine: the release commits only the version files.
+if (execSync("git status --porcelain --untracked-files=no").toString().trim()) {
   console.error("Commit or stash your changes first.");
   process.exit(1);
 }
