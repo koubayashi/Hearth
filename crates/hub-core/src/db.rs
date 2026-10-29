@@ -31,6 +31,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/005_saves.sql"),
     include_str!("../migrations/006_status.sql"),
     include_str!("../migrations/007_launch_options.sql"),
+    include_str!("../migrations/008_save_playtime.sql"),
 ];
 
 pub struct Db {
@@ -429,6 +430,14 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// The play timer read from the game's saves. True when it changed.
+    pub fn set_save_played(&self, game_id: i64, secs: i64) -> Result<bool> {
+        Ok(self.conn.execute(
+            "UPDATE games SET save_played_secs = ?2 WHERE id = ?1 AND save_played_secs IS NOT ?2",
+            params![game_id, secs],
+        )? > 0)
+    }
+
     pub fn set_save_seen(&self, game_id: i64, at: i64) -> Result<bool> {
         Ok(self.conn.execute(
             "UPDATE games SET save_seen_at = ?2 WHERE id = ?1 AND (save_seen_at IS NULL OR save_seen_at != ?2)",
@@ -822,7 +831,7 @@ impl Db {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at, status FROM games
+            "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at, status, save_played_secs FROM games
              WHERE ?1 IS NULL OR id = ?1",
         )?;
         let rows = stmt.query_map([only], |r| {
@@ -837,13 +846,14 @@ impl Db {
                 r.get::<_, Option<String>>(7)?,
                 r.get::<_, Option<i64>>(8)?,
                 r.get::<_, Option<String>>(9)?,
+                r.get::<_, Option<i64>>(10)?,
             ))
         })?;
 
         let mut drives = Drives::default();
         let mut games = Vec::new();
         for row in rows {
-            let (id, title, favorite, added_at, cover, hero, logo, description, save_seen, status) = row?;
+            let (id, title, favorite, added_at, cover, hero, logo, description, save_seen, status, save_played) = row?;
             let with_last = entries.remove(&id).unwrap_or_default();
             let (hub_secs, hub_last) = sessions.get(&id).copied().unwrap_or((0, 0));
 
@@ -884,7 +894,12 @@ impl Db {
                 installed,
                 added_at,
                 last_played,
-                playtime_secs: merged_secs(store_total, baseline, hub_secs),
+                // A store that times the game knows best; otherwise the game's
+                // own timer from its saves, when it says more than Hearth timed.
+                playtime_secs: match (store_total, save_played) {
+                    (None, Some(s)) => s.max(merged_secs(None, baseline, hub_secs)),
+                    _ => merged_secs(store_total, baseline, hub_secs),
+                },
                 cover,
                 hero,
                 logo,
@@ -1233,6 +1248,30 @@ mod tests {
         assert!(db.set_save_seen(id, 1_784_294_580).unwrap());
         assert!(!db.set_save_seen(id, 1_784_294_580).unwrap(), "unchanged");
         assert_eq!(db.game(id).unwrap().unwrap().last_played, Some(1_784_294_580));
+    }
+
+    #[test]
+    fn a_save_timer_counts_only_where_no_store_times_the_game() {
+        let mut db = Db::open_in_memory().unwrap();
+        let folder = entry(StoreId::Manual, "D:/Games/Clair/Expedition33.exe", "Clair Obscur Expedition 33", true);
+        db.sync_store(StoreId::Manual, &[folder], 0).unwrap();
+        let mut steam = entry(StoreId::Steam, "1", "Portal", true);
+        steam.store_playtime_secs = Some(600);
+        db.sync_store(StoreId::Steam, &[steam], 0).unwrap();
+        let ids: Vec<i64> = db.list_games(&LibraryQuery::default()).unwrap().iter().map(|g| g.id).collect();
+        let (clair, portal) = (ids[0], ids[1]);
+
+        assert!(db.set_save_played(clair, 20_746).unwrap());
+        assert!(!db.set_save_played(clair, 20_746).unwrap(), "unchanged");
+        assert_eq!(db.game(clair).unwrap().unwrap().playtime_secs, 20_746);
+
+        // Hearth timed more than the save says: Hearth's figure stands.
+        db.record_session(clair, 0, 30_000, SessionSource::Tracker).unwrap();
+        assert_eq!(db.game(clair).unwrap().unwrap().playtime_secs, 30_000);
+
+        // Steam times Portal itself; its save timer is ignored.
+        db.set_save_played(portal, 99_999).unwrap();
+        assert_eq!(db.game(portal).unwrap().unwrap().playtime_secs, 600);
     }
 
     #[test]
