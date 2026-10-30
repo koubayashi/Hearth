@@ -30,6 +30,7 @@ pub enum LaunchError {
 }
 
 pub fn run(action: &LaunchAction) -> Result<(), LaunchError> {
+    let mut params = String::new();
     let (mut cmd, what) = match action {
         LaunchAction::Uri { uri } => {
             // `explorer.exe <uri>` hands the URI to its protocol handler without
@@ -41,13 +42,66 @@ pub fn run(action: &LaunchAction) -> Result<(), LaunchError> {
         LaunchAction::Process { exe, args, working_dir } => {
             let mut c = Command::new(exe);
             c.args(args);
+            params = args
+                .iter()
+                .map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() })
+                .collect::<Vec<_>>()
+                .join(" ");
             if let Some(dir) = working_dir.as_ref().or(exe.parent().map(|p| p.to_path_buf()).as_ref()) {
                 c.current_dir(dir);
             }
             (c, exe.display().to_string())
         }
     };
-    cmd.spawn().map(drop).map_err(|source| LaunchError::Spawn { what, source })
+    spawn(&mut cmd, &params).map_err(|source| LaunchError::Spawn { what, source })
+}
+
+/// Starts `cmd`. A program whose manifest asks for administrator rights can't
+/// be started directly (os error 740), so it goes through the shell instead,
+/// which shows the UAC prompt as double-clicking it would. `params` is the
+/// command line after the program, as the shell takes it.
+fn spawn(cmd: &mut Command, params: &str) -> std::io::Result<()> {
+    const ERROR_ELEVATION_REQUIRED: i32 = 740;
+    match cmd.spawn() {
+        Ok(_) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(ERROR_ELEVATION_REQUIRED) => run_elevated(cmd, params),
+        Err(e) => Err(e),
+    }
+}
+
+#[cfg(windows)]
+fn run_elevated(cmd: &Command, params: &str) -> std::io::Result<()> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW};
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    fn wide(s: &OsStr) -> Vec<u16> {
+        s.encode_wide().chain(Some(0)).collect()
+    }
+    let verb = wide(OsStr::new("runas"));
+    let file = wide(cmd.get_program());
+    let params = wide(OsStr::new(params));
+    let dir = cmd.get_current_dir().map(|d| wide(d.as_os_str()));
+
+    // SAFETY: plain C struct; every pointer it holds outlives the call.
+    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    info.lpVerb = verb.as_ptr();
+    info.lpFile = file.as_ptr();
+    info.lpParameters = params.as_ptr();
+    info.lpDirectory = dir.as_ref().map_or(std::ptr::null(), |d| d.as_ptr());
+    info.nShow = SW_SHOWNORMAL;
+    if unsafe { ShellExecuteExW(&mut info) } == 0 {
+        // Declining the UAC prompt lands here too (os error 1223).
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn run_elevated(_cmd: &Command, _params: &str) -> std::io::Result<()> {
+    Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
 }
 
 /// Runs a program the user picked as a way to play: an .exe directly, a .bat
@@ -86,7 +140,7 @@ pub fn run_program(path: &Path, args: &str, working_dir: Option<&Path>) -> Resul
     if let Some(dir) = working_dir.or(path.parent()) {
         cmd.current_dir(dir);
     }
-    cmd.spawn().map(drop).map_err(|source| LaunchError::Spawn { what, source })
+    spawn(&mut cmd, args).map_err(|source| LaunchError::Spawn { what, source })
 }
 
 #[cfg(windows)]
