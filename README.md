@@ -29,19 +29,21 @@ app/src-tauri/   Tauri shell
 
 ## Development
 
-Requires Rust (stable, MSVC toolchain), Node 20+ and WebView2 (bundled with Windows 11).
+Requires Rust (stable, MSVC toolchain), Node 24 and WebView2 (bundled with Windows 11).
 
 ```bash
 cd app
-npm install
+npm ci
 npm run tauri dev
 ```
 
 Run the backend tests from the repo root:
 
 ```bash
-cargo test --workspace
+cargo test --workspace --exclude hearth
 ```
+
+Before changing anything, read [CONTRIBUTING.md](CONTRIBUTING.md). It covers setup, conventions and what never to commit, for people and for AI coding agents alike.
 
 ## License
 
