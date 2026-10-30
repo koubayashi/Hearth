@@ -3,8 +3,16 @@ node_modules/
 app/dist/
 app/src-tauri/gen/
 *.log
-# Design tool notes (impeccable), kept local
+# AI assistant files and working notes: kept on this PC, never in the repo.
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
 .impeccable/
+DECISIONS.md
+BACKLOG.md
+PRODUCT.md
+DESIGN.md
 *.tsbuildinfo
 
 # Secrets: the updater signing key lives in ~/.tauri, sign-ins in Credential
