@@ -3,7 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import type { Game, LaunchOption } from "../lib/types";
-import { storeName } from "../lib/ways";
+import { folderProgram, storeName } from "../lib/ways";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
 
@@ -31,10 +31,19 @@ export function WaysToPlay({ game, onClose }: { game: Game; onClose: () => void 
   const store = storeName(game);
   const storeId = (game.entries.find((e) => e.installed && !e.offline) ?? game.entries[0])?.store ?? "manual";
   const storeIsDefault = !ways.some((w) => w.is_default);
+  const [program, setProgram] = useState(folderProgram(game));
 
   // The library refreshes after each change; keep this list in step with it.
-  useEffect(() => setWays(game.launch_options), [game.launch_options]);
-  const reload = () => api.getGame(game.id).then((g) => g && setWays(g.launch_options));
+  useEffect(() => {
+    setWays(game.launch_options);
+    setProgram(folderProgram(game));
+  }, [game]);
+  const reload = () =>
+    api.getGame(game.id).then((g) => {
+      if (!g) return;
+      setWays(g.launch_options);
+      setProgram(folderProgram(g));
+    });
 
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>("input, button")?.focus();
@@ -54,6 +63,13 @@ export function WaysToPlay({ game, onClose }: { game: Game; onClose: () => void 
     const picked = await openDialog({ title: "Choose a program, script or shortcut", filters: PROGRAMS });
     if (typeof picked !== "string") return;
     setDraft((d) => d && { ...d, path: picked, name: d.name || nameFrom(picked) });
+  };
+  /** A folder game: start another program from its folder (single player
+   * instead of multiplayer, say). */
+  const changeProgram = async () => {
+    if (!isTauri() || !program) return;
+    const picked = await openDialog({ title: "Choose the program Play starts", defaultPath: program.path, filters: PROGRAMS });
+    if (typeof picked === "string") void act(() => api.setFolderExe(game.id, picked));
   };
   const browseFolder = async () => {
     if (!isTauri() || !draft) return;
@@ -96,15 +112,41 @@ export function WaysToPlay({ game, onClose }: { game: Game; onClose: () => void 
             <span className="way-icon">
               <StoreIcon store={storeId} size={18} />
             </span>
-            <span className="way-text">
-              <b>{store}</b>
-              <span>{game.installed ? `Launches through ${store}` : `Installs through ${store}`}</span>
-            </span>
+            {program ? (
+              <span className="way-text">
+                <b>Game folder</b>
+                <span title={program.path}>
+                  Starts {program.name}
+                  {!program.picked && " (picked automatically)"}
+                </span>
+              </span>
+            ) : (
+              <span className="way-text">
+                <b>{store}</b>
+                <span>{game.installed ? `Launches through ${store}` : `Installs through ${store}`}</span>
+              </span>
+            )}
             {storeIsDefault ? (
               <span className="way-default">Play button</span>
             ) : (
               <button className="btn" data-nav onClick={() => act(() => api.setDefaultLaunch(game.id, null))}>
                 Use for Play
+              </button>
+            )}
+            {program && (
+              <button className="icon-btn small" data-nav aria-label={`Change the program ${game.title} starts`} title="Change program" onClick={changeProgram}>
+                <Icon name="sliders" size={15} />
+              </button>
+            )}
+            {program?.picked && (
+              <button
+                className="icon-btn small"
+                data-nav
+                aria-label="Go back to the program Hearth picked"
+                title="Go back to the program Hearth picked"
+                onClick={() => act(() => api.setFolderExe(game.id, null))}
+              >
+                <Icon name="close" size={15} />
               </button>
             )}
           </li>

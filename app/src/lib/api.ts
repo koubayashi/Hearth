@@ -22,6 +22,7 @@ const backend = isTauri()
       deleteLaunchOption: (id: number) => invoke<void>("delete_launch_option", { id }),
       setDefaultLaunch: (gameId: number, option: number | null) =>
         invoke<void>("set_default_launch", { gameId, option }),
+      setFolderExe: (gameId: number, path: string | null) => invoke<void>("set_folder_exe", { gameId, path }),
       accounts: () => invoke<Accounts>("accounts"),
       syncNow: () => invoke<void>("sync_now"),
       epicSignIn: () => invoke<void>("epic_sign_in"),

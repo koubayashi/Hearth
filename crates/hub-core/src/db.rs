@@ -32,6 +32,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/006_status.sql"),
     include_str!("../migrations/007_launch_options.sql"),
     include_str!("../migrations/008_save_playtime.sql"),
+    include_str!("../migrations/009_folder_exe.sql"),
 ];
 
 pub struct Db {
@@ -706,6 +707,16 @@ impl Db {
         Ok(())
     }
 
+    /// The program a folder game's Play starts, relative to its install
+    /// folder; None goes back to the one the folder scan chose.
+    pub fn set_launch_exe(&self, entry_id: i64, exe: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE store_entries SET launch_exe = ?2 WHERE id = ?1 AND store = ?3",
+            params![entry_id, exe, StoreId::Manual.as_str()],
+        )?;
+        Ok(())
+    }
+
     pub fn launch_option(&self, id: i64) -> Result<Option<LaunchOption>> {
         Ok(self
             .conn
@@ -815,7 +826,7 @@ impl Db {
             let mut stmt = self.conn.prepare(
                 "SELECT e.id, e.game_id, e.store, e.store_game_id, e.installed, e.install_dir,
                         h.store IS NOT NULL, e.store_playtime_secs, e.store_baseline_secs,
-                        e.store_last_played
+                        e.store_last_played, e.launch_exe
                  FROM store_entries e
                  LEFT JOIN hidden h ON h.store = e.store AND h.store_game_id = e.store_game_id
                  WHERE ?1 IS NULL OR e.game_id = ?1
@@ -834,6 +845,7 @@ impl Db {
                     hidden: r.get(6)?,
                     store_playtime_secs: r.get(7)?,
                     store_baseline_secs: r.get(8)?,
+                    launch_exe: r.get(10)?,
                     offline: false,
                 };
                 entries.entry(entry.game_id).or_default().push((entry, r.get(9)?));

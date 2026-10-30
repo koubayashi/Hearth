@@ -88,7 +88,7 @@ const games: Game[] = allSeeds.map(([title, appid, store, installed, hours, days
   launch_options: [] as LaunchOption[],
   entries: [
     ...(title === "Hollow Knight"
-      ? [{ id: 1000, game_id: i + 1, store: "gog" as StoreId, store_game_id: "hk", installed: false, install_dir: null, hidden: false, store_playtime_secs: null, store_baseline_secs: null, offline: false }]
+      ? [{ id: 1000, game_id: i + 1, store: "gog" as StoreId, store_game_id: "hk", installed: false, install_dir: null, hidden: false, store_playtime_secs: null, store_baseline_secs: null, launch_exe: null, offline: false }]
       : []),
     {
       id: i + 1,
@@ -100,6 +100,7 @@ const games: Game[] = allSeeds.map(([title, appid, store, installed, hours, days
       hidden: false,
       store_playtime_secs: null,
       store_baseline_secs: null,
+      launch_exe: null,
       offline: title === "Dead Cells",
     },
   ],
@@ -131,6 +132,11 @@ export const mockBackend = {
   async setDefaultLaunch(gameId: number, option: number | null) {
     const game = games.find((g) => g.id === gameId);
     if (game) game.launch_options = game.launch_options.map((x) => ({ ...x, is_default: x.id === option }));
+    libraryChanged();
+  },
+  async setFolderExe(gameId: number, path: string | null) {
+    const entry = games.find((g) => g.id === gameId)?.entries.find((e) => e.store === "manual" && e.installed);
+    if (entry) entry.launch_exe = path ? (path.split(/[\\/]/).pop() ?? null) : null;
     libraryChanged();
   },
   accounts: async (): Promise<Accounts> => ({

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import type { Collection, Game, GameStatus, Via } from "../lib/types";
-import { defaultWay, folderGone, storeName } from "../lib/ways";
+import { defaultWay, folderGone, folderProgram, storeName } from "../lib/ways";
 import { STATUSES } from "../lib/types";
 import { Icon, type IconName } from "./Icon";
 
@@ -203,6 +203,7 @@ function PlayView({
     </button>
   );
   const store = storeName(game);
+  const program = folderProgram(game);
   return (
     <>
       {back}
@@ -212,7 +213,9 @@ function PlayView({
         "store",
         game.offline_drive
           ? `${store}: drive ${game.offline_drive} not connected`
-          : game.installed
+          : program
+            ? `Play ${program.name}`
+            : game.installed
             ? `Play with ${store}`
             : storeName(game) === "Manual"
               ? "Game folder: not installed"

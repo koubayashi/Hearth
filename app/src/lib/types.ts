@@ -12,6 +12,8 @@ export interface StoreEntry {
   hidden: boolean;
   store_playtime_secs: number | null;
   store_baseline_secs: number | null;
+  /** Folder games: the program Play starts instead of the scan's choice, relative to install_dir. */
+  launch_exe: string | null;
   /** Its install folder is on a drive that isn't connected right now. */
   offline: boolean;
 }

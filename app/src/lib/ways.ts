@@ -13,6 +13,15 @@ const launchEntry = (g: Game) =>
 /** The store Hearth launches or installs through. */
 export const storeName = (g: Game) => STORE_LABEL[launchEntry(g)?.store ?? "manual"];
 
+/** For a folder game, the program its Play starts: the one the user picked,
+ * else the one the folder scan chose. Null for store games. */
+export function folderProgram(g: Game): { path: string; name: string; picked: boolean } | null {
+  const e = launchEntry(g);
+  if (e?.store !== "manual" || !e.installed) return null;
+  const path = e.launch_exe && e.install_dir ? `${e.install_dir.replace(/[\\/]$/, "")}\\${e.launch_exe}` : e.store_game_id;
+  return { path, name: path.split(/[\\/]/).pop() ?? path, picked: !!e.launch_exe };
+}
+
 /** A game found in a folder that's since been deleted: no store can install
  * it, so it stays in the library (playtime and all) with nothing to start. */
 export const folderGone = (g: Game) =>

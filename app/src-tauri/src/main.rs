@@ -145,6 +145,12 @@ fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdRe
         .iter()
         .find(|p| p.id() == entry.store)
         .ok_or_else(|| format!("{} isn't supported yet", entry.store.as_str()))?;
+    let picked = entry.installed && !entry.offline && entry.store == hub_core::StoreId::Manual;
+    if let Some((dir, exe)) = entry.install_dir.as_deref().zip(entry.launch_exe.as_deref()).filter(|_| picked) {
+        let path = ways::folder_exe(dir, exe)
+            .ok_or_else(|| format!("{exe} isn't in {}'s folder any more. Choose its program again.", game.title))?;
+        return hub_launch::run_program(&path, "", None).map_err(err);
+    }
     let action = if entry.installed && !entry.offline {
         provider.launch(&entry.store_game_id)
     } else if entry.store == hub_core::StoreId::Manual {
@@ -809,6 +815,7 @@ fn main() {
             ways::save_launch_option,
             ways::delete_launch_option,
             ways::set_default_launch,
+            ways::set_folder_exe,
             play_sessions,
             backup::backup_export,
             backup::backup_restore,

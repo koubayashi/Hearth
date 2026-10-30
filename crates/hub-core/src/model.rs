@@ -67,6 +67,10 @@ pub struct StoreEntry {
     pub hidden: bool,
     pub store_playtime_secs: Option<i64>,
     pub store_baseline_secs: Option<i64>,
+    /// Folder games: the program Play starts instead of the scan's choice,
+    /// relative to `install_dir`.
+    #[serde(default)]
+    pub launch_exe: Option<String>,
     /// Its install folder is on a drive that isn't connected right now.
     #[serde(default)]
     pub offline: bool,
