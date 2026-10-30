@@ -37,14 +37,16 @@ if (bumped === cargo) {
   process.exit(1);
 }
 writeFileSync("Cargo.toml", bumped);
-for (const file of ["app/package.json"]) {
+for (const file of ["app/package.json", "app/package-lock.json"]) {
   const json = JSON.parse(readFileSync(file, "utf8"));
   json.version = version;
+  // The lockfile repeats the app's own version under its root package.
+  if (json.packages?.[""]) json.packages[""].version = version;
   writeFileSync(file, JSON.stringify(json, null, 2) + "\n");
 }
 run("cargo update --workspace --offline");
 
-run("git add Cargo.toml Cargo.lock app/package.json");
+run("git add Cargo.toml Cargo.lock app/package.json app/package-lock.json");
 run(`git commit -m "Hearth ${version}"`);
 run(`git tag v${version}`);
 run("git push");
