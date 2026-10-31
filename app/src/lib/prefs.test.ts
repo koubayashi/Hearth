@@ -18,3 +18,18 @@ describe("tones", () => {
     expect(contrast("#777777", "#777777")).toBe(1);
   });
 });
+
+describe("highlight presets", () => {
+  it("work on every tone's ground, dark and light, with white text on them", async () => {
+    const { ACCENT_PRESETS } = await import("../components/AccentPicker");
+    for (const { hex, name } of ACCENT_PRESETS) {
+      for (const t of TONES) {
+        for (const mode of ["dark", "light"] as const) {
+          expect(contrast(hex, t[mode].base), `${name} on ${t.id} ${mode}`).toBeGreaterThanOrEqual(3);
+        }
+      }
+      expect(inkFor(hex), name).toBe("#ffffff");
+      expect(contrast(hex, "#ffffff"), name).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});

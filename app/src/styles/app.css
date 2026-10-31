@@ -215,7 +215,6 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .switch[aria-checked="true"] { background: var(--accent); box-shadow: none; }
 .switch[aria-checked="true"]::after { transform: translateX(18px); background: var(--accent-ink); }
 .switch:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.color-input { width: 36px; height: 30px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; padding: 2px; cursor: pointer; }
 
 /* ---------- toast ---------- */
 .toast {
@@ -925,3 +924,70 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
    the games is what makes a page read as the library. */
 .hidden-view .cover:not(.lit):not(:hover) .cover-art img { filter: grayscale(1); opacity: 0.8; }
 .hidden-view .lv-row:not([aria-current]):not(:hover) .lv-thumb { filter: grayscale(1); }
+/* ---------- highlight colour picker ---------- */
+.accent-picker { width: fit-content; }
+.accent-swatches { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+/* Round wells: a ring around the chosen one, set off from the colour by a gap of ground. */
+.accent-dot {
+  all: unset; position: relative; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center;
+  box-shadow: 0 0 0 2px transparent;
+  transition: box-shadow var(--dur-fast) var(--ease-out), scale var(--dur-fast) var(--ease-out);
+}
+.accent-dot i {
+  width: 24px; height: 24px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+.accent-dot:hover { scale: 1.08; }
+.accent-dot:active { scale: 0.94; transition-duration: 60ms; }
+.accent-dot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.accent-dot[aria-pressed="true"] i { width: 20px; height: 20px; }
+.accent-dot:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+/* Any colour: the hue wheel, with the chosen colour inside once there is one. */
+.accent-well::before {
+  content: ""; position: absolute; inset: 2px; border-radius: 50%; z-index: -1;
+  background: conic-gradient(from 90deg, #e5484d, #f5a524, #e8d44d, #46a758, #12a594, #3e63dd, #8e4ec6, #d6409f, #e5484d);
+}
+.accent-well { isolation: isolate; }
+.accent-well i { width: 14px; height: 14px; box-shadow: 0 0 0 2px var(--base-2); }
+.accent-well[aria-pressed="true"] i { width: 14px; height: 14px; }
+
+/* The panel grows out of the swatch that opened it, and goes back into it. */
+.color-panel {
+  position: fixed; z-index: 45; width: 248px; padding: 12px;
+  display: grid; gap: 12px; transform-origin: top right;
+  border-radius: var(--radius-panel); background: var(--glass-strong); backdrop-filter: blur(30px) saturate(140%);
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+  animation: panel-in 180ms var(--ease-out);
+}
+.color-panel[data-closing] { animation: panel-out 120ms var(--ease-out) forwards; }
+.color-panel[data-above] { transform-origin: bottom right; }
+@keyframes panel-in { from { opacity: 0; scale: 0.94; } }
+@keyframes panel-out { to { opacity: 0; scale: 0.94; } }
+
+.color-pad {
+  position: relative; height: 140px; border-radius: var(--radius-control); cursor: crosshair; touch-action: none;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, hsl(var(--hue) 100% 50%));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.color-pad:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.color-thumb {
+  position: absolute; width: 16px; height: 16px; border-radius: 50%; translate: -50% -50%; pointer-events: none;
+  box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.hue-slider {
+  appearance: none; width: 100%; height: 14px; margin: 0; border-radius: 7px; cursor: pointer;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.hue-slider::-webkit-slider-thumb {
+  appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.hue-slider:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+.hex-field { display: flex; align-items: center; gap: 6px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.hex-field .text-input { text-transform: uppercase; font-family: ui-monospace, "Cascadia Mono", monospace; }

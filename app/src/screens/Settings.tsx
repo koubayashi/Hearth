@@ -10,6 +10,7 @@ import { pickName, useAccounts } from "../lib/gamertag";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { formatLastPlayed, inSentence } from "../lib/format";
 import { StoreIcon } from "../components/StoreIcon";
+import { AccentPicker } from "../components/AccentPicker";
 import { Icon } from "../components/Icon";
 
 type Note = { ok: boolean; text: string } | null;
@@ -953,27 +954,22 @@ export function Settings({
               ))}
             </div>
           </div>
-          <div className="setting">
+          <div className="setting setting-stack">
             <div className="text">
-              <b>Custom highlight colour</b>
+              <b>Highlight colour</b>
               <span>
-                {p.customAccent ? `Used instead of ${toneLabel}'s, in both modes.` : `Replaces ${toneLabel}'s highlight colour.`}
+                {p.customAccent
+                  ? `Used instead of ${toneLabel}'s, in both modes. The first colour goes back to it.`
+                  : `${toneLabel}'s own, or one of these. The last one picks any colour.`}
               </span>
               {faint && <span className="note warn">Hard to see on the {shown} background. Pick a {shown === "light" ? "deeper" : "lighter"} colour.</span>}
             </div>
-            <input
-              type="color"
-              className="color-input"
-              data-nav
-              aria-label="Custom highlight colour"
-              value={p.customAccent ?? tone[shown].accent}
-              onChange={(e) => setPrefs({ customAccent: e.target.value })}
+            <AccentPicker
+              value={p.customAccent}
+              toneAccent={tone[shown].accent}
+              toneLabel={toneLabel}
+              onChange={(customAccent) => setPrefs({ customAccent })}
             />
-            {p.customAccent && (
-              <button className="btn" data-nav onClick={() => setPrefs({ customAccent: null })}>
-                Use {toneLabel}'s
-              </button>
-            )}
           </div>
           <div className="setting">
             <div className="text">
