@@ -9,7 +9,6 @@ mod details;
 mod drives;
 mod errors;
 mod folders;
-mod fullscreen_fix;
 mod gog_account;
 mod saves;
 mod snap_layouts;

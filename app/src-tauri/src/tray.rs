@@ -33,7 +33,6 @@ pub fn show_main(app: &AppHandle) {
 /// Mica needs Windows 11; on Windows 10 the CSS background shows instead.
 pub fn style_main(window: &tauri::WebviewWindow) {
     crate::auth::forget_shared_cookies(window);
-    crate::fullscreen_fix::install(window);
     crate::snap_layouts::install(window);
     #[cfg(target_os = "windows")]
     let _ = window_vibrancy::apply_mica(window, None);

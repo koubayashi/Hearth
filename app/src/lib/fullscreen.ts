@@ -1,6 +1,6 @@
 // Fullscreen for the whole window: F11 anywhere, the Settings switch, and the
 // Console view (which is always fullscreen while it's open). From a maximized
-// window too: the Rust side makes sure the page then fills the whole screen.
+// window too (tao 0.37.2 and later fill the whole screen then).
 
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
