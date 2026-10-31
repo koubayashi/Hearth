@@ -36,3 +36,6 @@
 .primary .via { font-size: var(--text-sm); }
 .lv-play .via { font-size: var(--text-md); }
 .cx-play .via { font-size: 18px; }
+
+.ways-intro { margin: 0 0 var(--space-2); }
+.field-hint { color: var(--ink-3); font-size: var(--text-xs); }

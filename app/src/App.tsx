@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { preloadGameInfo } from "./lib/gameInfo";
+import { loadSmart } from "./lib/smart";
+import { onOpenShelf, shelfKey, type Shelf } from "./lib/nav";
 import { api } from "./lib/api";
 import type { Game, GameStatus, NowPlaying, Via } from "./lib/types";
 import { chosenWay, storeName } from "./lib/ways";
@@ -30,26 +32,41 @@ export function App() {
   // While the cover size slider moves, the library shows behind Settings.
   // It stays mounted (hidden) while Settings is open, so it is ready at once.
   const [peek, setPeek] = useState(false);
-  // Where Stats sent you: a game to show in the library, or a status shelf.
+  // Where you were sent: a game to show in the library (from Stats), or a
+  // shelf of Collections (a status from Stats, a series from a game's panel).
   const [revealId, setRevealId] = useState<number | null>(null);
-  const [startStatus, setStartStatus] = useState<GameStatus | undefined>(undefined);
+  const [startShelf, setStartShelf] = useState<Shelf | undefined>(undefined);
   const openGame = (g: Game) => {
     setFocused(g);
     setRevealId(g.id);
     setRoute("library");
   };
   const openStatus = (status: GameStatus) => {
-    setStartStatus(status);
+    setStartShelf({ kind: "status", status });
     setFocused(null);
     setRoute("collections");
   };
-  // A controller's Start button opens the console from anywhere.
+  // The game you came from stays in the panel.
+  useEffect(
+    () =>
+      onOpenShelf((s) => {
+        setStartShelf(s);
+        setRoute("collections");
+      }),
+    [],
+  );
+  // A controller's Start button opens the console from anywhere. The first
+  // time, say how to get back, in case it was pressed by accident.
   useEffect(() => {
     if (prefs.consoleMode) return;
-    const onKey = (e: KeyboardEvent) => e.key === "GamepadStart" && setPrefs({ consoleMode: true });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "GamepadStart") return;
+      if (!prefs.consoleTipSeen) say("Console view. Press Start again to go back to the desktop.");
+      setPrefs({ consoleMode: true, consoleTipSeen: true });
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [prefs.consoleMode]);
+  }, [prefs.consoleMode, prefs.consoleTipSeen]);
   // Escape leaves the hidden view, once nothing nearer used it: the game
   // panel, a menu or a dialog, or a search box clearing itself.
   useEffect(() => {
@@ -74,6 +91,7 @@ export function App() {
     api.gameCounts().then(setCounts);
     // Every game's panel details, ready before a game is selected.
     void preloadGameInfo();
+    void loadSmart();
   }, [version]);
 
   const toggleHidden = async (g: Game) => {
@@ -151,7 +169,7 @@ export function App() {
       <Backdrop src={showsArt ? (focused?.hero ?? null) : null} />
       <TitleBar />
       <div className="app">
-        <Rail route={route} counts={counts} onConsole={() => setPrefs({ consoleMode: true })} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false), setRevealId(null), setStartStatus(undefined))} />
+        <Rail route={route} counts={counts} onConsole={() => setPrefs({ consoleMode: true })} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false), setRevealId(null), setStartShelf(undefined))} />
         <main className={`main${peek && route === "settings" ? " peeking" : ""}`}>
           {libraryLike && prefs.libraryView === "list" && (
             <ListView
@@ -173,6 +191,8 @@ export function App() {
               hiddenView={route === "hidden"}
               onLeaveHidden={leaveHidden}
               revealId={route === "library" ? revealId : null}
+              hiddenCount={counts.hidden ?? 0}
+              onShowHidden={() => (setRoute("hidden"), setFocused(null))}
               version={version}
               focused={focused}
               playing={playing}
@@ -184,8 +204,8 @@ export function App() {
           )}
           {route === "collections" && (
             <Collections
-              key={startStatus ?? "collections"}
-              initialStatus={startStatus}
+              key={startShelf ? shelfKey(startShelf) : "collections"}
+              initialShelf={startShelf}
               version={version}
               focused={focused}
               playing={playing}

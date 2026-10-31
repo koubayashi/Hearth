@@ -241,6 +241,21 @@ function GogRow({ accounts }: { accounts: Accounts | null }) {
   );
 }
 
+/** Stores Hearth doesn't read yet, named so nobody goes looking for their games. */
+function ComingRow() {
+  return (
+    <div className="setting">
+      <div className="text">
+        <b>
+          <StoreIcon store="ea" size={15} /> EA app · <StoreIcon store="ubisoft" size={15} /> Ubisoft Connect
+        </b>
+        <span>Not read yet. Until then, add their installed games with Game folders below.</span>
+      </div>
+      <span className="tag">Coming</span>
+    </div>
+  );
+}
+
 /** Optional SteamGridDB key for community covers and backgrounds. */
 function SgdbRow({ accounts }: { accounts: Accounts | null }) {
   const [key, setKey] = useState("");
@@ -389,7 +404,7 @@ function SignedIn({ name, detail }: { name: string; detail: string }) {
 }
 
 /**
- * The name in the console's top bar and Stats. Steam and Epic names can
+ * Your name: in the sidebar, on Stats and in the console. Steam and Epic names can
  * differ, so one is chosen; a store you aren't signed in to can't be picked.
  */
 function NameSetting({ accounts }: { accounts: Accounts | null }) {
@@ -408,14 +423,14 @@ function NameSetting({ accounts }: { accounts: Accounts | null }) {
     <div className="setting setting-stack">
       <div className="setting-row">
         <div className="text">
-          <b>Your name in the console</b>
+          <b>Your name</b>
           <span>
             {picked ? (
               <>
-                Shown as <b className="inline-name">{picked.name}</b> in the top bar and on Stats.
+                Shown as <b className="inline-name">{picked.name}</b> in the sidebar, on Stats and in the console.
               </>
             ) : p.nameSource === "off" ? (
-              "The console shows no name."
+              "Hearth shows no name."
             ) : (
               "Sign in to Steam or Epic, or type your own name."
             )}
@@ -906,6 +921,7 @@ export function Settings({
             <EpicRow accounts={accounts} />
             <XboxRow accounts={accounts} />
             <GogRow accounts={accounts} />
+            <ComingRow />
           </div>
         </section>
 
@@ -1060,6 +1076,20 @@ export function Settings({
               aria-label="Show Jump back in"
               aria-checked={p.showRecent}
               onClick={() => setPrefs({ showRecent: !p.showRecent })}
+            />
+          </div>
+          <div className="setting">
+            <div className="text">
+              <b>Favourites first</b>
+              <span>Starred games get their own section at the top of the library. Star a game from its panel or menu.</span>
+            </div>
+            <button
+              className="switch"
+              role="switch"
+              data-nav
+              aria-label="Favourites first"
+              aria-checked={p.showFavoritesRow}
+              onClick={() => setPrefs({ showFavoritesRow: !p.showFavoritesRow })}
             />
           </div>
           <SgdbRow accounts={accounts} />

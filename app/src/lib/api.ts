@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { LaunchOptionInput, Via } from "./types";
-import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, StoreHit } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit } from "./types";
 import { mockBackend } from "./mock";
 
 const on = (event: string) => (cb: (payload: unknown) => void) => listen(event, (e) => cb(e.payload));
@@ -69,6 +69,12 @@ const backend = isTauri()
       artworkOptions: (id: number, kind: ArtKind) => invoke<ArtOption[]>("artwork_options", { id, kind }),
       setArtwork: (id: number, kind: ArtKind, url: string) => invoke<void>("set_artwork", { id, kind, url }),
       resetArtwork: (id: number) => invoke<void>("reset_artwork", { id }),
+      storeArtwork: (id: number) => invoke<{ cover: string | null; hero: string | null }>("store_artwork", { id }),
+      smartIndex: () => invoke<SmartIndex>("smart_index"),
+      setGameLink: (gameId: number, role: SmartRole, entity: string, on: boolean) =>
+        invoke<void>("set_game_link", { gameId, role, entity, on }),
+      createSeries: (gameId: number, name: string) => invoke<string>("create_series", { gameId, name }),
+      setEntityParent: (child: string, parent: string, on: boolean) => invoke<void>("set_entity_parent", { child, parent, on }),
       setStoreMatch: (id: number, steamAppId: number) =>
         invoke<GameDetails | null>("set_store_match", { id, steamAppId }),
       addGameFolder: (path: string) => invoke<string[]>("add_game_folder", { path }),
@@ -77,6 +83,8 @@ const backend = isTauri()
       onLibraryChanged: on("library-changed"),
       onAccountsChanged: on("accounts-changed"),
       onSyncStarted: on("sync-started"),
+      onSmartStatus: on("smart-status"),
+      onSmartChanged: on("smart-changed"),
       onAutoBackup: on("auto-backup"),
       onSyncError: on("sync-error"),
       updateReady: () => invoke<string | null>("update_ready"),

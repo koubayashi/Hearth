@@ -11,6 +11,7 @@ mod errors;
 mod folders;
 mod gog_account;
 mod saves;
+mod smart;
 mod snap_layouts;
 mod tracking;
 mod tray;
@@ -38,6 +39,7 @@ pub(crate) struct AppState {
     pub(crate) folders: Arc<folders::FolderProvider>,
     pub(crate) sgdb: Arc<hub_providers::sgdb::SteamGridDb>,
     pub(crate) saves: hub_providers::saves::Saves,
+    pub(crate) wikidata: hub_providers::wikidata::Wikidata,
     providers: Vec<Arc<dyn LibraryProvider>>,
     syncing: Mutex<SyncState>,
 }
@@ -680,6 +682,8 @@ pub(crate) fn sync_all(app: AppHandle) {
         saves::refresh(&app).await;
         let _ = app.emit("library-changed", ());
         details::prefetch(&app).await;
+        // After details: they give games from other stores a Steam id to match by.
+        smart::refresh(&app).await;
     });
 }
 
@@ -744,6 +748,7 @@ fn main() {
                 gog,
                 folders,
                 saves: Default::default(),
+                wikidata: Default::default(),
                 sgdb: Arc::new(hub_providers::sgdb::SteamGridDb::new(secrets::load("sgdb-key"))),
                 steam,
                 metadata: Default::default(),
@@ -857,6 +862,11 @@ fn main() {
             artwork::open_sgdb_key_page,
             artwork::artwork_options,
             artwork::set_artwork,
+            artwork::store_artwork,
+            smart::smart_index,
+            smart::set_game_link,
+            smart::create_series,
+            smart::set_entity_parent,
             artwork::reset_artwork,
             collections::set_status,
             collections::list_collections,

@@ -106,6 +106,11 @@ export function WaysToPlay({ game, onClose }: { game: Game; onClose: () => void 
             <Icon name="close" size={16} />
           </button>
         </div>
+        <p className="note ways-intro">
+          Start {game.title} another way: with mods through a script extender or mod manager, straight from its exe
+          without the store's launcher, in DX11 or offline mode, or through any script or tool. Pick which one the Play
+          button uses.
+        </p>
 
         <ul className="ways-list">
           <li className="way">
@@ -207,7 +212,7 @@ export function WaysToPlay({ game, onClose }: { game: Game; onClose: () => void 
                   className="text-input"
                   data-nav
                   value={draft.path}
-                  placeholder="C:\Games\Peacock\Start Server.cmd"
+                  placeholder="C:\Games\Skyrim Special Edition\skse64_loader.exe"
                   onChange={(e) => setDraft({ ...draft, path: e.target.value })}
                 />
                 {isTauri() && (
@@ -216,6 +221,7 @@ export function WaysToPlay({ game, onClose }: { game: Game; onClose: () => void 
                   </button>
                 )}
               </span>
+              <small className="field-hint">A mod loader, a mod manager, the game's own exe, a .bat script or a .lnk shortcut.</small>
             </label>
             <label className="field">
               <span>Name</span>
@@ -223,9 +229,10 @@ export function WaysToPlay({ game, onClose }: { game: Game; onClose: () => void 
                 className="text-input"
                 data-nav
                 value={draft.name}
-                placeholder="Offline server"
+                placeholder="With mods"
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
+              <small className="field-hint">Shown on the Play button, as in "Play · With mods".</small>
             </label>
             <label className="field">
               <span>Arguments (optional)</span>

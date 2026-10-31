@@ -26,6 +26,19 @@ export async function preloadGameInfo() {
   }
 }
 
+/** What's in memory for a game right now, without asking (for sorting and filters). */
+export const savedInfo = (id: number): Info | undefined => cache.get(id);
+
+/** Re-renders whenever more saved info arrives. */
+export function useSavedInfo() {
+  const [n, rerender] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    listeners.add(rerender);
+    return () => void listeners.delete(rerender);
+  }, []);
+  return n;
+}
+
 /** Store-page details and install info for a game: what's in memory at once,
  *  then a fresh copy for this game (which may fetch it if never seen). */
 export function useGameInfo(game: Game | null, nonce: number) {

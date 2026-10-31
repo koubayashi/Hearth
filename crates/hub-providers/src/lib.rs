@@ -11,6 +11,7 @@ pub mod saves;
 pub mod secrets;
 pub mod sgdb;
 pub mod steam;
+pub mod wikidata;
 pub mod vdf;
 pub mod xbox;
 pub mod xbox_live;

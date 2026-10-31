@@ -1,5 +1,9 @@
 import { Fragment } from "react";
 import { Icon, type IconName } from "./Icon";
+import { StoreIcon } from "./StoreIcon";
+import { pickName, useAccounts } from "../lib/gamertag";
+import { usePrefs } from "../lib/prefs";
+import type { StoreId } from "../lib/types";
 
 export type Route = "library" | "collections" | "stats" | "hidden" | "settings";
 
@@ -75,6 +79,38 @@ export function Rail({
         Console
       </button>
       {item("settings", "Settings", "settings")}
+      <Profile onOpen={() => onNavigate("settings")} />
     </nav>
+  );
+}
+
+/**
+ * Who's signed in, at the foot of the rail: your name (the one chosen in
+ * Settings, shared with Stats and the console) and the stores you're signed
+ * in to. Opens Settings, where both are changed.
+ */
+function Profile({ onOpen }: { onOpen: () => void }) {
+  const accounts = useAccounts();
+  const p = usePrefs();
+  const picked = pickName(accounts, p);
+  if (!picked) return null;
+  const stores = (["steam", "xbox", "epic", "gog"] as StoreId[]).filter((s) => accounts?.[s as "steam" | "xbox" | "epic" | "gog"]);
+  const initial = [...picked.name.trim()][0]?.toUpperCase() ?? "?";
+  return (
+    <button className="nav profile" data-nav title="Your name and store accounts, in Settings" onClick={onOpen}>
+      <span className="monogram" aria-hidden>
+        {initial}
+      </span>
+      <span className="who">
+        <b>{picked.name}</b>
+        {stores.length > 0 && (
+          <span className="who-stores" aria-label={`Signed in to ${stores.length} ${stores.length === 1 ? "store" : "stores"}`}>
+            {stores.map((s) => (
+              <StoreIcon key={s} store={s} size={12} />
+            ))}
+          </span>
+        )}
+      </span>
+    </button>
   );
 }

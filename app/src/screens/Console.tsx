@@ -15,6 +15,7 @@ import { StoreIcon } from "../components/StoreIcon";
 import { ArtworkPicker } from "../components/ArtworkPicker";
 import { StoreMatch } from "../components/StoreMatch";
 import { WaysToPlay } from "../components/WaysToPlay";
+import { SmartEditor } from "../components/SmartEditor";
 import { ConsoleStats } from "./ConsoleStats";
 import { ConsoleSettings } from "./ConsoleSettings";
 
@@ -469,8 +470,9 @@ export function Console({
           onPanel={setPanel}
         />
       )}
-      {panel === "artwork" && game && <ArtworkPicker game={game} onClose={() => setPanel(null)} onDone={() => setPanel(null)} />}
+      {panel === "artwork" && game && <ArtworkPicker game={game} onClose={() => setPanel(null)} onDone={() => {}} />}
       {panel === "ways" && game && <WaysToPlay game={game} onClose={() => setPanel(null)} />}
+      {panel === "smart" && game && <SmartEditor game={game} onClose={() => setPanel(null)} />}
       {panel === "match" && game && <StoreMatch game={game} onClose={() => setPanel(null)} onDone={() => setPanel(null)} />}
     </div>
   );

@@ -50,6 +50,9 @@ pub struct Tracker {
     /// (normalized dir with trailing separator, game id), longest dir first.
     dirs: Vec<(String, i64)>,
     active: HashMap<i64, Active>,
+    /// Games the user stopped timing by hand: not timed again until none of
+    /// their processes is running (a helper left behind can't restart it).
+    muted: Vec<i64>,
 }
 
 fn normalize(p: &str) -> String {
@@ -100,6 +103,8 @@ impl Tracker {
         let mut seen: Vec<i64> = exes.into_iter().filter_map(|e| self.game_for_exe(e)).collect();
         seen.sort_unstable();
         seen.dedup();
+        self.muted.retain(|id| seen.contains(id));
+        seen.retain(|id| !self.muted.contains(id));
 
         let mut events = Vec::new();
         // A long silence means the PC slept (or Hearth stalled) with the game
@@ -130,6 +135,16 @@ impl Tracker {
             }
         }
         events
+    }
+
+    /// The user says this game isn't being played: close its session now and
+    /// leave it alone until its processes have all closed.
+    pub fn stop(&mut self, id: i64) -> Option<Event> {
+        if !self.active.contains_key(&id) {
+            return None;
+        }
+        self.muted.push(id);
+        self.end(id)
     }
 
     /// Close every open session, e.g. when Hearth quits.
@@ -234,5 +249,20 @@ mod tests {
         }
         assert_eq!(t.flush(), [Event::Ended(Session { game_id: 1, started_at: 100, ended_at: 700 })]);
         assert!(t.running().is_empty());
+    }
+
+    #[test]
+    fn a_stopped_game_waits_for_its_processes_to_close() {
+        let mut t = tracker();
+        let helper = p(r"D:\Games\Epic Games\RedDeadRedemption2\Launcher.exe");
+        t.observe([helper.as_path()], 1000);
+        t.observe([helper.as_path()], 1100);
+        assert_eq!(t.stop(2), Some(Event::Ended(Session { game_id: 2, started_at: 1000, ended_at: 1100 })));
+        // The helper is still there: no new session.
+        assert!(t.observe([helper.as_path()], 1105).is_empty());
+        assert!(t.running().is_empty());
+        // Once it has closed, the next start is timed again.
+        assert!(t.observe([], 1110).is_empty());
+        assert_eq!(t.observe([helper.as_path()], 2000), [Event::Started { game_id: 2, at: 2000 }]);
     }
 }

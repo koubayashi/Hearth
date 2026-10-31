@@ -138,6 +138,14 @@ pub fn start(app: AppHandle) {
         .expect("start tracker thread");
 }
 
+/// The user stopped timing a game from the tray: its session ends now.
+pub fn stop(app: &AppHandle, game_id: i64) {
+    let event = lock(&app.state::<Tracking>().tracker).stop(game_id);
+    log(app, &format!("stopped timing {} by hand", title(app, game_id)));
+    handle(app, event.into_iter().collect());
+    checkpoint(app);
+}
+
 /// Close open sessions so quitting mid-game still counts the time played.
 pub fn flush(app: &AppHandle) {
     let events = lock(&app.state::<Tracking>().tracker).flush();

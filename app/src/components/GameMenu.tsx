@@ -6,7 +6,7 @@ import { defaultWay, folderGone, folderProgram, storeName } from "../lib/ways";
 import { STATUSES } from "../lib/types";
 import { Icon, type IconName } from "./Icon";
 
-export type PanelAction = "artwork" | "match" | "ways";
+export type PanelAction = "artwork" | "match" | "ways" | "smart";
 
 /**
  * The one menu for a game: right-click, Menu key or controller Y on a cover,
@@ -74,10 +74,17 @@ export function GameMenu({
     onClose();
     f();
   };
-  const item = (icon: IconName, label: string, f: () => void) => (
-    <button role="menuitem" onClick={run(f)}>
+  const item = (icon: IconName, label: string, f: () => void, hint?: string) => (
+    <button role="menuitem" onClick={run(f)} className={hint ? "has-hint" : undefined}>
       <Icon name={icon} />
-      {label}
+      {hint ? (
+        <span className="menu-two">
+          {label}
+          <small>{hint}</small>
+        </span>
+      ) : (
+        label
+      )}
     </button>
   );
   const setStatus = (s: GameStatus | null) => api.setStatus(game.id, s);
@@ -167,7 +174,9 @@ export function GameMenu({
           <hr />
           {sub("collections", "Add to collection", "collections")}
           {item("library", "Change artwork…", () => onPanel("artwork"))}
-          {item("sliders", "Ways to play…", () => onPanel("ways"))}
+          {item("collections", "Series and studios…", () => onPanel("smart"))}
+          {/* Until a game has one, say what they are for: mods are the usual reason. */}
+          {item("sliders", "Ways to play…", () => onPanel("ways"), game.launch_options.length === 0 ? "Mods, tools, other programs" : undefined)}
           {sub("external", "Store and files", "open")}
           <hr />
           {item(game.hidden ? "eye" : "hidden", game.hidden ? "Show in library" : "Hide from library", () => onToggleHidden(game))}
@@ -191,7 +200,7 @@ function PlayView({
   back: React.ReactNode;
   /** Closes the menu, then does the thing. */
   run: (f: () => void) => () => void;
-  item: (icon: IconName, label: string, f: () => void) => React.ReactNode;
+  item: (icon: IconName, label: string, f: () => void, hint?: string) => React.ReactNode;
   onPrimary: (g: Game, via?: Via) => void;
   onPanel: (action: PanelAction) => void;
 }) {

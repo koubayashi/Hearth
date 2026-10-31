@@ -196,3 +196,36 @@ pub struct LibraryQuery {
     /// Only games in this collection.
     pub collection: Option<i64>,
 }
+
+/// A series, franchise or company games can be grouped by.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Entity {
+    pub id: String,
+    pub label: String,
+}
+
+/// `child` is part of `parent` (a studio of a publisher, a series of a franchise).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntityParent {
+    pub child: String,
+    pub parent: String,
+}
+
+/// A game is in a series, or was made or published by a company.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameLink {
+    pub game_id: i64,
+    /// "series", "developer" or "publisher".
+    pub role: String,
+    pub entity: String,
+    /// Added by the user rather than found on Wikidata.
+    pub by_user: bool,
+}
+
+/// Everything the "browse by" shelves need, in one read.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SmartIndex {
+    pub entities: Vec<Entity>,
+    pub parents: Vec<EntityParent>,
+    pub links: Vec<GameLink>,
+}

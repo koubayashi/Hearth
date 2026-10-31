@@ -33,6 +33,10 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/007_launch_options.sql"),
     include_str!("../migrations/008_save_playtime.sql"),
     include_str!("../migrations/009_folder_exe.sql"),
+    include_str!("../migrations/010_store_art.sql"),
+    include_str!("../migrations/011_smart.sql"),
+    include_str!("../migrations/012_smart_again.sql"),
+    include_str!("../migrations/013_smart_compilations.sql"),
 ];
 
 pub struct Db {
@@ -493,6 +497,155 @@ impl Db {
         )? > 0)
     }
 
+    /// The store's own (cover, background), whatever is showing now.
+    pub fn store_art(&self, game_id: i64) -> Result<(Option<String>, Option<String>)> {
+        Ok(self
+            .conn
+            .query_row("SELECT store_cover, store_hero FROM games WHERE id = ?1", [game_id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?
+            .unwrap_or((None, None)))
+    }
+
+    /// Games Wikidata hasn't been asked about since `older_than`: (id, title,
+    /// Steam app id if known). Installed and recently played games first.
+    pub fn wikidata_targets(&self, older_than: i64, limit: i64) -> Result<Vec<(i64, String, Option<i64>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id, g.title,
+                    COALESCE((SELECT CAST(e.store_game_id AS INTEGER) FROM store_entries e
+                               WHERE e.game_id = g.id AND e.store = 'steam' LIMIT 1),
+                             json_extract(g.details_json, '$.steam_app_id'))
+               FROM games g
+              WHERE g.wd_checked_at IS NULL OR g.wd_checked_at < ?1
+              ORDER BY (SELECT MAX(installed) FROM store_entries e WHERE e.game_id = g.id) DESC,
+                       (SELECT MAX(store_last_played) FROM store_entries e WHERE e.game_id = g.id) DESC
+              LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![older_than, limit], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// What Wikidata says about a game: its item (None when nothing matched)
+    /// and its (role, entity id, label) links. Replaces what Wikidata said
+    /// before; the user's own additions and removals stay.
+    pub fn set_wikidata(&self, game_id: i64, item: Option<&str>, links: &[(&str, &str, &str)], now: i64) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM game_links WHERE game_id = ?1 AND source = 'wikidata'", [game_id])?;
+        for (role, id, label) in links {
+            tx.execute(
+                "INSERT INTO entities (id, label) VALUES (?1, ?2) ON CONFLICT (id) DO UPDATE SET label = excluded.label",
+                params![id, label],
+            )?;
+            // A link the user added or took away already has a row: theirs wins.
+            tx.execute(
+                "INSERT OR IGNORE INTO game_links (game_id, role, entity, source) VALUES (?1, ?2, ?3, 'wikidata')",
+                params![game_id, role, id],
+            )?;
+        }
+        tx.execute("UPDATE games SET wd_item = ?2, wd_checked_at = ?3 WHERE id = ?1", params![game_id, item, now])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Wikidata entities whose parents haven't been looked up since `older_than`.
+    pub fn entities_without_parents(&self, older_than: i64, limit: i64) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM entities
+              WHERE id NOT LIKE 'user:%' AND (parents_checked_at IS NULL OR parents_checked_at < ?1)
+              LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![older_than, limit], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The parents found for each of `checked`, as (child, parent, parent label).
+    /// Replaces what Wikidata said before about those; the user's changes stay.
+    pub fn set_parents(&self, checked: &[String], parents: &[(&str, &str, &str)], now: i64) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for child in checked {
+            tx.execute("DELETE FROM entity_parents WHERE child = ?1 AND source = 'wikidata'", [child])?;
+            tx.execute("UPDATE entities SET parents_checked_at = ?2 WHERE id = ?1", params![child, now])?;
+        }
+        for (child, parent, label) in parents {
+            tx.execute(
+                "INSERT INTO entities (id, label) VALUES (?1, ?2) ON CONFLICT (id) DO UPDATE SET label = excluded.label",
+                params![parent, label],
+            )?;
+            tx.execute(
+                "INSERT OR IGNORE INTO entity_parents (child, parent, source) VALUES (?1, ?2, 'wikidata')",
+                params![child, parent],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Every series, company, "part of" step and game link, minus what the
+    /// user took away.
+    pub fn smart_index(&self) -> Result<SmartIndex> {
+        let mut stmt = self.conn.prepare("SELECT id, label FROM entities")?;
+        let entities = stmt
+            .query_map([], |r| Ok(Entity { id: r.get(0)?, label: r.get(1)? }))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut stmt = self.conn.prepare("SELECT child, parent FROM entity_parents WHERE source != 'removed'")?;
+        let parents = stmt
+            .query_map([], |r| Ok(EntityParent { child: r.get(0)?, parent: r.get(1)? }))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut stmt = self.conn.prepare(
+            "SELECT l.game_id, l.role, l.entity, l.source = 'user' FROM game_links l
+               JOIN games g ON g.id = l.game_id
+              WHERE l.source != 'removed'",
+        )?;
+        let links = stmt
+            .query_map([], |r| Ok(GameLink { game_id: r.get(0)?, role: r.get(1)?, entity: r.get(2)?, by_user: r.get(3)? }))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(SmartIndex { entities, parents, links })
+    }
+
+    /// The user puts a game in a series (or credits a company), or takes it
+    /// out. Taking out a Wikidata link remembers that, so a refresh can't
+    /// bring it back.
+    pub fn set_game_link(&self, game_id: i64, role: &str, entity: &str, on: bool) -> Result<()> {
+        if on {
+            self.conn.execute(
+                "INSERT INTO game_links (game_id, role, entity, source) VALUES (?1, ?2, ?3, 'user')
+                 ON CONFLICT (game_id, role, entity) DO UPDATE SET source = 'user'",
+                params![game_id, role, entity],
+            )?;
+        } else {
+            // A franchise shows as a series, so taking a series away takes
+            // the franchise link too. The marker stays even where Wikidata
+            // hasn't said it yet, so no later refresh can add it.
+            let roles: &[&str] = if role == "series" { &["series", "franchise"] } else { &[role] };
+            for r in roles {
+                self.conn.execute(
+                    "INSERT INTO game_links (game_id, role, entity, source) VALUES (?1, ?2, ?3, 'removed')
+                     ON CONFLICT (game_id, role, entity) DO UPDATE SET source = 'removed'",
+                    params![game_id, r, entity],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The user says `child` is part of `parent` (EA Romania of Electronic
+    /// Arts, where Wikidata names no owner), or that it isn't. Either way it
+    /// stays so through every refresh.
+    pub fn set_entity_parent(&self, child: &str, parent: &str, on: bool) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO entity_parents (child, parent, source) VALUES (?1, ?2, ?3)
+             ON CONFLICT (child, parent) DO UPDATE SET source = excluded.source",
+            params![child, parent, if on { "user" } else { "removed" }],
+        )?;
+        Ok(())
+    }
+
+    /// A series of the user's own (Wikidata has none for these games). Returns its id.
+    pub fn create_entity(&self, label: &str) -> Result<String> {
+        let id: String = self.conn.query_row("SELECT 'user:' || lower(hex(randomblob(6)))", [], |r| r.get(0))?;
+        self.conn.execute("INSERT INTO entities (id, label) VALUES (?1, ?2)", params![id, label.trim()])?;
+        Ok(id)
+    }
+
     /// Drop chosen artwork so the store's (and SteamGridDB's) apply again.
     pub fn reset_art(&self, game_id: i64) -> Result<()> {
         self.conn.execute(
@@ -516,7 +669,7 @@ impl Db {
     /// Replace a game's artwork (the user picked its store page).
     pub fn set_game_art(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<()> {
         self.conn.execute(
-            "UPDATE games SET cover = ?2, hero = ?3, logo = ?4 WHERE id = ?1",
+            "UPDATE games SET cover = ?2, hero = ?3, logo = ?4, store_cover = ?2, store_hero = ?3 WHERE id = ?1",
             params![game_id, cover, hero, logo],
         )?;
         Ok(())
@@ -587,7 +740,8 @@ impl Db {
     /// Set artwork on a game directly (from matched store-page details).
     pub fn set_game_art_if_missing(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<()> {
         self.conn.execute(
-            "UPDATE games SET cover = COALESCE(cover, ?2), hero = COALESCE(hero, ?3), logo = COALESCE(logo, ?4)
+            "UPDATE games SET cover = COALESCE(cover, ?2), hero = COALESCE(hero, ?3), logo = COALESCE(logo, ?4),
+                    store_cover = COALESCE(store_cover, ?2), store_hero = COALESCE(store_hero, ?3)
              WHERE id = ?1",
             params![game_id, cover, hero, logo],
         )?;
@@ -657,7 +811,8 @@ impl Db {
     ) -> Result<()> {
         self.conn.execute(
             "UPDATE games SET cover = COALESCE(cover, ?3), hero = COALESCE(hero, ?4),
-                logo = COALESCE(logo, ?5)
+                logo = COALESCE(logo, ?5),
+                store_cover = COALESCE(store_cover, ?3), store_hero = COALESCE(store_hero, ?4)
              WHERE id = (SELECT game_id FROM store_entries WHERE store = ?1 AND store_game_id = ?2)",
             params![store.as_str(), store_game_id, cover, hero, logo],
         )?;
@@ -1345,6 +1500,62 @@ mod tests {
         assert!(!db.set_art(id, "cover", "https://cdn2.steamgriddb.com/grid/b.png", "sgdb").unwrap());
         assert_eq!(db.game(id).unwrap().unwrap().cover.as_deref(), Some("mine.png"));
         assert!(db.steam_art_targets().unwrap().is_empty(), "Steam refresh leaves it alone too");
+    }
+
+    #[test]
+    fn users_series_fixes_survive_a_wikidata_refresh() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "212580", "The Amazing Spider-Man", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        assert_eq!(db.wikidata_targets(100, 10).unwrap(), [(id, "The Amazing Spider-Man".to_string(), Some(212580))]);
+
+        let links = [("developer", "Q775346", "Beenox"), ("publisher", "Q200491", "Activision")];
+        db.set_wikidata(id, Some("Q2625129"), &links, 50).unwrap();
+        assert!(db.wikidata_targets(40, 10).unwrap().is_empty(), "checked since");
+
+        // Wikidata has no series for it: the user makes one, and drops a credit.
+        let series = db.create_entity("The Amazing Spider-Man").unwrap();
+        db.set_game_link(id, "series", &series, true).unwrap();
+        db.set_game_link(id, "publisher", "Q200491", false).unwrap();
+
+        db.set_wikidata(id, Some("Q2625129"), &links, 60).unwrap();
+        let index = db.smart_index().unwrap();
+        let mut have: Vec<(&str, &str, bool)> = index.links.iter().map(|l| (l.role.as_str(), l.entity.as_str(), l.by_user)).collect();
+        have.sort();
+        assert_eq!(have, [("developer", "Q775346", false), ("series", series.as_str(), true)]);
+        assert!(index.entities.iter().any(|e| e.id == series && e.label == "The Amazing Spider-Man"));
+    }
+
+    #[test]
+    fn parents_refresh_keeps_the_users_changes() {
+        let db = Db::open_in_memory().unwrap();
+        db.conn.execute("INSERT INTO entities (id, label) VALUES ('Q903621', 'Ubisoft Montreal')", []).unwrap();
+        assert_eq!(db.entities_without_parents(100, 10).unwrap(), ["Q903621"]);
+        db.set_parents(&["Q903621".into()], &[("Q903621", "Q188273", "Ubisoft")], 50).unwrap();
+        assert_eq!(db.entities_without_parents(40, 10).unwrap(), ["Q188273"], "the parent is new, so it's asked about next");
+        let index = db.smart_index().unwrap();
+        assert_eq!(index.parents, [EntityParent { child: "Q903621".into(), parent: "Q188273".into() }]);
+
+        // The user adds an owner Wikidata doesn't know, and takes one away.
+        db.set_entity_parent("Q97728742", "Q173941", true).unwrap();
+        db.set_entity_parent("Q903621", "Q188273", false).unwrap();
+        db.set_parents(&["Q903621".into(), "Q97728742".into()], &[("Q903621", "Q188273", "Ubisoft")], 60).unwrap();
+        let index = db.smart_index().unwrap();
+        assert_eq!(index.parents, [EntityParent { child: "Q97728742".into(), parent: "Q173941".into() }]);
+    }
+
+    #[test]
+    fn store_art_is_kept_after_it_is_replaced() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "620", "Portal 2", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        db.set_game_art(id, "store-cover.jpg", "store-hero.jpg", "").unwrap();
+
+        db.set_art(id, "cover", "mine.png", "user").unwrap();
+        db.set_art(id, "hero", "mine-wide.png", "user").unwrap();
+        assert_eq!(db.store_art(id).unwrap(), (Some("store-cover.jpg".into()), Some("store-hero.jpg".into())));
+        db.reset_art(id).unwrap();
+        assert_eq!(db.store_art(id).unwrap().0.as_deref(), Some("store-cover.jpg"), "a reset keeps it too");
     }
 
     #[test]

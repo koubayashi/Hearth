@@ -13,6 +13,10 @@ import { StoreMatch } from "./StoreMatch";
 import { ArtworkPicker } from "./ArtworkPicker";
 import { GameMenu, type PanelAction } from "./GameMenu";
 import { WaysToPlay } from "./WaysToPlay";
+import { SmartEditor } from "./SmartEditor";
+import { useGameLinks, type SmartLink } from "../lib/smart";
+import { openShelf } from "../lib/nav";
+import type { SmartRole } from "../lib/types";
 
 function scoreTone(score: number) {
   return score >= 75 ? "good" : score >= 50 ? "mixed" : "bad";
@@ -42,12 +46,14 @@ export const Poster = forwardRef<
   const [matching, setMatching] = useState(false);
   const [picking, setPicking] = useState(false);
   const [ways, setWays] = useState(false);
+  const [editingLinks, setEditingLinks] = useState(false);
   // The arrow beside Play: its menu of ways to play, anchored to it.
   const [playMenu, setPlayMenu] = useState<DOMRect | null>(null);
   const waysRef = useRef<HTMLButtonElement>(null);
   const [nonce, setNonce] = useState(0);
   const { details, install } = useGameInfo(game, nonce);
   const { showScores, blurPosterArt } = usePrefs();
+  const links = useGameLinks(game?.id ?? null);
 
   useEffect(() => {
     setMenu(null);
@@ -55,12 +61,17 @@ export const Poster = forwardRef<
     setMatching(false);
     setPicking(false);
     setWays(false);
+    setEditingLinks(false);
   }, [game?.id]);
+  const openPanel = (action: PanelAction) => {
+    setPicking(action === "artwork");
+    setMatching(action === "match");
+    setWays(action === "ways");
+    setEditingLinks(action === "smart");
+  };
   useEffect(() => {
-    if (!request) return;
-    setPicking(request.action === "artwork");
-    setMatching(request.action === "match");
-    setWays(request.action === "ways");
+    if (request) openPanel(request.action);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
   // Only while the library loads: the frame holds its place, quietly.
@@ -87,13 +98,11 @@ export const Poster = forwardRef<
         <ArtworkPicker
           game={game}
           onClose={() => setPicking(false)}
-          onDone={() => {
-            setPicking(false);
-            setNonce((n) => n + 1);
-          }}
+          onDone={() => setNonce((n) => n + 1)}
         />
       )}
       {ways && <WaysToPlay game={game} onClose={() => setWays(false)} />}
+      {editingLinks && <SmartEditor game={game} onClose={() => setEditingLinks(false)} />}
       {matching && (
         <StoreMatch
           game={game}
@@ -167,17 +176,21 @@ export const Poster = forwardRef<
         <dl>
           <dt>Played</dt>
           <dd>{formatGamePlaytime(game.playtime_secs, game.last_played)}</dd>
+          {/* "Playing now" sits with Last played, so it can't be confused with
+              the Playing status chip above. */}
           <dt>Last played</dt>
-          <dd>{formatGameLastPlayed(game.last_played, game.playtime_secs)}</dd>
-          <dt>Status</dt>
           <dd className={playingSince ? "playing" : undefined}>
             {playingSince
               ? `Playing now · ${formatPlaytime(Math.max(60, Math.floor(Date.now() / 1000) - playingSince))}`
-              : game.installed
-                ? "Ready to play"
-                : game.offline_drive
-                  ? `Drive ${game.offline_drive} not connected`
-                  : "Not installed"}
+              : formatGameLastPlayed(game.last_played, game.playtime_secs)}
+          </dd>
+          <dt>Install</dt>
+          <dd>
+            {game.installed
+              ? "Ready to play"
+              : game.offline_drive
+                ? `Drive ${game.offline_drive} not connected`
+                : "Not installed"}
           </dd>
           {details?.release_date && (
             <>
@@ -185,11 +198,21 @@ export const Poster = forwardRef<
               <dd>{details.release_date}</dd>
             </>
           )}
-          {details && details.publishers.length > 0 && details.publishers[0] !== studio && (
-            <>
-              <dt>Publisher</dt>
-              <dd>{details.publishers[0]}</dd>
-            </>
+          {/* Series and studios from Wikidata, each opening its shelf; the
+              store page's publisher until Wikidata has answered. */}
+          <LinkRow label="Series" role="series" links={links.series} />
+          <LinkRow label="Developer" role="developer" links={links.developer} />
+          {links.publisher.length > 0 ? (
+            <LinkRow label="Publisher" role="publisher" links={links.publisher} />
+          ) : (
+            details &&
+            details.publishers.length > 0 &&
+            details.publishers[0] !== studio && (
+              <>
+                <dt>Publisher</dt>
+                <dd>{details.publishers[0]}</dd>
+              </>
+            )
           )}
         </dl>
 
@@ -284,7 +307,7 @@ export const Poster = forwardRef<
               onPrimary={onPrimary}
               onToggleFavorite={onToggleFavorite}
               onToggleHidden={onToggleHidden}
-              onPanel={(action) => (action === "ways" ? setWays(true) : action === "artwork" ? setPicking(true) : setMatching(true))}
+              onPanel={openPanel}
             />
           )}
           <button
@@ -325,7 +348,7 @@ export const Poster = forwardRef<
               onPrimary={onPrimary}
               onToggleFavorite={onToggleFavorite}
               onToggleHidden={onToggleHidden}
-              onPanel={(action) => (action === "ways" ? setWays(true) : action === "artwork" ? setPicking(true) : setMatching(true))}
+              onPanel={openPanel}
             />
           )}
         </div>
@@ -333,3 +356,26 @@ export const Poster = forwardRef<
     </aside>
   );
 });
+
+/** "Series: Max Payne", each name opening that shelf in Collections. */
+function LinkRow({ label, role, links }: { label: string; role: SmartRole; links: SmartLink[] }) {
+  if (links.length === 0) return null;
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd className="smart-links">
+        {links.map((l) => (
+          <button
+            key={l.id}
+            className="link"
+            data-nav
+            title={`Show every game ${role === "series" ? "in" : "from"} ${l.label}`}
+            onClick={() => openShelf({ kind: "entity", role, id: l.id })}
+          >
+            {l.label}
+          </button>
+        ))}
+      </dd>
+    </>
+  );
+}

@@ -168,3 +168,14 @@ export interface PlaySession {
   ended_at: number;
   source: "hub" | "tracker";
 }
+
+/** What games can be browsed by. Franchises count as series: they're series' parents. */
+export type SmartRole = "series" | "developer" | "publisher";
+
+/** Series, companies, "part of" steps and game links, from Wikidata and the user's fixes. */
+export interface SmartIndex {
+  entities: { id: string; label: string }[];
+  parents: { child: string; parent: string }[];
+  /** "franchise" comes from Wikidata only, and shows as a series. */
+  links: { game_id: number; role: SmartRole | "franchise"; entity: string; by_user: boolean }[];
+}

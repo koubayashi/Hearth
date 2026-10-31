@@ -22,9 +22,12 @@ export function CoverGrid({
   onActivate,
   onContext,
   reveal,
+  meta,
 }: {
   /** Right-click / Menu key on a cover, with where to open the menu. */
   onContext?: (g: Game, x: number, y: number) => void;
+  /** The line under each cover; playtime when absent. */
+  meta?: (g: Game) => string;
   /** Scroll this game into view; the nonce makes repeat picks of one game work. */
   reveal?: { id: number; nonce: number } | null;
   games: Game[];
@@ -139,7 +142,7 @@ export function CoverGrid({
               </span>
               <span className="cover-title">{g.title}</span>
               <span className="cover-meta">
-                {formatGamePlaytime(g.playtime_secs, g.last_played)}
+                {meta ? meta(g) : formatGamePlaytime(g.playtime_secs, g.last_played)}
               </span>
             </button>
           ))}

@@ -10,11 +10,15 @@ import { isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
 import { Icon } from "../components/Icon";
 import { HiddenBar } from "../components/HiddenBar";
-import { useGameInfo } from "../lib/gameInfo";
+import { savedInfo, useGameInfo, useSavedInfo } from "../lib/gameInfo";
+import { NO_NARROW, sortGames, type InfoOf } from "../lib/arrange";
+import { setPrefs, usePrefs } from "../lib/prefs";
+import { ArrangeMenu } from "../components/ArrangeMenu";
 import { StoreIcon } from "../components/StoreIcon";
 import { ArtworkPicker } from "../components/ArtworkPicker";
 import { StoreMatch } from "../components/StoreMatch";
 import { WaysToPlay } from "../components/WaysToPlay";
+import { SmartEditor } from "../components/SmartEditor";
 
 type Group = { id: string; title: string; games: Game[] };
 /** The list is virtualized as one run of group headings and game rows. */
@@ -52,6 +56,9 @@ export function ListView({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [installedOnly, setInstalledOnly] = useState(false);
+  const sort = usePrefs().librarySort;
+  const [arrangeAt, setArrangeAt] = useState<DOMRect | null>(null);
+  const infoTick = useSavedInfo();
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<{ game: Game; x: number; y: number; anchor?: DOMRect; play?: boolean } | null>(null);
   const [panel, setPanel] = useState<PanelAction | null>(null);
@@ -74,14 +81,18 @@ export function ListView({
   }, [search, installedOnly, hiddenView, version]);
 
   const groups = useMemo<Group[]>(() => {
-    const list = games ?? [];
+    const info: InfoOf = (id) => {
+      const i = savedInfo(id);
+      return i && { details: i.details, bytes: i.install?.bytes ?? null };
+    };
+    const list = sortGames(games ?? [], sort, info);
     if (hiddenView) return [{ id: "hidden", title: "Hidden games", games: list }];
     return [
       { id: "installed", title: "Installed", games: list.filter((g) => g.installed) },
       { id: "offline", title: "Drive not connected", games: list.filter((g) => !g.installed && g.offline_drive) },
       { id: "rest", title: "Not installed", games: list.filter((g) => !g.installed && !g.offline_drive) },
     ].filter((g) => g.games.length > 0);
-  }, [games, hiddenView]);
+  }, [games, hiddenView, sort, infoTick]);
 
   // Keep a game selected: the fresh copy of the current one, else the first.
   useEffect(() => {
@@ -163,9 +174,10 @@ export function ListView({
         />
       )}
       {panel === "artwork" && focused && (
-        <ArtworkPicker game={focused} onClose={() => setPanel(null)} onDone={() => (setPanel(null), setNonce((n) => n + 1))} />
+        <ArtworkPicker game={focused} onClose={() => setPanel(null)} onDone={() => setNonce((n) => n + 1)} />
       )}
       {panel === "ways" && focused && <WaysToPlay game={focused} onClose={() => setPanel(null)} />}
+      {panel === "smart" && focused && <SmartEditor game={focused} onClose={() => setPanel(null)} />}
       {panel === "match" && focused && (
         <StoreMatch game={focused} onClose={() => setPanel(null)} onDone={() => (setPanel(null), setNonce((n) => n + 1))} />
       )}
@@ -192,6 +204,33 @@ export function ListView({
               Installed
             </button>
           </div>
+          <button
+            className="icon-btn small"
+            data-nav
+            title="Sort"
+            aria-label="Sort"
+            aria-haspopup="menu"
+            aria-expanded={arrangeAt !== null}
+            onMouseDown={(e) => arrangeAt && e.stopPropagation()}
+            onClick={(e) => {
+              const at = e.currentTarget.getBoundingClientRect();
+              setArrangeAt((cur) => (cur ? null : at));
+            }}
+          >
+            <Icon name="sliders" size={15} />
+          </button>
+          {arrangeAt && (
+            <ArrangeMenu
+              anchor={arrangeAt}
+              sort={sort}
+              narrow={NO_NARROW}
+              genres={[]}
+              hiddenCount={0}
+              onSort={(s) => setPrefs({ librarySort: s })}
+              onNarrow={() => {}}
+              onClose={() => setArrangeAt(null)}
+            />
+          )}
         </div>
         <div className="lv-scroll" ref={scrollRef}>
           {loadError && (

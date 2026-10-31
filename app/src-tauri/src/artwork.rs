@@ -112,6 +112,27 @@ pub async fn artwork_options(app: AppHandle, id: i64, kind: ArtKind) -> CmdResul
     app.state::<AppState>().sgdb.images(r, kind).await.map_err(|e| crate::tracking::redact(&format!("{e:#}")))
 }
 
+/// The store's own cover and background, offered first in the picker. A Steam
+/// game whose store art was never saved gets Steam's standard addresses.
+#[derive(serde::Serialize)]
+pub struct StoreArt {
+    cover: Option<String>,
+    hero: Option<String>,
+}
+
+#[tauri::command]
+pub fn store_artwork(app: AppHandle, id: i64) -> CmdResult<StoreArt> {
+    let (cover, hero) = lock(&app.state::<AppState>().db).store_art(id).map_err(err)?;
+    if cover.is_some() && hero.is_some() {
+        return Ok(StoreArt { cover, hero });
+    }
+    let steam = steam_app_of(&app, id)?.1.map(|a| hub_providers::steam::Steam::art_urls(&a.to_string()));
+    Ok(StoreArt {
+        cover: cover.or_else(|| steam.as_ref().and_then(|s| s.cover.clone())),
+        hero: hero.or_else(|| steam.and_then(|s| s.hero)),
+    })
+}
+
 /// The user picked a picture: it's theirs and is never replaced automatically.
 #[tauri::command]
 pub fn set_artwork(app: AppHandle, id: i64, kind: ArtKind, url: String) -> CmdResult<()> {

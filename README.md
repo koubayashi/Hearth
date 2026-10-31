@@ -1,6 +1,6 @@
 # Hearth
 
-A fast, simple, open-source game library for Windows. One hub for every game you own on Steam, Epic, Xbox / Game Pass, GOG, EA and Ubisoft, plus games from anywhere else.
+A fast, simple, open-source game library for Windows. One hub for every game you own on Steam, Epic, Xbox / Game Pass and GOG, plus games from anywhere else. EA app and Ubisoft Connect are coming.
 
 > Status: early development. Not usable yet.
 

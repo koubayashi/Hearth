@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { SortKey } from "./arrange";
 
 export type Tone = "graphite" | "gallery" | "ember" | "spruce" | "rosewood" | "harbor" | "mono";
 /** "system" follows Windows' app mode (Settings > Personalization > Colors). */
@@ -36,6 +37,12 @@ export interface Prefs {
   nameSource: NameSource;
   /** The name typed in Settings, for nameSource "custom". */
   customName: string;
+  /** How games are ordered inside each library section. */
+  librarySort: SortKey;
+  /** Starred games as the library's first section (and only there). */
+  showFavoritesRow: boolean;
+  /** The note on how to leave the console has been shown once. */
+  consoleTipSeen: boolean;
 }
 
 /** Each tone's ground and accent in both modes, for the swatches (tokens.css has the full sets). */
@@ -56,7 +63,7 @@ export const shownMode = (p: Prefs): "dark" | "light" =>
   p.mode === "system" ? (systemDark?.matches === false ? "light" : "dark") : p.mode;
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "" };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", showFavoritesRow: true, consoleTipSeen: false };
 
 function load(): Prefs {
   try {

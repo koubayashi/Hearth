@@ -1,11 +1,15 @@
 //! System tray: Hearth keeps running here when its window is closed, so the
 //! playtime tracker never stops.
 
-use tauri::menu::{Menu, MenuItem};
+use std::sync::Mutex;
+
+use hub_core::LibraryQuery;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Listener, Manager};
 
 use crate::tracking::{self, NowPlaying};
+use crate::{lock, AppState};
 
 const TRAY_ID: &str = "hearth";
 
@@ -40,32 +44,69 @@ pub fn style_main(window: &tauri::WebviewWindow) {
     let _ = window;
 }
 
-/// The tray menu, with a restart item while a downloaded update waits.
-fn menu(app: &AppHandle, update: Option<&str>) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, "open", "Open Hearth", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Hearth", true, None::<&str>)?;
-    match update {
-        Some(v) => {
-            let label = format!("Restart to update to {v}");
-            let update = MenuItem::with_id(app, "update", label, true, None::<&str>)?;
-            Menu::with_items(app, &[&open, &update, &quit])
-        }
-        None => Menu::with_items(app, &[&open, &quit]),
+/// Recent games in the tray menu.
+const RECENT: usize = 5;
+
+/// The version a downloaded update would install, for the restart item.
+static UPDATE: Mutex<Option<String>> = Mutex::new(None);
+
+/// The tray menu: recent games to start, a way to stop timing a game the
+/// tracker has wrong, then Open, the update restart while one waits, and Quit.
+fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let m = Menu::new(app)?;
+    let recent = {
+        let state = app.state::<AppState>();
+        let mut games = lock(&state.db).list_games(&LibraryQuery::default()).unwrap_or_default();
+        games.retain(|g| g.installed && g.last_played.is_some());
+        games.sort_by_key(|g| std::cmp::Reverse(g.last_played));
+        games.truncate(RECENT);
+        games
+    };
+    for g in &recent {
+        m.append(&MenuItem::with_id(app, format!("play:{}", g.id), menu_text(&g.title), true, None::<&str>)?)?;
+    }
+    let playing = tracking::now_playing(app);
+    if !recent.is_empty() || !playing.is_empty() {
+        m.append(&PredefinedMenuItem::separator(app)?)?;
+    }
+    for p in &playing {
+        let label = format!("Stop timing {}", menu_text(&p.title));
+        m.append(&MenuItem::with_id(app, format!("stop:{}", p.game_id), label, true, None::<&str>)?)?;
+    }
+    if !playing.is_empty() {
+        m.append(&PredefinedMenuItem::separator(app)?)?;
+    }
+    m.append(&MenuItem::with_id(app, "open", "Open Hearth", true, None::<&str>)?)?;
+    if let Some(v) = lock(&UPDATE).as_deref() {
+        m.append(&MenuItem::with_id(app, "update", format!("Restart to update to {v}"), true, None::<&str>)?)?;
+    }
+    m.append(&MenuItem::with_id(app, "quit", "Quit Hearth", true, None::<&str>)?)?;
+    Ok(m)
+}
+
+/// Windows menus read "&" as an access key: double it so titles show as written.
+fn menu_text(title: &str) -> String {
+    title.replace('&', "&&")
+}
+
+/// Builds the menu again: after a sync, a session, or an update download.
+pub fn refresh(app: &AppHandle) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
+    if let Ok(m) = menu(app) {
+        let _ = tray.set_menu(Some(m));
     }
 }
 
 pub fn set_update(app: &AppHandle, version: Option<&str>) {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
-    if let Ok(m) = menu(app, version) {
-        let _ = tray.set_menu(Some(m));
-    }
+    *lock(&UPDATE) = version.map(str::to_string);
+    refresh(app);
 }
 
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(app.default_window_icon().cloned().expect("app icon"))
         .tooltip("Hearth")
-        .menu(&menu(app, None)?)
+        .menu(&menu(app)?)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main(app),
@@ -78,7 +119,15 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
                 tracking::flush(app);
                 app.exit(0);
             }
-            _ => {}
+            id => {
+                if let Some(game) = id.strip_prefix("play:").and_then(|g| g.parse().ok()) {
+                    if let Err(e) = crate::launch_game(app.state::<AppState>(), game, None) {
+                        tracking::log(app, &format!("tray: couldn't start game {game} ({e})"));
+                    }
+                } else if let Some(game) = id.strip_prefix("stop:").and_then(|g| g.parse().ok()) {
+                    tracking::stop(app, game);
+                }
+            }
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
@@ -86,6 +135,9 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    // Recent games change with every sync and session.
+    let handle = app.clone();
+    app.listen_any("library-changed", move |_| refresh(&handle));
     Ok(())
 }
 
@@ -97,4 +149,5 @@ pub fn set_playing(app: &AppHandle, playing: &[NowPlaying]) {
         many => format!("Hearth · timing {} games", many.len()),
     };
     let _ = tray.set_tooltip(Some(tip));
+    refresh(app);
 }

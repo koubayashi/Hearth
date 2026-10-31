@@ -1,5 +1,5 @@
 import type { LaunchOption, LaunchOptionInput, Via } from "./types";
-import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, StoreHit, StoreId } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, StoreId } from "./types";
 
 // ?sgdb in the URL shows Settings as if a key were saved, to design that state.
 const demoSgdb = typeof location !== "undefined" && location.search.includes("sgdb");
@@ -56,6 +56,29 @@ const seeds: Seed[] = [
   ["Ori and the Will of the Wisps", 1057090, "xbox", true, 13.3, 150],
   ["Hi-Fi Rush", 1817230, "xbox", false, 0, null],
 ];
+
+const demoEntities: Record<string, string> = {
+  Q1: "Hades", Q2: "Hollow Knight", Q3: "Forza Horizon", Q4: "Forza", Q5: "Halo", Q6: "Ori",
+  Q10: "Supergiant Games", Q11: "Team Cherry", Q12: "Playground Games", Q13: "343 Industries",
+  Q14: "Rare", Q15: "Moon Studios", Q16: "Xbox Game Studios", Q17: "Microsoft", Q18: "Remedy Entertainment",
+  Q19: "Bethesda Game Studios", Q20: "Bethesda Softworks", Q21: "Tango Gameworks",
+};
+const demoParents: [string, string][] = [
+  ["Q3", "Q4"], ["Q12", "Q16"], ["Q13", "Q16"], ["Q14", "Q16"], ["Q16", "Q17"], ["Q19", "Q20"], ["Q21", "Q20"], ["Q20", "Q17"],
+];
+const demoLinks: [string, SmartRole, string][] = [
+  ["Hades", "series", "Q1"], ["Hades II", "series", "Q1"], ["Hades", "developer", "Q10"], ["Hades II", "developer", "Q10"],
+  ["Hades", "publisher", "Q10"], ["Hollow Knight", "series", "Q2"], ["Hollow Knight: Silksong", "series", "Q2"],
+  ["Hollow Knight", "developer", "Q11"], ["Hollow Knight: Silksong", "developer", "Q11"],
+  ["Forza Horizon 5", "series", "Q3"], ["Forza Horizon 5", "developer", "Q12"], ["Forza Horizon 5", "publisher", "Q16"],
+  ["Halo Infinite", "series", "Q5"], ["Halo Infinite", "developer", "Q13"], ["Halo Infinite", "publisher", "Q16"],
+  ["Sea of Thieves", "developer", "Q14"], ["Sea of Thieves", "publisher", "Q16"],
+  ["Ori and the Will of the Wisps", "series", "Q6"], ["Ori and the Will of the Wisps", "developer", "Q15"],
+  ["Ori and the Will of the Wisps", "publisher", "Q16"], ["Control", "developer", "Q18"],
+  ["Starfield", "developer", "Q19"], ["Starfield", "publisher", "Q20"], ["Hi-Fi Rush", "developer", "Q21"], ["Hi-Fi Rush", "publisher", "Q20"],
+];
+const smartEdits: SmartIndex["links"] = [];
+const smartRemoved = new Set<string>();
 
 // ?games=2000 repeats the seeds (numbered) to test a large library.
 const demoCount = typeof location !== "undefined" ? Number(new URLSearchParams(location.search).get("games")) || 0 : 0;
@@ -269,6 +292,40 @@ export const mockBackend = {
     if (g && kind === "hero") g.hero = url;
   },
   async resetArtwork(_id: number) {},
+  // A small, hand-made slice of what Wikidata gives, to design the shelves with.
+  async smartIndex(): Promise<SmartIndex> {
+    const id = (title: string) => games.find((g) => g.title === title)?.id ?? 0;
+    const entities = Object.entries(demoEntities).map(([id, label]) => ({ id, label }));
+    const links: SmartIndex["links"] = demoLinks
+      .map(([title, role, entity]): SmartIndex["links"][number] => ({ game_id: id(title), role, entity, by_user: false }))
+      .concat(smartEdits)
+      .filter((l) => l.game_id > 0 && !smartRemoved.has(`${l.game_id} ${l.role} ${l.entity}`));
+    return { entities, parents: demoParents.map(([child, parent]) => ({ child, parent })), links };
+  },
+  async setGameLink(gameId: number, role: SmartRole, entity: string, on: boolean) {
+    const key = `${gameId} ${role} ${entity}`;
+    if (on) {
+      smartRemoved.delete(key);
+      smartEdits.push({ game_id: gameId, role, entity, by_user: true });
+    } else {
+      smartRemoved.add(key);
+    }
+  },
+  async setEntityParent(child: string, parent: string, on: boolean) {
+    const at = demoParents.findIndex(([c, p]) => c === child && p === parent);
+    if (on && at < 0) demoParents.push([child, parent]);
+    if (!on && at >= 0) demoParents.splice(at, 1);
+  },
+  async createSeries(gameId: number, name: string) {
+    const id = `user:${Object.keys(demoEntities).length}`;
+    demoEntities[id] = name;
+    smartEdits.push({ game_id: gameId, role: "series", entity: id, by_user: true });
+    return id;
+  },
+  async storeArtwork(id: number) {
+    const g = games.find((g) => g.id === id);
+    return { cover: g?.cover ?? null, hero: g?.hero ?? null };
+  },
   async searchStore(term: string): Promise<StoreHit[]> {
     return games
       .filter((g) => g.title.toLowerCase().includes(term.toLowerCase().slice(0, 4)))
@@ -296,6 +353,8 @@ export const mockBackend = {
   },
   onAccountsChanged: noop,
   onSyncStarted: noop,
+  onSmartStatus: noop,
+  onSmartChanged: noop,
   onAutoBackup: noop,
   onSyncError: noop,
   async updateReady(): Promise<string | null> {

@@ -4,6 +4,7 @@ import { computeStats, hours, type Stats as StatsData, type Week } from "../lib/
 import { formatPlaytime } from "../lib/format";
 import { STATUSES, STORE_LABEL, type Game, type GameStatus, type PlaySession } from "../lib/types";
 import { StoreIcon } from "../components/StoreIcon";
+import { possessive, useGamerTag } from "../lib/gamertag";
 
 /** Playtime and library numbers: store totals for all-time, Hearth's own sessions for anything dated. */
 export function Stats({
@@ -18,6 +19,7 @@ export function Stats({
   onOpenStatus: (status: GameStatus) => void;
 }) {
   const [data, setData] = useState<{ games: Game[]; sessions: PlaySession[] } | null>(null);
+  const name = useGamerTag();
 
   useEffect(() => {
     Promise.all([
@@ -36,7 +38,7 @@ export function Stats({
   return (
     <div className="scroll stats-scroll">
       <div className="stats">
-        <h1>Stats</h1>
+        <h1>{name ? `${possessive(name)} stats` : "Stats"}</h1>
 
         <Headline s={s} onOpenGame={onOpenGame} />
 
