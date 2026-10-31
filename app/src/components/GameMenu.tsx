@@ -6,7 +6,7 @@ import { defaultWay, folderGone, folderProgram, storeName } from "../lib/ways";
 import { STATUSES } from "../lib/types";
 import { Icon, type IconName } from "./Icon";
 
-export type PanelAction = "artwork" | "match" | "ways" | "smart";
+export type PanelAction = "artwork" | "match" | "ways" | "smart" | "history";
 
 /**
  * The one menu for a game: right-click, Menu key or controller Y on a cover,
@@ -175,6 +175,7 @@ export function GameMenu({
           {sub("collections", "Add to collection", "collections")}
           {item("library", "Change artwork…", () => onPanel("artwork"))}
           {item("collections", "Series and studios…", () => onPanel("smart"))}
+          {item("stats", "Play history…", () => onPanel("history"))}
           {/* Until a game has one, say what they are for: mods are the usual reason. */}
           {item("sliders", "Ways to play…", () => onPanel("ways"), game.launch_options.length === 0 ? "Mods, tools, other programs" : undefined)}
           {sub("external", "Store and files", "open")}

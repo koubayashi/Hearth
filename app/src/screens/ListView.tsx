@@ -19,6 +19,7 @@ import { ArtworkPicker } from "../components/ArtworkPicker";
 import { StoreMatch } from "../components/StoreMatch";
 import { WaysToPlay } from "../components/WaysToPlay";
 import { SmartEditor } from "../components/SmartEditor";
+import { PlayHistory } from "../components/PlayHistory";
 
 type Group = { id: string; title: string; games: Game[] };
 /** The list is virtualized as one run of group headings and game rows. */
@@ -178,6 +179,7 @@ export function ListView({
       )}
       {panel === "ways" && focused && <WaysToPlay game={focused} onClose={() => setPanel(null)} />}
       {panel === "smart" && focused && <SmartEditor game={focused} onClose={() => setPanel(null)} />}
+      {panel === "history" && focused && <PlayHistory game={focused} onClose={() => setPanel(null)} />}
       {panel === "match" && focused && (
         <StoreMatch game={focused} onClose={() => setPanel(null)} onDone={() => (setPanel(null), setNonce((n) => n + 1))} />
       )}
@@ -327,6 +329,7 @@ export function ListView({
           onToggleFavorite={onToggleFavorite}
           onMore={(r) => openMenu(focused, 0, 0, r)}
           onWays={(r) => openMenu(focused, 0, 0, r, true)}
+          onHistory={() => setPanel("history")}
           onBack={backToRow}
         />
       ) : (
@@ -347,9 +350,11 @@ function Detail({
   onToggleFavorite,
   onMore,
   onWays,
+  onHistory,
   onBack,
 }: {
   onWays: (anchor: DOMRect) => void;
+  onHistory: () => void;
   game: Game;
   nonce: number;
   /** No wide art: the hidden view. */
@@ -440,7 +445,11 @@ function Detail({
         </div>
         <div className="lv-stat">
           <span>Play time</span>
-          <b>{formatGamePlaytime(game.playtime_secs, game.last_played)}</b>
+          <b>
+            <button className="link" data-nav title="Every session, by month" onClick={onHistory}>
+              {formatGamePlaytime(game.playtime_secs, game.last_played)}
+            </button>
+          </b>
         </div>
         <span className="spacer" />
         <span className="lv-stores">

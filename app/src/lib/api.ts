@@ -39,6 +39,7 @@ const backend = isTauri()
       openSteamKeyPage: () => invoke<void>("open_steam_key_page"),
       nowPlaying: () => invoke<NowPlaying[]>("now_playing"),
       playSessions: () => invoke<PlaySession[]>("play_sessions"),
+      deletePlaySession: (id: number) => invoke<void>("delete_play_session", { id }),
       backupExport: (path: string, prefs: string) => invoke<void>("backup_export", { path, prefs }),
       autoBackupStatus: () => invoke<{ folder: string | null; last_at: number | null; error: string | null }>("auto_backup_status"),
       autoBackupSet: (folder: string | null) => invoke<{ folder: string | null; last_at: number | null; error: string | null }>("auto_backup_set", { folder }),

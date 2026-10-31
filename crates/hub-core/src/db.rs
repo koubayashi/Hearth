@@ -909,6 +909,13 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Forget one recorded session (a game left running overnight); the
+    /// game's playtime and last played follow, as both come from sessions.
+    pub fn delete_session(&self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM sessions WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
     /// Every recorded play session of games that aren't hidden, oldest first
     /// (the Stats page's history).
     pub fn sessions(&self) -> Result<Vec<PlaySession>> {
@@ -1277,6 +1284,21 @@ mod tests {
         assert_eq!(titles(q(InstallFilter::NotInstalled, vec![], None)), ["Celeste"]);
         assert_eq!(titles(q(InstallFilter::All, vec![StoreId::Epic], None)), ["Control"]);
         assert_eq!(titles(q(InstallFilter::All, vec![], Some("ade"))), ["Hades"]);
+    }
+
+    #[test]
+    fn a_removed_session_leaves_playtime_and_last_played() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "1", "Hades", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        db.record_session(id, 1000, 2800, SessionSource::Tracker).unwrap();
+        let overnight = db.record_session(id, 5000, 50_000, SessionSource::Tracker).unwrap();
+
+        db.delete_session(overnight).unwrap();
+        let g = db.game(id).unwrap().unwrap();
+        assert_eq!(g.playtime_secs, 1800);
+        assert_eq!(g.last_played, Some(2800));
+        assert_eq!(db.sessions().unwrap().len(), 1);
     }
 
     #[test]

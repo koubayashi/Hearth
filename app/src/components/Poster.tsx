@@ -14,6 +14,7 @@ import { ArtworkPicker } from "./ArtworkPicker";
 import { GameMenu, type PanelAction } from "./GameMenu";
 import { WaysToPlay } from "./WaysToPlay";
 import { SmartEditor } from "./SmartEditor";
+import { PlayHistory } from "./PlayHistory";
 import { useGameLinks, type SmartLink } from "../lib/smart";
 import { openShelf } from "../lib/nav";
 import type { SmartRole } from "../lib/types";
@@ -47,6 +48,7 @@ export const Poster = forwardRef<
   const [picking, setPicking] = useState(false);
   const [ways, setWays] = useState(false);
   const [editingLinks, setEditingLinks] = useState(false);
+  const [history, setHistory] = useState(false);
   // The arrow beside Play: its menu of ways to play, anchored to it.
   const [playMenu, setPlayMenu] = useState<DOMRect | null>(null);
   const waysRef = useRef<HTMLButtonElement>(null);
@@ -62,12 +64,14 @@ export const Poster = forwardRef<
     setPicking(false);
     setWays(false);
     setEditingLinks(false);
+    setHistory(false);
   }, [game?.id]);
   const openPanel = (action: PanelAction) => {
     setPicking(action === "artwork");
     setMatching(action === "match");
     setWays(action === "ways");
     setEditingLinks(action === "smart");
+    setHistory(action === "history");
   };
   useEffect(() => {
     if (request) openPanel(request.action);
@@ -103,6 +107,7 @@ export const Poster = forwardRef<
       )}
       {ways && <WaysToPlay game={game} onClose={() => setWays(false)} />}
       {editingLinks && <SmartEditor game={game} onClose={() => setEditingLinks(false)} />}
+      {history && <PlayHistory game={game} onClose={() => setHistory(false)} />}
       {matching && (
         <StoreMatch
           game={game}
@@ -175,7 +180,11 @@ export const Poster = forwardRef<
 
         <dl>
           <dt>Played</dt>
-          <dd>{formatGamePlaytime(game.playtime_secs, game.last_played)}</dd>
+          <dd>
+            <button className="link" data-nav title="Every session, by month" onClick={() => setHistory(true)}>
+              {formatGamePlaytime(game.playtime_secs, game.last_played)}
+            </button>
+          </dd>
           {/* "Playing now" sits with Last played, so it can't be confused with
               the Playing status chip above. */}
           <dt>Last played</dt>

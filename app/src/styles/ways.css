@@ -39,3 +39,40 @@
 
 .ways-intro { margin: 0 0 var(--space-2); }
 .field-hint { color: var(--ink-3); font-size: var(--text-xs); }
+
+/* Play history: the figures, a strip of weeks, then every session by month. */
+.history-dialog { width: min(560px, calc(100vw - 64px)); }
+/* The dialog scrolls as a whole; nothing in it should shrink to fit. */
+.history-dialog > * { flex: none; }
+.history-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: var(--space-3); }
+.history-figures > div { display: flex; flex-direction: column; gap: 2px; }
+.history-figures span { font-size: var(--text-xs); color: var(--ink-3); }
+.history-figures b { font: 600 var(--text-lg) var(--font-display); font-variant-numeric: tabular-nums; }
+.history-weeks {
+  display: grid; grid-template-columns: repeat(26, minmax(0, 1fr)); gap: 2px; height: 48px;
+  border-bottom: 1px solid var(--line-strong); margin-bottom: 18px; position: relative;
+}
+.history-weeks span { display: flex; align-items: flex-end; justify-content: center; height: 100%; }
+.history-weeks i { width: min(100%, 12px); background: var(--accent); border-radius: 3px 3px 0 0; opacity: 0.85; }
+.history-weeks small { position: absolute; top: calc(100% + 4px); font-size: var(--text-xs); color: var(--ink-3); }
+.history-weeks small:last-child { right: 0; }
+.history-months { display: flex; flex-direction: column; gap: var(--space-4); }
+.history-months h3 {
+  display: flex; justify-content: space-between; margin: 0 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+  font: 600 var(--text-md) var(--font-display);
+}
+.history-months h3 span { font-weight: 500; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.history-months ul { list-style: none; padding: 0; margin: 0; }
+.history-months li {
+  display: grid; grid-template-columns: 11ch 1fr auto 76px; align-items: center; gap: var(--space-3);
+  min-height: 34px; font-size: var(--text-sm); color: var(--ink-2); font-variant-numeric: tabular-nums;
+}
+.history-months li b { color: var(--ink); font-weight: 500; text-align: right; }
+.history-months li > :last-child { justify-self: end; }
+/* Remove shows on hover or focus, so the list reads as a list. */
+.history-months li .icon-btn { opacity: 0; transition: opacity var(--dur-fast); }
+.history-months li:hover .icon-btn, .history-months li .icon-btn:focus-visible { opacity: 1; }
+.history-months li.long em { font-style: normal; color: #f2c46d; }
+[data-mode="light"] .history-months li.long em { color: #8a5a00; }
+.btn.history-remove { height: 28px; padding: 0 10px; color: #ff8a80; }
+[data-mode="light"] .btn.history-remove { color: #b3261e; }

@@ -79,6 +79,7 @@ const demoLinks: [string, SmartRole, string][] = [
 ];
 const smartEdits: SmartIndex["links"] = [];
 const smartRemoved = new Set<string>();
+const removedSessions = new Set<number>();
 
 // ?games=2000 repeats the seeds (numbered) to test a large library.
 const demoCount = typeof location !== "undefined" ? Number(new URLSearchParams(location.search).get("games")) || 0 : 0;
@@ -197,7 +198,11 @@ export const mockBackend = {
       const started_at = now - day * 86400 - 3 * H;
       out.push({ id: day, game_id, started_at, ended_at: started_at + 1200 + (r % 13) * 900, source: "tracker" });
     }
-    return out;
+    return out.filter((s) => !removedSessions.has(s.id));
+  },
+  async deletePlaySession(id: number) {
+    removedSessions.add(id);
+    libraryChanged();
   },
   // Synthetic details so the panel can be designed without the store API.
   async gameDetails(id: number): Promise<GameDetails | null> {

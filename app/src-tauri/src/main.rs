@@ -175,6 +175,13 @@ fn play_sessions(state: State<AppState>) -> CmdResult<Vec<hub_core::PlaySession>
 }
 
 #[tauri::command]
+fn delete_play_session(app: AppHandle, state: State<AppState>, id: i64) -> CmdResult<()> {
+    lock(&state.db).delete_session(id).map_err(err)?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
 fn now_playing(app: AppHandle) -> Vec<tracking::NowPlaying> {
     tracking::now_playing(&app)
 }
@@ -823,6 +830,7 @@ fn main() {
             ways::set_folder_exe,
             snap_layouts::place_maximize_button,
             play_sessions,
+            delete_play_session,
             backup::backup_export,
             backup::backup_restore,
             backup::restore_ways,
