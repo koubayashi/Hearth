@@ -5,7 +5,7 @@ import { useStartWithWindows } from "../lib/autostart";
 import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
-import { TONES, setPrefs, usePrefs, type NameSource } from "../lib/prefs";
+import { TONES, contrast, setPrefs, usePrefs, useShownMode, type NameSource } from "../lib/prefs";
 import { pickName, useAccounts } from "../lib/gamertag";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { formatLastPlayed, inSentence } from "../lib/format";
@@ -882,6 +882,12 @@ export function Settings({
 }) {
   const p = usePrefs();
   const accounts = useAccounts();
+  // Appearance: swatches and the colour picker show the mode on screen.
+  const shown = useShownMode(p);
+  const tone = TONES.find((t) => t.id === p.tone) ?? TONES[0];
+  const toneLabel = tone.label;
+  // Focus rings and selections use the highlight: it has to stand out from the ground.
+  const faint = !!p.customAccent && contrast(p.customAccent, tone[shown].base) < 3;
   return (
     <div className="scroll settings-scroll">
       <div className="settings">
@@ -916,21 +922,32 @@ export function Settings({
         <div className="setting-group glass">
           <div className="setting">
             <div className="text">
-              <b>Tone</b>
-              <span>The background and highlight colour.</span>
+              <b>Mode</b>
+              <span>{p.mode === "system" ? `Follows Windows, ${shown} right now.` : "Dark, light, or whichever Windows uses."}</span>
+            </div>
+            <div className="seg seg-boxed" role="group" aria-label="Mode">
+              {(["dark", "light", "system"] as const).map((m) => (
+                <button key={m} data-nav aria-pressed={p.mode === m} onClick={() => setPrefs({ mode: m })}>
+                  {m === "dark" ? "Dark" : m === "light" ? "Light" : "Match Windows"}
+                </button>
+              ))}
             </div>
           </div>
-          <div className="setting">
+          <div className="setting setting-stack">
+            <div className="text">
+              <b>Tone</b>
+              <span>The background and highlight colour, shown here as they look in {shown} mode.</span>
+            </div>
             <div className="swatches" role="group" aria-label="Tone">
               {TONES.map((t) => (
                 <button
                   key={t.id}
                   className="swatch"
                   data-nav
-                  aria-pressed={p.tone === t.id && !p.customAccent}
-                  onClick={() => setPrefs({ tone: t.id, customAccent: null })}
+                  aria-pressed={p.tone === t.id}
+                  onClick={() => setPrefs({ tone: t.id })}
                 >
-                  <i style={{ background: t.base, boxShadow: `inset -8px 0 ${t.accent}` }} />
+                  <i style={{ background: t[shown].base, boxShadow: `inset -8px 0 ${t[shown].accent}` }} />
                   {t.label}
                 </button>
               ))}
@@ -939,19 +956,22 @@ export function Settings({
           <div className="setting">
             <div className="text">
               <b>Custom highlight colour</b>
-              <span>Replaces the tone's highlight colour.</span>
+              <span>
+                {p.customAccent ? `Used instead of ${toneLabel}'s, in both modes.` : `Replaces ${toneLabel}'s highlight colour.`}
+              </span>
+              {faint && <span className="note warn">Hard to see on the {shown} background. Pick a {shown === "light" ? "deeper" : "lighter"} colour.</span>}
             </div>
             <input
               type="color"
               className="color-input"
               data-nav
               aria-label="Custom highlight colour"
-              value={p.customAccent ?? TONES.find((t) => t.id === p.tone)!.accent}
+              value={p.customAccent ?? tone[shown].accent}
               onChange={(e) => setPrefs({ customAccent: e.target.value })}
             />
             {p.customAccent && (
               <button className="btn" data-nav onClick={() => setPrefs({ customAccent: null })}>
-                Reset
+                Use {toneLabel}'s
               </button>
             )}
           </div>
@@ -967,20 +987,6 @@ export function Settings({
               aria-label="Soften the art behind the cover"
               aria-checked={p.blurPosterArt}
               onClick={() => setPrefs({ blurPosterArt: !p.blurPosterArt })}
-            />
-          </div>
-          <div className="setting">
-            <div className="text">
-              <b>Light mode</b>
-              <span>A light background for daytime.</span>
-            </div>
-            <button
-              className="switch"
-              role="switch"
-              data-nav
-              aria-label="Light mode"
-              aria-checked={p.mode === "light"}
-              onClick={() => setPrefs({ mode: p.mode === "light" ? "dark" : "light" })}
             />
           </div>
         </div>

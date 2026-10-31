@@ -95,7 +95,55 @@
   --accent-ink: #06231a;
 }
 
-/* Light mode overrides whichever tone's accent is chosen, but keeps the accent. */
+[data-tone="rosewood"] {
+  --base: #171114;
+  --base-2: #20181c;
+  --glass: rgba(38, 27, 32, 0.55);
+  --glass-strong: rgba(29, 21, 25, 0.82);
+  --line: rgba(248, 236, 240, 0.1);
+  --line-strong: rgba(248, 236, 240, 0.18);
+  --ink: #f6eef1;
+  --ink-2: #c3adb5;
+  --ink-3: #98818a;
+  --tint: rgba(23, 17, 20, 0.55);
+  --accent: #eba9b9;
+  --accent-ink: #2b0c16;
+}
+
+[data-tone="harbor"] {
+  --base: #0d1517;
+  --base-2: #131f22;
+  --glass: rgba(19, 34, 38, 0.55);
+  --glass-strong: rgba(15, 27, 30, 0.82);
+  --line: rgba(230, 243, 245, 0.1);
+  --line-strong: rgba(230, 243, 245, 0.18);
+  --ink: #ebf4f5;
+  --ink-2: #a1bcc0;
+  --ink-3: #789498;
+  --tint: rgba(13, 21, 23, 0.55);
+  --accent: #8fd5de;
+  --accent-ink: #04252a;
+}
+
+/* No hue at all: the highlight is the ink itself. */
+[data-tone="mono"] {
+  --base: #121212;
+  --base-2: #1a1a1a;
+  --glass: rgba(30, 30, 30, 0.55);
+  --glass-strong: rgba(22, 22, 22, 0.82);
+  --line: rgba(240, 240, 240, 0.1);
+  --line-strong: rgba(240, 240, 240, 0.18);
+  --ink: #f2f2f2;
+  --ink-2: #b0b0b0;
+  --ink-3: #888888;
+  --tint: rgba(18, 18, 18, 0.55);
+  --accent: #ececec;
+  --accent-ink: #141414;
+}
+
+/* Light mode: each tone keeps its character as a tinted paper ground, with a
+   deeper accent (pastels wash out on light). Graphite is the neutral default.
+   Every ink tier and the Play button meet WCAG AA on these grounds. */
 [data-mode="light"] {
   --base: #e9ecf0;
   --base-2: #f3f5f8;
@@ -108,11 +156,82 @@
   --ink-3: #5f6b7b;
   --tint: rgba(233, 236, 240, 0.4);
   --shadow: 0 14px 30px rgba(20, 30, 45, 0.16);
+  --accent: #2f5bd3;
+  --accent-ink: #ffffff;
   color-scheme: light;
 }
 
-/* Pastel accents wash out on a light ground: use deeper versions of each. */
-[data-mode="light"] { --accent: #2f5bd3; --accent-ink: #ffffff; }
-[data-mode="light"][data-tone="gallery"] { --accent: #8a5d14; }
-[data-mode="light"][data-tone="ember"] { --accent: #b04e12; }
-[data-mode="light"][data-tone="spruce"] { --accent: #1c6e51; }
+[data-mode="light"][data-tone="gallery"] {
+  --base: #e7ecf2;
+  --base-2: #f2f5f9;
+  --line: rgba(18, 27, 38, 0.1);
+  --line-strong: rgba(18, 27, 38, 0.18);
+  --ink: #121b26;
+  --ink-2: #475768;
+  --ink-3: #5a6a7c;
+  --tint: rgba(231, 236, 242, 0.4);
+  --accent: #8a5d14;
+}
+
+[data-mode="light"][data-tone="ember"] {
+  --base: #f0e9e3;
+  --base-2: #f8f3ef;
+  --line: rgba(35, 25, 20, 0.1);
+  --line-strong: rgba(35, 25, 20, 0.18);
+  --ink: #231914;
+  --ink-2: #5e4c40;
+  --ink-3: #725f52;
+  --tint: rgba(240, 233, 227, 0.4);
+  --shadow: 0 14px 30px rgba(45, 28, 18, 0.16);
+  --accent: #b04e12;
+}
+
+[data-mode="light"][data-tone="spruce"] {
+  --base: #e4ece8;
+  --base-2: #f0f5f2;
+  --line: rgba(17, 32, 26, 0.1);
+  --line-strong: rgba(17, 32, 26, 0.18);
+  --ink: #11201a;
+  --ink-2: #44594f;
+  --ink-3: #566c62;
+  --tint: rgba(228, 236, 232, 0.4);
+  --accent: #1c6e51;
+}
+
+[data-mode="light"][data-tone="rosewood"] {
+  --base: #efe7ea;
+  --base-2: #f8f2f4;
+  --line: rgba(36, 20, 25, 0.1);
+  --line-strong: rgba(36, 20, 25, 0.18);
+  --ink: #241419;
+  --ink-2: #5f4850;
+  --ink-3: #735b63;
+  --tint: rgba(239, 231, 234, 0.4);
+  --shadow: 0 14px 30px rgba(45, 20, 28, 0.16);
+  --accent: #a3385a;
+}
+
+[data-mode="light"][data-tone="harbor"] {
+  --base: #e3edef;
+  --base-2: #eff6f7;
+  --line: rgba(15, 31, 34, 0.1);
+  --line-strong: rgba(15, 31, 34, 0.18);
+  --ink: #0f1f22;
+  --ink-2: #425a5e;
+  --ink-3: #546d71;
+  --tint: rgba(227, 237, 239, 0.4);
+  --accent: #0f6f7c;
+}
+
+[data-mode="light"][data-tone="mono"] {
+  --base: #ebebeb;
+  --base-2: #f5f5f5;
+  --line: rgba(22, 22, 22, 0.1);
+  --line-strong: rgba(22, 22, 22, 0.18);
+  --ink: #161616;
+  --ink-2: #4f4f4f;
+  --ink-3: #636363;
+  --tint: rgba(235, 235, 235, 0.4);
+  --shadow: 0 14px 30px rgba(0, 0, 0, 0.14);
+  --accent: #1c1c1c;
+}

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { TONES, setPrefs, usePrefs } from "../lib/prefs";
+import { TONES, setPrefs, usePrefs, useShownMode } from "../lib/prefs";
 import { setFullscreen } from "../lib/fullscreen";
 import { useStartWithWindows } from "../lib/autostart";
 import { nameOptions, pickName, useAccounts } from "../lib/gamertag";
@@ -11,6 +11,7 @@ import { Icon } from "../components/Icon";
  */
 export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }) {
   const p = usePrefs();
+  const shown = useShownMode(p);
   const startup = useStartWithWindows();
   // Only names that exist; typing your own needs the desktop view.
   const accounts = useAccounts();
@@ -41,10 +42,10 @@ export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }
               key={t.id}
               className="cx-tone"
               data-nav
-              aria-pressed={p.tone === t.id && !p.customAccent}
+              aria-pressed={p.tone === t.id}
               onClick={() => setPrefs({ tone: t.id, customAccent: null })}
             >
-              <i style={{ background: t.base, boxShadow: `inset -10px 0 ${t.accent}` }} />
+              <i style={{ background: t[shown].base, boxShadow: `inset -10px 0 ${t[shown].accent}` }} />
               {t.label}
             </button>
           ))}
@@ -65,8 +66,14 @@ export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }
           ))}
         </div>
       </Row>
-      <Row title="Light mode" text="A light background for daytime.">
-        <Switch label="Light mode" on={p.mode === "light"} onToggle={() => setPrefs({ mode: p.mode === "light" ? "dark" : "light" })} />
+      <Row title="Mode" text={p.mode === "system" ? `Follows Windows, ${shown} right now.` : "Dark, light, or whichever Windows uses."}>
+        <div className="cx-tones" role="group" aria-label="Mode">
+          {(["dark", "light", "system"] as const).map((m) => (
+            <button key={m} className="cx-tone" data-nav aria-pressed={p.mode === m} onClick={() => setPrefs({ mode: m })}>
+              {m === "dark" ? "Dark" : m === "light" ? "Light" : "Match Windows"}
+            </button>
+          ))}
+        </div>
       </Row>
       <Row title="Full screen" text="The console fills the whole screen while it's open.">
         <Switch

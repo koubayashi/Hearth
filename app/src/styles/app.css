@@ -9,7 +9,6 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  transition: background var(--dur-slow) var(--ease-out);
 }
 ::selection { background: var(--accent); color: var(--accent-ink); }
 button { font: inherit; color: inherit; }
@@ -194,7 +193,8 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .setting .text b { display: block; font-weight: 600; }
 .setting .text span { color: var(--ink-2); font-size: var(--text-sm); }
 .setting .text .inline-name { display: inline; color: var(--ink); }
-.swatches { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+/* Even columns, so seven tones never leave one alone on a row. */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-2); }
 .swatch {
   all: unset; display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; cursor: pointer;
   border-radius: var(--radius-control); border: 1px solid var(--line); color: var(--ink-2); font-weight: 500;
@@ -472,6 +472,8 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .note { font-size: var(--text-sm); color: var(--ink-2); }
 .note.error { color: #ff8a80; }
 [data-mode="light"] .note.error { color: #b3261e; }
+.note.warn { display: block; margin-top: 4px; color: #f2c46d; }
+[data-mode="light"] .note.warn { color: #8a5a00; }
 .setting .text b svg { vertical-align: -2px; margin-right: 4px; }
 .primary-chip { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
 .primary-chip:hover { background: var(--accent); filter: brightness(1.07); color: var(--accent-ink); }
