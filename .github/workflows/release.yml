@@ -38,6 +38,18 @@ jobs:
       - run: npm ci
         working-directory: app
 
+      # The tag is the version: write it into Cargo.toml and package.json so
+      # the installer and latest.json can't disagree with the release name.
+      - name: Version from tag
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          (Get-Content Cargo.toml -Raw) -replace '(?m)(\[workspace\.package\]\r?\nversion = )"[^"]*"', "`$1`"$version`"" | Set-Content Cargo.toml -NoNewline
+          if (-not (Select-String -Path Cargo.toml -Pattern "^version = `"$version`"" -Quiet)) { throw "Could not set the version in Cargo.toml" }
+          Push-Location app
+          npm version $version --no-git-tag-version --allow-same-version
+          Pop-Location
+
       - run: cargo test --workspace --exclude hearth
 
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
