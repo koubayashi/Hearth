@@ -12,6 +12,7 @@ mod folders;
 mod fullscreen_fix;
 mod gog_account;
 mod saves;
+mod snap_layouts;
 mod tracking;
 mod tray;
 mod updates;
@@ -816,6 +817,7 @@ fn main() {
             ways::delete_launch_option,
             ways::set_default_launch,
             ways::set_folder_exe,
+            snap_layouts::place_maximize_button,
             play_sessions,
             backup::backup_export,
             backup::backup_restore,

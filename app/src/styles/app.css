@@ -48,7 +48,7 @@ input { font: inherit; color: inherit; }
   all: unset; width: 46px; height: 36px; display: grid; place-items: center; color: var(--ink-2);
   transition: background var(--dur-fast), color var(--dur-fast);
 }
-.winbtn:hover { background: var(--line); color: var(--ink); }
+.winbtn:hover, .winbtn[data-hover] { background: var(--line); color: var(--ink); }
 .winbtn.close:hover { background: #c42b1c; color: #fff; }
 
 /* ---------- shell ---------- */
@@ -832,7 +832,8 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
    controls dip slightly; full-width rows darken instead, since a scaled row
    reads as a glitch. Uses the standalone scale property so it never fights
    the hover and focus transforms already on these elements. */
-:is(.chip, .btn, .seg button, .icon-btn, .swatch, .shelf, .surprise, .switch, .link, .winbtn, .stats-hero-game):active:not(:disabled) {
+:is(.chip, .btn, .seg button, .icon-btn, .swatch, .shelf, .surprise, .switch, .link, .winbtn, .stats-hero-game):active:not(:disabled),
+.winbtn[data-pressed] /* the Maximize button's press comes from the window over it (snap_layouts.rs) */ {
   scale: 0.96; transition: scale 80ms var(--ease-out);
 }
 :is(.nav, .settings-index button, .menu button, .install-row, .ranked button, .figures button, .podium-item):active:not(:disabled) { background: var(--line-strong); }
