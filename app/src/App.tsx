@@ -12,6 +12,7 @@ import { Library } from "./screens/Library";
 import { Collections } from "./screens/Collections";
 import { Settings } from "./screens/Settings";
 import { Stats } from "./screens/Stats";
+import { Storage } from "./screens/Storage";
 import { legacy } from "./components/Art";
 import { setPrefs, usePrefs } from "./lib/prefs";
 import { ListView } from "./screens/ListView";
@@ -216,6 +217,7 @@ export function App() {
             />
           )}
           {route === "stats" && <Stats version={version} onOpenGame={openGame} onOpenStatus={openStatus} />}
+          {route === "storage" && <Storage version={version} onOpenGame={openGame} say={say} />}
           {route === "settings" && (
             <div className="peek-library" aria-hidden inert>
               <Library

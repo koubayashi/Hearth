@@ -26,6 +26,16 @@ export async function preloadGameInfo() {
   }
 }
 
+/** Measures a game's install folder (again, with `refresh`) and keeps the
+ *  result, so every page showing sizes sees it. */
+export async function measureInstall(id: number, refresh: boolean) {
+  const install = await api.installInfo(id, refresh);
+  const old = cache.get(id);
+  cache.set(id, { details: old?.details ?? null, install });
+  changed();
+  return install;
+}
+
 /** What's in memory for a game right now, without asking (for sorting and filters). */
 export const savedInfo = (id: number): Info | undefined => cache.get(id);
 

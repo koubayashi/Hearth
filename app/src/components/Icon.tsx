@@ -62,6 +62,13 @@ const paths = {
     </>
   ),
   sliders: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4" />,
+  drive: (
+    <>
+      <path d="M3.5 14.5l2.3-8.1A2 2 0 0 1 7.7 5h8.6a2 2 0 0 1 1.9 1.4l2.3 8.1" />
+      <rect x="3.5" y="14.5" width="17" height="5" rx="1.5" />
+      <path d="M16.5 17h.01M13.5 17h.01" />
+    </>
+  ),
   dice: (
     <>
       <rect x="4" y="4" width="16" height="16" rx="3" />

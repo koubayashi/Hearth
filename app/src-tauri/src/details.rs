@@ -158,10 +158,13 @@ pub fn saved_game_info(app: AppHandle) -> CmdResult<Vec<SavedInfo>> {
                 .flatten()
                 .and_then(|(json, _)| json)
                 .and_then(|j| serde_json::from_str(&j).ok());
+            // A game on a drive that isn't connected keeps its last measured
+            // size, so Storage can still say what that drive holds.
             let install = g
                 .entries
                 .iter()
                 .find(|e| e.installed)
+                .or_else(|| g.entries.iter().find(|e| e.offline))
                 .and_then(|e| e.install_dir.clone())
                 .map(|path| InstallInfo { path, bytes: db.install_size(g.id).ok().flatten() });
             SavedInfo { id: g.id, details, install }

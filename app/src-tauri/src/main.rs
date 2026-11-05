@@ -13,6 +13,7 @@ mod gog_account;
 mod saves;
 mod smart;
 mod snap_layouts;
+mod storage;
 mod tracking;
 mod tray;
 mod updates;
@@ -858,6 +859,7 @@ fn main() {
             details::install_info,
             details::saved_game_info,
             details::open_install_folder,
+            storage::storage_drives,
             details::open_store_page,
             folders::game_folders,
             folders::add_game_folder,

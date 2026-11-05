@@ -120,7 +120,7 @@ const games: Game[] = allSeeds.map(([title, appid, store, installed, hours, days
       store,
       store_game_id: String(appid),
       installed,
-      install_dir: title === "Dead Cells" ? "E:\\Games\\Dead Cells" : installed ? `C:\\Games\\${title}` : null,
+      install_dir: title === "Dead Cells" ? "E:\\Games\\Dead Cells" : installed ? `${i % 3 === 0 ? "D" : "C"}:\\Games\\${title}` : null,
       hidden: false,
       store_playtime_secs: null,
       store_baseline_secs: null,
@@ -223,13 +223,24 @@ export const mockBackend = {
   },
   async installInfo(id: number, _refresh: boolean): Promise<InstallInfo | null> {
     const g = games.find((g) => g.id === id);
-    const dir = g?.entries.find((e) => e.installed)?.install_dir;
+    const dir = (g?.entries.find((e) => e.installed) ?? g?.entries.find((e) => e.offline))?.install_dir;
     return dir ? { path: dir, bytes: 1_000_000_000 * (8 + (id % 90)) } : null;
   },
   async savedGameInfo() {
     return Promise.all(
-      games.map(async (g) => ({ id: g.id, details: await this.gameDetails(g.id), install: await this.installInfo(g.id, false) })),
+      // A few sizes start unknown, so the demo shows Storage measuring them.
+      games.map(async (g) => {
+        const install = await this.installInfo(g.id, false);
+        return { id: g.id, details: await this.gameDetails(g.id), install: install && g.id % 5 === 2 ? { ...install, bytes: null } : install };
+      }),
     );
+  },
+  async storageDrives(_roots: string[]) {
+    return [
+      { root: "C:", label: "Windows", total: 1_000_000_000_000, free: 212_000_000_000 },
+      { root: "D:", label: "Games", total: 2_000_000_000_000, free: 1_140_000_000_000 },
+      { root: "F:", label: "Backup", total: 4_000_000_000_000, free: 3_100_000_000_000 },
+    ];
   },
   async openInstallFolder(_id: number) {},
   async openStorePage(_id: number) {},

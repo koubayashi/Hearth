@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { LaunchOptionInput, Via } from "./types";
 import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit } from "./types";
+import type { DriveSpace } from "./storage";
 import { mockBackend } from "./mock";
 
 const on = (event: string) => (cb: (payload: unknown) => void) => listen(event, (e) => cb(e.payload));
@@ -53,6 +54,7 @@ const backend = isTauri()
       installInfo: (id: number, refresh: boolean) => invoke<InstallInfo | null>("install_info", { id, refresh }),
       savedGameInfo: () => invoke<{ id: number; details: GameDetails | null; install: InstallInfo | null }[]>("saved_game_info"),
       openInstallFolder: (id: number) => invoke<void>("open_install_folder", { id }),
+      storageDrives: (roots: string[]) => invoke<DriveSpace[]>("storage_drives", { roots }),
       openStorePage: (id: number) => invoke<void>("open_store_page", { id }),
       gameFolders: () => invoke<string[]>("game_folders"),
       searchStore: (term: string) => invoke<StoreHit[]>("search_store", { term }),

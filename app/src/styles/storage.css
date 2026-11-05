@@ -1,0 +1,63 @@
+/* Storage: each drive's fill, and the games on it largest first. Sits in the
+   same page frame as Stats (.stats). */
+
+.storage-sub { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin: calc(-1 * var(--space-3)) 0 var(--space-6); color: var(--ink-2); }
+.storage-sub b { font: 600 var(--text-xl) var(--font-display); color: var(--ink); font-variant-numeric: tabular-nums; }
+.storage-progress { font-size: var(--text-sm); color: var(--ink-3); font-variant-numeric: tabular-nums; height: 32px; display: inline-flex; align-items: center; }
+
+.stats .drive { margin-bottom: var(--space-7); }
+.stats .drive.drive-empty { margin-bottom: var(--space-5); }
+.drive-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-3); }
+.drive-head h2 { display: flex; align-items: center; gap: var(--space-2); font: 600 var(--text-xl) var(--font-display); letter-spacing: -0.01em; }
+.drive-head h2 svg { color: var(--ink-3); align-self: center; }
+.drive-head h2 span { font-weight: 400; color: var(--ink-2); }
+.drive-head p { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.drive-head p b { color: var(--ink); font-weight: 600; }
+.drive-offline .drive-head p { color: var(--ink-3); }
+.drive-empty .drive-head h2 { font-size: var(--text-lg); }
+
+/* The fill: games in the accent, everything else a quiet grey, free space the empty track. */
+.drive-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--line); }
+.drive-empty .drive-bar { height: 6px; }
+.drive-bar span { height: 100%; transform-origin: left; animation: fill var(--dur-slow) var(--ease-out) backwards; }
+.drive-bar .seg-other { animation-delay: 60ms; }
+@keyframes fill { from { transform: scaleX(0); } }
+.seg-games { background: var(--accent); }
+.seg-other { background: var(--ink-3); opacity: 0.55; }
+.drive-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin-top: var(--space-2); font-size: var(--text-sm); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.drive-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.drive-legend small { color: var(--ink-3); font-size: inherit; }
+.drive-note { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--ink-3); }
+
+.drive-games { list-style: none; padding: 0; margin-top: var(--space-4); }
+.drive-games li { position: relative; display: flex; align-items: center; gap: var(--space-1); border-top: 1px solid var(--line); }
+.drive-game {
+  all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: grid; align-items: center; gap: var(--space-4);
+  grid-template-columns: 28px minmax(0, 1fr) 84px minmax(60px, 160px);
+  padding: 6px var(--space-2); border-radius: var(--radius-control); cursor: pointer; transition: background var(--dur-fast);
+}
+.drive-game:hover { background: var(--line); }
+.drive-game:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.drive-game img, .drive-art { width: 28px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 3px; background: var(--base-2); }
+.drive-name { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
+.drive-name b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drive-name small { flex: none; font-size: var(--text-xs); color: var(--ink-3); }
+.drive-size { text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: var(--text-sm); }
+/* Size against the drive's largest game, so the big installs read at a glance. */
+.drive-share { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.drive-share span { display: block; height: 100%; background: var(--accent); opacity: 0.8; }
+.drive-offline .drive-share span { background: var(--ink-3); }
+.drive-games .icon-btn { width: 30px; height: 30px; background: transparent; border-color: transparent; opacity: 0; transition: opacity var(--dur-fast), background var(--dur-fast); }
+.drive-games li:hover .icon-btn, .drive-games .icon-btn:focus-visible { opacity: 1; }
+.drive-gap { width: 30px; flex: none; }
+.drive-more { margin-top: var(--space-3); margin-left: var(--space-2); }
+
+@container (max-width: 640px) {
+  .drive-game { grid-template-columns: 28px minmax(0, 1fr) 76px; }
+  .drive-share { display: none; }
+  .drive-name { flex-direction: column; gap: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drive-bar span { animation: none; }
+}

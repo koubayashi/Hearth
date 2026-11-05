@@ -5,12 +5,13 @@ import { pickName, useAccounts } from "../lib/gamertag";
 import { usePrefs } from "../lib/prefs";
 import type { StoreId } from "../lib/types";
 
-export type Route = "library" | "collections" | "stats" | "hidden" | "settings";
+export type Route = "library" | "collections" | "stats" | "storage" | "hidden" | "settings";
 
 const ITEMS: { id: Route; label: string; icon: IconName }[] = [
   { id: "library", label: "Library", icon: "library" },
   { id: "collections", label: "Collections", icon: "collections" },
   { id: "stats", label: "Stats", icon: "stats" },
+  { id: "storage", label: "Storage", icon: "drive" },
 ];
 
 export function Rail({

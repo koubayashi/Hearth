@@ -10,6 +10,7 @@ import { CrashBoundary, reportUnhandledErrors } from "./components/CrashScreen";
 import "./styles/app.css";
 import "./styles/views.css";
 import "./styles/ways.css";
+import "./styles/storage.css";
 import "./styles/system.css";
 
 reportUnhandledErrors();
