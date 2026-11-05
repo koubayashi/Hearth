@@ -47,7 +47,10 @@ pub fn run(action: &LaunchAction) -> Result<(), LaunchError> {
                 .map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() })
                 .collect::<Vec<_>>()
                 .join(" ");
-            if let Some(dir) = working_dir.as_ref().or(exe.parent().map(|p| p.to_path_buf()).as_ref()) {
+            // A bare program name ("explorer.exe") has an empty parent, which
+            // Windows refuses as a start folder (os error 123); let it inherit ours.
+            let own_dir = exe.parent().filter(|p| !p.as_os_str().is_empty());
+            if let Some(dir) = working_dir.as_deref().or(own_dir) {
                 c.current_dir(dir);
             }
             (c, exe.display().to_string())
@@ -172,6 +175,14 @@ fn new_console(_c: &mut Command) {}
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
+
+    /// A program named without a folder (as "Open install folder" names
+    /// explorer.exe) starts, rather than failing on an empty start folder.
+    #[test]
+    fn starts_a_program_named_without_a_folder() {
+        let action = LaunchAction::Process { exe: "cmd.exe".into(), args: vec!["/C".into(), "exit".into()], working_dir: None };
+        run(&action).expect("a bare program name starts");
+    }
 
     /// A script in a folder with spaces gets its arguments as typed and starts
     /// in its own folder (as a server replacement's start script expects).
