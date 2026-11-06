@@ -28,5 +28,12 @@ pub fn separate_version(app: AppHandle, game_id: i64, entry_id: i64) -> CmdResul
     let id = lock(&state.db).separate_version(game_id, entry_id).map_err(err)?;
     crate::tracking::log(&app, &format!("versions: separated entry {entry_id} of game {game_id}"));
     changed(&app);
+    // The separated game starts without art; fetch it now rather than at
+    // the next sync, so it doesn't sit there blank.
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::refresh_art(&handle).await;
+        let _ = handle.emit("library-changed", ());
+    });
     Ok(id)
 }

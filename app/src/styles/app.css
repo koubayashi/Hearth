@@ -694,6 +694,15 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   width: 16px; height: 16px; flex: none; border-radius: 3px; border: 1px solid var(--line-strong);
   display: grid; place-items: center; color: var(--accent); margin: 0 1px;
 }
+/* One choice of several (sort order, which way Play starts): a round mark,
+   so it doesn't read as a box you can tick alongside others. */
+.radio-dot {
+  width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1px solid var(--line-strong);
+  display: grid; place-items: center; margin: 0 1px;
+}
+.radio-dot::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); transform: scale(0); transition: transform var(--dur-fast) var(--ease-out); }
+[aria-checked="true"] > .radio-dot { border-color: var(--accent); }
+[aria-checked="true"] > .radio-dot::after { transform: scale(1); }
 .menu-new { padding: 4px; }
 .menu-new .text-input { width: 100%; box-sizing: border-box; }
 .status-chip { display: inline-flex; align-items: center; gap: 2px; }

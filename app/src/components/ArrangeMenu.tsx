@@ -88,7 +88,8 @@ export function ArrangeMenu({
       <div className="menu-label">Sort by</div>
       {SORTS.map((s) => (
         <button key={s.id} role="menuitemradio" aria-checked={sort === s.id} onClick={() => onSort(s.id)}>
-          {check(sort === s.id)}
+          {/* One sort at a time: a radio mark, not the genres' checkboxes. */}
+          <span className="radio-dot" aria-hidden />
           {s.label}
         </button>
       ))}

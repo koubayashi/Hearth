@@ -213,7 +213,7 @@ function PlayView({
   const fallback = defaultWay(game);
   const choice = (key: string, label: string, on: boolean, via: Via, disabled = false) => (
     <button key={key} role="menuitemradio" aria-checked={on} disabled={disabled} onClick={run(() => onPrimary(game, via))}>
-      <span className="check-box">{on && <Icon name="check" size={13} />}</span>
+      <span className="radio-dot" aria-hidden />
       {label}
     </button>
   );
@@ -241,7 +241,7 @@ function PlayView({
       )}
       {(versions.length === 0 || game.launch_options.length > 0) && (
         <>
-      <div className="menu-label">Play button uses the ticked one</div>
+      <div className="menu-label">The Play button starts</div>
       {choice(
         "store",
         game.offline_drive
