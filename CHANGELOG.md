@@ -4,6 +4,18 @@ What changed in each Hearth release, newest first. Each version's section
 becomes its GitHub release notes, so the release build won't publish a
 version that has no section here.
 
+## Unreleased
+
+### Better
+
+- **Hearth notices installs by itself.** Come back to its window and it
+  checks what's installed: a game restored from the Recycle Bin, or
+  installed or uninstalled in its store, shows up without a refresh.
+- **F5 refreshes your library**, like Settings › Refresh library.
+- **Hearth feels less like a web page:** right-clicking shows no browser
+  menu (text boxes keep cut, copy and paste), and browser shortcuts like
+  Ctrl+R, Ctrl+P and Alt+← no longer reload, print or leave the page.
+
 ## 0.3.0
 
 A big one: your library learns what's taking space on your drives,
