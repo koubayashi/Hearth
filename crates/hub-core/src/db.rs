@@ -164,6 +164,29 @@ impl Db {
     /// Apply one provider's results. Entries the store no longer reports are
     /// kept (they may simply need a login to show up) but marked uninstalled.
     pub fn sync_store(&mut self, store: StoreId, entries: &[GameEntry], now: i64) -> Result<()> {
+        self.sync_entries(store, entries, now, true)
+    }
+
+    /// Only what's installed on this PC, from a quick local scan: entries
+    /// gain or lose their install, new installs become games, and the store
+    /// totals and dates (which only the full sync knows) are left alone.
+    /// Returns whether anything changed.
+    pub fn sync_installed(&mut self, store: StoreId, installed: &[GameEntry], now: i64) -> Result<bool> {
+        let before = self.install_state(store)?;
+        self.sync_entries(store, installed, now, false)?;
+        Ok(self.install_state(store)? != before)
+    }
+
+    /// Every entry of a store with its install state, to tell whether a scan changed anything.
+    fn install_state(&self, store: StoreId) -> Result<Vec<(i64, bool, Option<String>)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, installed, install_dir FROM store_entries WHERE store = ?1 ORDER BY id")?;
+        let rows = stmt.query_map([store.as_str()], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn sync_entries(&mut self, store: StoreId, entries: &[GameEntry], now: i64, full: bool) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute(
             "UPDATE store_entries SET installed = 0 WHERE store = ?1",
@@ -178,6 +201,12 @@ impl Db {
                 )
                 .optional()?;
             match existing {
+                Some(id) if !full => {
+                    tx.execute(
+                        "UPDATE store_entries SET installed = ?2, install_dir = ?3 WHERE id = ?1",
+                        params![id, e.installed, e.install_dir],
+                    )?;
+                }
                 Some(id) => {
                     tx.execute(
                         // Stores like Epic report a total but no date: when the
@@ -1438,6 +1467,29 @@ mod tests {
         let back = db.separate_version(base, legacy).unwrap();
         assert_eq!(db.game(base).unwrap().unwrap().title, "Grand Theft Auto V Enhanced");
         assert_eq!(db.game(back).unwrap().unwrap().title, "Grand Theft Auto V");
+    }
+
+    #[test]
+    fn a_quick_installed_scan_keeps_store_totals() {
+        let mut db = Db::open_in_memory().unwrap();
+        let mut played = entry(StoreId::Steam, "1", "Hades", true);
+        played.store_playtime_secs = Some(7200);
+        db.sync_store(StoreId::Steam, &[played, entry(StoreId::Steam, "2", "Celeste", false)], 0).unwrap();
+
+        // Nothing changed: same installs, and the scan has no playtime.
+        assert!(!db.sync_installed(StoreId::Steam, &[entry(StoreId::Steam, "1", "Hades", true)], 0).unwrap());
+        assert_eq!(db_game(&db, "Hades").playtime_secs, 7200, "the full sync's total stays");
+
+        // Hades uninstalled, Celeste installed, and a new game appears.
+        let now = [entry(StoreId::Steam, "2", "Celeste", true), entry(StoreId::Steam, "3", "Balatro", true)];
+        assert!(db.sync_installed(StoreId::Steam, &now, 0).unwrap());
+        assert!(!db_game(&db, "Hades").installed);
+        assert_eq!(db_game(&db, "Hades").playtime_secs, 7200);
+        assert!(db_game(&db, "Celeste").installed && db_game(&db, "Balatro").installed);
+    }
+
+    fn db_game(db: &Db, title: &str) -> Game {
+        db.list_games(&LibraryQuery::default()).unwrap().into_iter().find(|g| g.title == title).unwrap()
     }
 
     #[test]

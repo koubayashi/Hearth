@@ -38,6 +38,8 @@ pub fn show_main(app: &AppHandle) {
 pub fn style_main(window: &tauri::WebviewWindow) {
     crate::auth::forget_shared_cookies(window);
     crate::snap_layouts::install(window);
+    crate::webview_lock::apply(window);
+    crate::rescan::watch_focus(window);
     #[cfg(target_os = "windows")]
     let _ = window_vibrancy::apply_mica(window, None);
     #[cfg(not(target_os = "windows"))]

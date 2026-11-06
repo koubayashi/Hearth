@@ -58,6 +58,19 @@ export function App() {
       }),
     [],
   );
+  // F5 refreshes everything, as Settings' "Refresh library" does. (Coming
+  // back to the window already rescans what's installed: Rust watches that.)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "F5") return;
+      e.preventDefault();
+      if (e.repeat) return;
+      say("Refreshing your library…");
+      api.syncNow().catch((err) => say(`Couldn't refresh: ${err}`));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // A controller's Start button opens the console from anywhere. The first
   // time, say how to get back, in case it was pressed by accident.
   useEffect(() => {

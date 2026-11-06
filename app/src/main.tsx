@@ -15,6 +15,16 @@ import "./styles/system.css";
 
 reportUnhandledErrors();
 applyPrefs();
+
+// Hearth is an app, not a web page: no browser right-click menu (Back,
+// Refresh, Save as, Print). Text boxes keep it for cut, copy and paste.
+// Games have their own menu; their handlers run first and stop this one
+// from mattering. The browser's own shortcuts are off too (webview_lock.rs).
+const editable = (t: EventTarget | null) =>
+  t instanceof HTMLElement && !!t.closest('input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, [contenteditable="true"]');
+window.addEventListener("contextmenu", (e) => {
+  if (!editable(e.target)) e.preventDefault();
+});
 installSpatialNav();
 startGamepadBridge();
 installFullscreenKey();
