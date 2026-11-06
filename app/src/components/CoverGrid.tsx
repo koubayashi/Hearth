@@ -111,7 +111,7 @@ export function CoverGrid({
               data-nav
               data-game={g.id}
               className={`cover ${g.installed ? "" : "out"} ${g.id === focusedId ? "lit" : ""}`}
-              aria-label={`${g.title}, ${g.entries.map((e) => STORE_LABEL[e.store]).join(" and ")}${g.installed ? "" : ", not installed"}${g.hidden ? ", hidden" : ""}`}
+              aria-label={`${g.title}, ${g.entries.map((e) => STORE_LABEL[e.store]).join(" and ")}${g.installed ? "" : ", not installed"}${g.hidden ? ", hidden" : ""}${g.favorite ? ", favourite" : ""}`}
               onFocus={() => onFocusGame(g)}
               onClick={() => onFocusGame(g)}
               onDoubleClick={() => onActivate(g)}
@@ -140,7 +140,11 @@ export function CoverGrid({
                   </span>
                 )}
               </span>
-              <span className="cover-title">{g.title}</span>
+              <span className="cover-title">
+                {/* Favourites carry a star by their name, not over the art. */}
+                {g.favorite && <Icon name="star" size={12} className="fav-mark" />}
+                <span className="cover-name">{g.title}</span>
+              </span>
               <span className="cover-meta">
                 {meta ? meta(g) : formatGamePlaytime(g.playtime_secs, g.last_played)}
               </span>

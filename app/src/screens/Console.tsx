@@ -308,14 +308,14 @@ export function Console({
               if (Math.abs(d) > 20) move(at + Math.sign(d));
             }}
           >
-            <div className="cx-track" style={{ "--at": at } as React.CSSProperties}>
+            <div className="cx-track" style={{ "--at": at, "--past": shelf.split !== undefined && at >= shelf.split ? 1 : 0 } as React.CSSProperties}>
               {row.slice(first, last).map((g, n) => {
                 const i = first + n;
                 return (
                   <button
                     key={g.id}
-                    className={`cx-tile${i === at ? " on" : i > at ? " after" : ""}${g.installed ? "" : " dim"}${i === shelf.split ? " split" : ""}`}
-                    style={{ "--i": i } as React.CSSProperties}
+                    className={`cx-tile${i === at ? " on" : i > at ? " after" : ""}${g.installed ? "" : " dim"}`}
+                    style={{ "--i": i, "--s": shelf.split !== undefined && i >= shelf.split ? 1 : 0 } as React.CSSProperties}
                     role="option"
                     aria-selected={i === at}
                     aria-label={g.title}
@@ -347,15 +347,21 @@ export function Console({
                     }}
                   >
                     <Art src={g.cover ?? g.hero} title={g.title} />
-                    {i === shelf.split && (
-                      <span className="cx-split" aria-hidden>
-                        Not installed
-                      </span>
-                    )}
                     {playing.some((p) => p.game_id === g.id) && <span className="cx-live" title="Playing now" />}
                   </button>
                 );
               })}
+              {/* Between the games you can start and the rest: its own element, so
+                  it never grows with a selected cover. */}
+              {shelf.split !== undefined && (
+                <span
+                  className={`cx-divider${at < shelf.split ? " after" : ""}`}
+                  style={{ "--i": shelf.split } as React.CSSProperties}
+                  aria-hidden
+                >
+                  <span>Not installed</span>
+                </span>
+              )}
               {games && row.length === 0 && <p className="cx-empty">{shelf.empty}</p>}
             </div>
           </div>

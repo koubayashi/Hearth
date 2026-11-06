@@ -416,10 +416,12 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   background: var(--glass-strong); font-size: 11px; font-weight: 600;
 }
 .cover-title {
-  display: block; margin-top: 8px; font-size: var(--text-sm); color: var(--ink-2);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 5px; margin-top: 8px; font-size: var(--text-sm); color: var(--ink-2);
   transition: color var(--dur-fast);
 }
+.cover-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A favourite's star: filled, in the accent, sized to the name beside it. */
+.fav-mark { flex: none; color: var(--accent); fill: currentColor; }
 .cover:hover .cover-art, .piece:hover .frame { transform: translateY(-2px); }
 .cover:hover .cover-title { color: var(--ink); }
 
@@ -1127,3 +1129,29 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .part-of-field { position: relative; display: inline-block; }
 .part-of-field .text-input { width: 240px; height: 30px; }
 .part-of-field .smart-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 8; box-shadow: var(--shadow); }
+
+/* Artwork picker preview: the chosen background with the chosen cover over
+   it, as the game's panel shows them. Each half opens its tab. */
+.art-preview { position: relative; flex: none; height: 168px; border-radius: var(--radius-panel); overflow: hidden; background: var(--base); }
+/* :where() keeps this reset below the two halves' own placement. */
+:where(.art-preview button) { all: unset; box-sizing: border-box; cursor: pointer; display: block; }
+.art-preview-hero { position: absolute; inset: 0; }
+.art-preview-hero img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; transition: opacity var(--dur-fast); }
+.art-preview-hero:hover img { opacity: 1; }
+.art-preview-cover {
+  position: absolute; left: var(--space-4); top: var(--space-3); bottom: var(--space-3); aspect-ratio: 2 / 3;
+  border-radius: var(--radius-art); overflow: hidden; background: var(--base-2); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  transition: transform var(--dur-fast), box-shadow var(--dur-fast);
+}
+.art-preview-cover img { width: 100%; height: 100%; object-fit: cover; }
+.art-preview-cover:hover { transform: translateY(-2px); }
+.art-preview-cover[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent), 0 10px 28px rgba(0, 0, 0, 0.5); }
+.art-preview-hero[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--accent); border-radius: var(--radius-panel); }
+.art-preview button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.art-none { display: grid; place-items: center; width: 100%; height: 100%; font-size: var(--text-sm); color: var(--ink-3); }
+.art-preview-note {
+  position: absolute; right: var(--space-3); bottom: var(--space-3); padding: 3px 10px; border-radius: 999px;
+  font-size: var(--text-xs); font-weight: 600; color: var(--ink); background: var(--glass-strong); backdrop-filter: blur(12px);
+}
+.art-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: 2px; }
+.art-foot-actions { display: flex; gap: var(--space-2); }

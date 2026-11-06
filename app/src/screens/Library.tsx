@@ -220,13 +220,14 @@ export function Library({
     const list = games ?? [];
     if (hiddenView) return [{ title: "Hidden games", games: list }];
     if (scope) return [{ title: scope.title, games: list }];
-    // Favourites have no section of their own: the toolbar's ★ chip shows
-    // them, and each game stays with the installed or not-installed games.
+    // Favourites have no section of their own: they lead each section, in
+    // the chosen sort, with a star by their name, and the rest follow.
+    const favFirst = (gs: Game[]) => [...gs.filter((g) => g.favorite), ...gs.filter((g) => !g.favorite)];
     return [
-      { title: "Library", games: list.filter((g) => g.installed) },
+      { title: "Library", games: favFirst(list.filter((g) => g.installed)) },
       // Installed, but on a drive that's unplugged right now.
-      { title: "Drive not connected", games: list.filter((g) => !g.installed && g.offline_drive) },
-      { title: "Not installed", games: list.filter((g) => !g.installed && !g.offline_drive) },
+      { title: "Drive not connected", games: favFirst(list.filter((g) => !g.installed && g.offline_drive)) },
+      { title: "Not installed", games: favFirst(list.filter((g) => !g.installed && !g.offline_drive)) },
     ].filter((s) => s.games.length > 0);
   }, [games, hiddenView, scope?.title]);
 

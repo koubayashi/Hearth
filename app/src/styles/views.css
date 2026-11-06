@@ -112,7 +112,7 @@
 /* ---------- console: fullscreen, controller first ---------- */
 /* Sized for reading from a couch: bigger type, bigger targets, one row. */
 .console {
-  --pad: clamp(32px, 4.5vw, 72px); --tile: clamp(112px, 8.5vw, 150px); --tile-on: calc(var(--tile) * 1.5); --gap: 16px;
+  --pad: clamp(32px, 4.5vw, 72px); --tile: clamp(112px, 8.5vw, 150px); --tile-on: calc(var(--tile) * 1.5); --gap: 16px; --split-gap: 64px;
   position: fixed; inset: 0; z-index: 25; overflow: hidden; isolation: isolate; color: var(--ink); background: var(--base);
   /* Menu, shelves and row at the top, the game in the lower third, the art in between. */
   display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; font-size: 18px;
@@ -182,11 +182,11 @@
 .cx-track {
   --extra: calc(var(--tile-on) - var(--tile));
   position: relative; height: calc(var(--tile-on) * 1.5);
-  transform: translateX(calc(var(--at) * -1 * (var(--tile) + var(--gap))));
+  transform: translateX(calc(-1 * (var(--at) * (var(--tile) + var(--gap)) + var(--past, 0) * var(--split-gap))));
   transition: transform 380ms var(--ease-out);
 }
 .cx-tile {
-  all: unset; position: absolute; top: 0; left: calc(var(--i) * (var(--tile) + var(--gap)));
+  all: unset; position: absolute; top: 0; left: calc(var(--i) * (var(--tile) + var(--gap)) + var(--s, 0) * var(--split-gap));
   width: var(--tile); aspect-ratio: 2 / 3; border-radius: var(--radius-art);
   cursor: pointer; background: var(--line); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   transform-origin: 0 0; transition: transform 380ms var(--ease-out), opacity var(--dur-med), box-shadow var(--dur-med);
@@ -194,16 +194,20 @@
 .cx-tile img, .cx-tile .art-fallback { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .cx-tile.dim:not(.on) { opacity: 0.6; }
 .cx-tile.after { transform: translateX(var(--extra)); }
-/* Recently played: games you can start now, then a divider, then the rest. */
-.cx-tile.split::after {
-  content: ""; position: absolute; top: 6%; bottom: 6%; left: calc(var(--gap) / -2 - 1px); width: 2px;
-  border-radius: 1px; background: var(--line-strong);
+/* Recently played: games you can start now, then a wider gap holding a
+   line, then the rest, labelled above their first cover. Space does the
+   separating; the line and label say why. The divider moves with the covers
+   after the selected one. */
+.cx-divider {
+  position: absolute; top: 0; width: 1px; height: calc(var(--tile) * 1.5); background: var(--line-strong);
+  left: calc(var(--i) * (var(--tile) + var(--gap)) + (var(--split-gap) - var(--gap)) / 2);
+  transition: transform 380ms var(--ease-out);
 }
-.cx-split {
-  position: absolute; top: calc(100% + 10px); left: 0; white-space: nowrap;
-  font-size: var(--text-sm); color: var(--ink-3); letter-spacing: 0.01em;
+.cx-divider.after { transform: translateX(var(--extra)); }
+.cx-divider span {
+  position: absolute; bottom: calc(100% + 8px); left: calc((var(--gap) + var(--split-gap)) / 2); white-space: nowrap;
+  font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); letter-spacing: 0.01em;
 }
-.cx-tile.split.on::after, .cx-tile.on .cx-split { opacity: 0; }
 /* Selected: the picture light from the covers wall, an accent ring with a
    soft accent glow above. The ring is 2px at 1.5x, so 3px on screen. */
 .cx-tile.on { transform: scale(1.5); z-index: 1; box-shadow: 0 0 0 2px var(--accent), 0 12px 32px rgba(0, 0, 0, 0.5); }
@@ -305,5 +309,5 @@
 .cx-tone:focus-visible, .cx-button:focus-visible, .cx-switch:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .cx-track, .cx-tile, .cx-art img { transition: none; }
+  .cx-track, .cx-tile, .cx-divider, .cx-art img { transition: none; }
 }
