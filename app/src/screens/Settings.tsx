@@ -1078,20 +1078,6 @@ export function Settings({
               onClick={() => setPrefs({ showRecent: !p.showRecent })}
             />
           </div>
-          <div className="setting">
-            <div className="text">
-              <b>Favourites first</b>
-              <span>Starred games get their own section at the top of the library. Star a game from its panel or menu.</span>
-            </div>
-            <button
-              className="switch"
-              role="switch"
-              data-nav
-              aria-label="Favourites first"
-              aria-checked={p.showFavoritesRow}
-              onClick={() => setPrefs({ showFavoritesRow: !p.showFavoritesRow })}
-            />
-          </div>
           <SgdbRow accounts={accounts} />
           <div className="setting">
             <div className="text">

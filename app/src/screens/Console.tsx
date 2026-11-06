@@ -34,21 +34,30 @@ interface Shelf {
   games: Game[];
   /** Shown when the shelf is empty; only the first three can be. */
   empty: string;
+  /** Index of the first game after the "Not installed" divider. */
+  split?: number;
+}
+
+/** Recently played: what you can start right now first, then the rest of
+ *  your history after a divider, each part most recent first. */
+function recentShelf(all: Game[]): Shelf {
+  const played = all.filter((g) => g.last_played !== null).sort((a, b) => b.last_played! - a.last_played!).slice(0, 20);
+  const ready = played.filter((g) => g.installed);
+  const rest = played.filter((g) => !g.installed);
+  return {
+    id: "recent",
+    label: "Recently played",
+    games: [...ready, ...rest],
+    empty: "Games you play show up here.",
+    split: ready.length > 0 && rest.length > 0 ? ready.length : undefined,
+  };
 }
 
 /** The three fixed shelves, then favourites, each status and each collection
  *  that holds games, so nothing appears that would only say "empty". */
 function buildShelves(all: Game[], collections: Collection[]): Shelf[] {
   const shelves: Shelf[] = [
-    {
-      id: "recent",
-      label: "Recently played",
-      games: all
-        .filter((g) => g.last_played !== null)
-        .sort((a, b) => b.last_played! - a.last_played!)
-        .slice(0, 20),
-      empty: "Games you play show up here.",
-    },
+    recentShelf(all),
     { id: "installed", label: "Installed", games: all.filter((g) => g.installed), empty: "No games installed." },
     { id: "all", label: "All games", games: all, empty: "Your library is empty. Connect a store in the desktop view." },
   ];
@@ -305,7 +314,7 @@ export function Console({
                 return (
                   <button
                     key={g.id}
-                    className={`cx-tile${i === at ? " on" : i > at ? " after" : ""}${g.installed ? "" : " dim"}`}
+                    className={`cx-tile${i === at ? " on" : i > at ? " after" : ""}${g.installed ? "" : " dim"}${i === shelf.split ? " split" : ""}`}
                     style={{ "--i": i } as React.CSSProperties}
                     role="option"
                     aria-selected={i === at}
@@ -338,6 +347,11 @@ export function Console({
                     }}
                   >
                     <Art src={g.cover ?? g.hero} title={g.title} />
+                    {i === shelf.split && (
+                      <span className="cx-split" aria-hidden>
+                        Not installed
+                      </span>
+                    )}
                     {playing.some((p) => p.game_id === g.id) && <span className="cx-live" title="Playing now" />}
                   </button>
                 );

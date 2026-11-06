@@ -74,6 +74,13 @@ pub struct StoreEntry {
     /// Its install folder is on a drive that isn't connected right now.
     #[serde(default)]
     pub offline: bool,
+    /// The store's own name for it ("Grand Theft Auto V Enhanced"): a
+    /// version's name once games are combined.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// When the store last saw it played, if it says.
+    #[serde(default)]
+    pub last_played: Option<i64>,
 }
 
 /// A game as shown in the library: one tile, possibly backed by several stores.
@@ -118,6 +125,10 @@ pub struct LaunchOption {
     pub working_dir: Option<String>,
     /// The Play button uses this one instead of the store.
     pub is_default: bool,
+    /// Its program isn't on disk any more (a deleted game folder took it).
+    /// A bare program name ("explorer.exe") is found on PATH, so it never is.
+    #[serde(default)]
+    pub missing: bool,
 }
 
 /// Backlog-style progress, set by the user.

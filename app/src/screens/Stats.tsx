@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { computeStats, hours, type Stats as StatsData, type Week } from "../lib/stats";
-import { formatPlaytime } from "../lib/format";
+import { formatBytes, formatPlaytime } from "../lib/format";
+import { Icon } from "../components/Icon";
+import { useDriveUse } from "./Storage";
 import { STATUSES, STORE_LABEL, type Game, type GameStatus, type PlaySession } from "../lib/types";
 import { StoreIcon } from "../components/StoreIcon";
 import { possessive, useGamerTag } from "../lib/gamertag";
@@ -11,8 +13,11 @@ export function Stats({
   version,
   onOpenGame,
   onOpenStatus,
+  onOpenStorage,
 }: {
   version: number;
+  /** Open the Storage page. */
+  onOpenStorage: () => void;
   /** Show this game in the library. */
   onOpenGame: (g: Game) => void;
   /** Show this status's shelf in Collections. */
@@ -123,8 +128,51 @@ export function Stats({
             </ul>
           </section>
         </div>
+
+        <StorageSummary version={version} onOpen={onOpenStorage} />
       </div>
     </div>
+  );
+}
+
+/** How full each drive is, and the way into Storage to clear space. */
+function StorageSummary({ version, onOpen }: { version: number; onOpen: () => void }) {
+  const { use } = useDriveUse(version);
+  if (!use) return null;
+  const total = use.reduce((n, d) => n + d.gameBytes, 0);
+  const shown = use.filter((d) => d.space);
+  if (shown.length === 0) return null;
+  return (
+    <section>
+      <div className="storage-head">
+        <h2>
+          Storage {total > 0 && <small>{formatBytes(total)} of games</small>}
+        </h2>
+        <button className="btn" data-nav onClick={onOpen}>
+          <Icon name="drive" size={15} />
+          Manage storage
+        </button>
+      </div>
+      <ul className="drive-lines">
+        {shown.map((d) => {
+          const s = d.space!;
+          const other = Math.max(0, s.total - s.free - d.gameBytes);
+          const pct = (n: number) => `${Math.min(100, (n / s.total) * 100)}%`;
+          return (
+            <li key={d.root} className="drive-line">
+              <b>
+                {d.root} {d.label && <span>{d.label}</span>}
+              </b>
+              <div className="drive-bar" role="img" aria-label={`${d.root}: games ${formatBytes(d.gameBytes)}, ${formatBytes(s.free)} free of ${formatBytes(s.total)}`}>
+                <span className="seg-games" style={{ width: pct(d.gameBytes) }} />
+                <span className="seg-other" style={{ width: pct(other) }} />
+              </div>
+              <small>{formatBytes(s.free)} free</small>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

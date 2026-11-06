@@ -14,6 +14,8 @@ mod saves;
 mod smart;
 mod snap_layouts;
 mod storage;
+mod uninstall;
+mod versions;
 mod tracking;
 mod tray;
 mod updates;
@@ -119,8 +121,17 @@ fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdRe
         .game(id)
         .map_err(err)?
         .ok_or("That game is no longer in your library")?;
+    let version = match via {
+        Some(ways::Via::Entry { id }) => Some(
+            game.entries
+                .iter()
+                .find(|e| e.id == id)
+                .ok_or("That version is no longer part of this game")?,
+        ),
+        _ => None,
+    };
     let chosen = match via {
-        Some(ways::Via::Store) => None,
+        Some(ways::Via::Store) | Some(ways::Via::Entry { .. }) => None,
         Some(ways::Via::Option { id }) => Some(
             game.launch_options
                 .iter()
@@ -135,10 +146,14 @@ fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdRe
     if let Some(drive) = &game.offline_drive {
         return Err(format!("{} is on drive {drive}, which isn't connected. Connect it to play.", game.title));
     }
-    let entry = game
-        .entries
-        .iter()
-        .find(|e| e.installed && !e.offline)
+    let entry = version
+        .or_else(|| {
+            // With two versions installed, the one played last.
+            game.entries
+                .iter()
+                .filter(|e| e.installed && !e.offline)
+                .max_by_key(|e| e.last_played.unwrap_or(0))
+        })
         // Nothing installed: install from a store, not from a deleted folder.
         .or_else(|| game.entries.iter().find(|e| e.store != hub_core::StoreId::Manual))
         .or(game.entries.first())
@@ -860,6 +875,10 @@ fn main() {
             details::saved_game_info,
             details::open_install_folder,
             storage::storage_drives,
+            uninstall::uninstall_plan,
+            uninstall::uninstall_game,
+            versions::combine_games,
+            versions::separate_version,
             details::open_store_page,
             folders::game_folders,
             folders::add_game_folder,

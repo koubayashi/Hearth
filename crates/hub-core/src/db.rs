@@ -18,6 +18,9 @@ pub enum DbError {
     BackupTooNew,
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    /// Something the user asked for that can't be done, said plainly.
+    #[error("{0}")]
+    Invalid(String),
 }
 
 pub type Result<T> = std::result::Result<T, DbError>;
@@ -37,6 +40,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/011_smart.sql"),
     include_str!("../migrations/012_smart_again.sql"),
     include_str!("../migrations/013_smart_compilations.sql"),
+    include_str!("../migrations/014_versions.sql"),
 ];
 
 pub struct Db {
@@ -183,7 +187,8 @@ impl Db {
                                 CASE WHEN store_playtime_secs IS NOT NULL AND ?4 > store_playtime_secs
                                      THEN ?6 ELSE store_last_played END),
                             store_playtime_secs = ?4,
-                            store_baseline_secs = COALESCE(store_baseline_secs, ?4)
+                            store_baseline_secs = COALESCE(store_baseline_secs, ?4),
+                            title = ?7
                          WHERE id = ?1",
                         params![
                             id,
@@ -191,16 +196,24 @@ impl Db {
                             e.install_dir,
                             e.store_playtime_secs,
                             e.store_last_played,
-                            now
+                            now,
+                            e.title
                         ],
                     )?;
                 }
                 None => {
                     let norm = normalize_title(&e.title);
+                    // Same title on another store, or the title of a game
+                    // the user combined into another (a second store's copy
+                    // of GTA V Enhanced joins the combined GTA V).
                     let game_id: Option<i64> = tx
-                        .query_row("SELECT id FROM games WHERE norm_title = ?1", [&norm], |r| {
-                            r.get(0)
-                        })
+                        .query_row(
+                            "SELECT id FROM games WHERE norm_title = ?1
+                             UNION ALL SELECT game_id FROM title_aliases WHERE norm_title = ?1
+                             LIMIT 1",
+                            [&norm],
+                            |r| r.get(0),
+                        )
                         .optional()?;
                     let game_id = match game_id {
                         Some(id) => id,
@@ -214,8 +227,8 @@ impl Db {
                     };
                     tx.execute(
                         "INSERT INTO store_entries (game_id, store, store_game_id, installed,
-                            install_dir, store_playtime_secs, store_baseline_secs, store_last_played)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7)",
+                            install_dir, store_playtime_secs, store_baseline_secs, store_last_played, title)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8)",
                         params![
                             game_id,
                             store.as_str(),
@@ -223,7 +236,8 @@ impl Db {
                             e.installed,
                             e.install_dir,
                             e.store_playtime_secs,
-                            e.store_last_played
+                            e.store_last_played,
+                            e.title
                         ],
                     )?;
                 }
@@ -883,6 +897,123 @@ impl Db {
             .optional()?)
     }
 
+    /// Makes `other` a version of `keep` (GTA V Enhanced into GTA V): one
+    /// library entry from then on, which syncs never split again. Everything
+    /// attached to `other` moves over: store entries, sessions (remembering
+    /// which version each came from, so separating gives them back),
+    /// collections, series and studios, ways to play, favourite and status.
+    pub fn combine_games(&mut self, keep: i64, other: i64) -> Result<()> {
+        if keep == other {
+            return Ok(());
+        }
+        let tx = self.conn.transaction()?;
+        // Sessions so far belong to the version that was there: the game's first entry.
+        for g in [keep, other] {
+            tx.execute(
+                "UPDATE sessions SET entry_id = (SELECT MIN(id) FROM store_entries WHERE game_id = ?1)
+                 WHERE game_id = ?1 AND entry_id IS NULL",
+                [g],
+            )?;
+        }
+        tx.execute("UPDATE store_entries SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
+        tx.execute("UPDATE sessions SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
+        tx.execute(
+            "INSERT OR IGNORE INTO collection_games (collection_id, game_id)
+             SELECT collection_id, ?1 FROM collection_games WHERE game_id = ?2",
+            [keep, other],
+        )?;
+        tx.execute(
+            "INSERT OR IGNORE INTO game_links (game_id, role, entity, source)
+             SELECT ?1, role, entity, source FROM game_links WHERE game_id = ?2",
+            [keep, other],
+        )?;
+        // One default way to play: the kept game's, if it has one.
+        tx.execute(
+            "UPDATE launch_options SET game_id = ?1,
+                is_default = is_default AND NOT EXISTS
+                    (SELECT 1 FROM launch_options WHERE game_id = ?1 AND is_default)
+             WHERE game_id = ?2",
+            [keep, other],
+        )?;
+        tx.execute("UPDATE OR IGNORE active_sessions SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
+        tx.execute(
+            "UPDATE games SET
+                favorite = MAX(favorite, (SELECT favorite FROM games WHERE id = ?2)),
+                status = COALESCE(status, (SELECT status FROM games WHERE id = ?2)),
+                save_paths_json = COALESCE(save_paths_json, (SELECT save_paths_json FROM games WHERE id = ?2)),
+                save_played_secs = COALESCE(save_played_secs, (SELECT save_played_secs FROM games WHERE id = ?2)),
+                save_seen_at = MAX(COALESCE(save_seen_at, 0), COALESCE((SELECT save_seen_at FROM games WHERE id = ?2), 0)),
+                added_at = MIN(added_at, (SELECT added_at FROM games WHERE id = ?2)),
+                install_size = NULL
+             WHERE id = ?1",
+            [keep, other],
+        )?;
+        tx.execute("UPDATE title_aliases SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
+        tx.execute(
+            "INSERT OR REPLACE INTO title_aliases (norm_title, game_id)
+             SELECT norm_title, ?1 FROM games WHERE id = ?2",
+            [keep, other],
+        )?;
+        tx.execute("DELETE FROM games WHERE id = ?1", [other])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Takes one version back out of a combined game into a game of its own,
+    /// under its store title, with the sessions recorded for it. Every entry
+    /// with that title goes (the same version on Steam and Epic). Returns
+    /// the new game's id.
+    pub fn separate_version(&mut self, game_id: i64, entry_id: i64) -> Result<i64> {
+        let tx = self.conn.transaction()?;
+        let (title, game_title, norm): (Option<String>, String, String) = tx.query_row(
+            "SELECT e.title, g.title, g.norm_title FROM store_entries e JOIN games g ON g.id = e.game_id
+             WHERE e.id = ?1 AND e.game_id = ?2",
+            [entry_id, game_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        let title = title.unwrap_or(game_title);
+        let moving: Vec<i64> = {
+            let mut stmt = tx.prepare(
+                "SELECT id FROM store_entries WHERE game_id = ?1 AND (id = ?2 OR title = ?3)",
+            )?;
+            let rows = stmt.query_map(params![game_id, entry_id, title], |r| r.get(0))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let total: i64 = tx.query_row("SELECT COUNT(*) FROM store_entries WHERE game_id = ?1", [game_id], |r| r.get(0))?;
+        if moving.len() as i64 >= total {
+            return Err(DbError::Invalid("That's the game's only version".into()));
+        }
+        let new_norm = normalize_title(&title);
+        tx.execute(
+            "INSERT INTO games (title, norm_title, added_at) SELECT ?1, ?2, added_at FROM games WHERE id = ?3",
+            params![title, new_norm, game_id],
+        )?;
+        let new_id = tx.last_insert_rowid();
+        for id in &moving {
+            tx.execute("UPDATE store_entries SET game_id = ?1 WHERE id = ?2", [new_id, *id])?;
+            tx.execute("UPDATE sessions SET game_id = ?1 WHERE entry_id = ?2 AND game_id = ?3", [new_id, *id, game_id])?;
+        }
+        tx.execute("DELETE FROM title_aliases WHERE norm_title = ?1", [&new_norm])?;
+        // Taking out the version the game was named after: it takes the
+        // name with it, and the game is named after a version that stays.
+        if new_norm == norm {
+            let rest: String = tx.query_row(
+                "SELECT COALESCE(title, ?2) FROM store_entries WHERE game_id = ?1 ORDER BY id LIMIT 1",
+                params![game_id, title],
+                |r| r.get(0),
+            )?;
+            let rest_norm = normalize_title(&rest);
+            tx.execute("DELETE FROM title_aliases WHERE norm_title = ?1", [&rest_norm])?;
+            tx.execute(
+                "UPDATE games SET title = ?2, norm_title = ?3 WHERE id = ?1",
+                params![game_id, rest, rest_norm],
+            )?;
+        }
+        tx.execute("UPDATE games SET install_size = NULL WHERE id = ?1", [game_id])?;
+        tx.commit()?;
+        Ok(new_id)
+    }
+
     pub fn set_favorite(&self, game_id: i64, favorite: bool) -> Result<()> {
         self.conn.execute(
             "UPDATE games SET favorite = ?2 WHERE id = ?1",
@@ -988,7 +1119,7 @@ impl Db {
             let mut stmt = self.conn.prepare(
                 "SELECT e.id, e.game_id, e.store, e.store_game_id, e.installed, e.install_dir,
                         h.store IS NOT NULL, e.store_playtime_secs, e.store_baseline_secs,
-                        e.store_last_played, e.launch_exe
+                        e.store_last_played, e.launch_exe, e.title
                  FROM store_entries e
                  LEFT JOIN hidden h ON h.store = e.store AND h.store_game_id = e.store_game_id
                  WHERE ?1 IS NULL OR e.game_id = ?1
@@ -1009,6 +1140,8 @@ impl Db {
                     store_baseline_secs: r.get(8)?,
                     launch_exe: r.get(10)?,
                     offline: false,
+                    title: r.get(11)?,
+                    last_played: r.get(9)?,
                 };
                 entries.entry(entry.game_id).or_default().push((entry, r.get(9)?));
             }
@@ -1137,15 +1270,25 @@ impl Db {
 }
 
 fn launch_option_row(r: &rusqlite::Row) -> rusqlite::Result<LaunchOption> {
+    let path: String = r.get(3)?;
     Ok(LaunchOption {
         id: r.get(0)?,
         game_id: r.get(1)?,
         name: r.get(2)?,
-        path: r.get(3)?,
+        missing: way_missing(&path),
+        path,
         args: r.get(4)?,
         working_dir: r.get(5)?,
         is_default: r.get(6)?,
     })
+}
+
+/// A way's program is gone: a full path that isn't on disk. A bare name is
+/// looked up on PATH when it runs, so it's never counted as gone, and neither
+/// is one on a drive that isn't connected (the game says so itself).
+fn way_missing(path: &str) -> bool {
+    let p = Path::new(path.trim().trim_matches('"'));
+    p.is_absolute() && drive_root(path).exists() && !p.exists()
 }
 
 /// The drive (or network share) a path lives on: "E:\\Games\\X" -> "E:\\".
@@ -1224,6 +1367,77 @@ mod tests {
         assert!(!db.launch_option(peacock).unwrap().unwrap().is_default);
         db.delete_launch_option(peacock).unwrap();
         assert!(db.game(game).unwrap().unwrap().launch_options.is_empty());
+    }
+
+    /// GTA V and GTA V Enhanced, both on Epic, each played once.
+    fn two_versions() -> (Db, i64, i64) {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(
+            StoreId::Epic,
+            &[entry(StoreId::Epic, "legacy", "Grand Theft Auto V", false), entry(StoreId::Epic, "enh", "Grand Theft Auto V Enhanced", true)],
+            0,
+        )
+        .unwrap();
+        let games = db.list_games(&LibraryQuery::default()).unwrap();
+        let id = |t: &str| games.iter().find(|g| g.title == t).unwrap().id;
+        let (base, enh) = (id("Grand Theft Auto V"), id("Grand Theft Auto V Enhanced"));
+        db.record_session(base, 100, 1100, SessionSource::Hub).unwrap();
+        db.record_session(enh, 2000, 2600, SessionSource::Hub).unwrap();
+        db.set_status(base, Some(GameStatus::Completed)).unwrap();
+        db.set_favorite(enh, true).unwrap();
+        (db, base, enh)
+    }
+
+    #[test]
+    fn combined_versions_are_one_game_and_stay_that_way() {
+        let (mut db, base, enh) = two_versions();
+        db.combine_games(base, enh).unwrap();
+        let resync = |db: &mut Db| {
+            db.sync_store(
+                StoreId::Epic,
+                &[entry(StoreId::Epic, "legacy", "Grand Theft Auto V", false), entry(StoreId::Epic, "enh", "Grand Theft Auto V Enhanced", true)],
+                0,
+            )
+            .unwrap();
+            db.list_games(&LibraryQuery::default()).unwrap()
+        };
+        let games = resync(&mut db);
+        assert_eq!(games.len(), 1, "a sync doesn't split them again");
+        let g = &games[0];
+        assert_eq!((g.id, g.entries.len()), (base, 2));
+        assert_eq!(g.playtime_secs, 1600, "both versions' time");
+        assert!(g.installed && g.favorite);
+        assert_eq!(g.status, Some(GameStatus::Completed));
+
+        // The Enhanced edition bought on Steam later joins the same game.
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "3240220", "Grand Theft Auto V Enhanced", false)], 0)
+            .unwrap();
+        let games = db.list_games(&LibraryQuery::default()).unwrap();
+        assert_eq!((games.len(), games[0].entries.len()), (1, 3));
+    }
+
+    #[test]
+    fn a_separated_version_takes_its_title_and_sessions_back() {
+        let (mut db, base, enh) = two_versions();
+        db.combine_games(base, enh).unwrap();
+        let g = db.game(base).unwrap().unwrap();
+        let enh_entry = g.entries.iter().find(|e| e.store_game_id == "enh").unwrap().id;
+        let back = db.separate_version(base, enh_entry).unwrap();
+        let (a, b) = (db.game(base).unwrap().unwrap(), db.game(back).unwrap().unwrap());
+        assert_eq!((a.title.as_str(), a.playtime_secs), ("Grand Theft Auto V", 1000));
+        assert_eq!((b.title.as_str(), b.playtime_secs), ("Grand Theft Auto V Enhanced", 600));
+        assert!(db.separate_version(base, a.entries[0].id).is_err(), "a game keeps one version");
+    }
+
+    #[test]
+    fn separating_the_version_a_game_is_named_after_renames_it() {
+        let (mut db, base, enh) = two_versions();
+        db.combine_games(base, enh).unwrap();
+        let g = db.game(base).unwrap().unwrap();
+        let legacy = g.entries.iter().find(|e| e.store_game_id == "legacy").unwrap().id;
+        let back = db.separate_version(base, legacy).unwrap();
+        assert_eq!(db.game(base).unwrap().unwrap().title, "Grand Theft Auto V Enhanced");
+        assert_eq!(db.game(back).unwrap().unwrap().title, "Grand Theft Auto V");
     }
 
     #[test]
@@ -1372,6 +1586,19 @@ mod tests {
         db.sync_store(StoreId::Epic, &[], 1).unwrap();
         let g = &db.list_games(&LibraryQuery::default()).unwrap()[0];
         assert!(g.offline_drive.is_some());
+    }
+
+    #[test]
+    fn a_way_whose_program_was_deleted_is_missing() {
+        let dir = std::env::temp_dir();
+        let here = dir.join(format!("hearth-way-{}.exe", std::process::id()));
+        std::fs::write(&here, b"").unwrap();
+        assert!(!way_missing(&here.to_string_lossy()));
+        assert!(!way_missing(&format!("\"{}\"", here.display())), "quoted paths count too");
+        std::fs::remove_file(&here).unwrap();
+        assert!(way_missing(&here.to_string_lossy()));
+        assert!(!way_missing("explorer.exe"), "found on PATH");
+        assert!(!way_missing(r"Q:\Games\Gone\game.exe") || Path::new(r"Q:\").exists(), "unplugged drive");
     }
 
     #[test]

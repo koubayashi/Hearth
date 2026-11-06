@@ -18,6 +18,9 @@ pub enum Via {
     Store,
     /// One of the game's ways to play.
     Option { id: i64 },
+    /// One version of a combined game (its store entry): played if
+    /// installed, else installed from its store.
+    Entry { id: i64 },
 }
 
 fn changed(app: &AppHandle) {

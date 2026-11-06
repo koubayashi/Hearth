@@ -6,6 +6,7 @@ import { formatHoursShort, formatLastPlayed, formatPlaytime } from "../lib/forma
 import { setPrefs, usePrefs } from "../lib/prefs";
 import { savedInfo, useSavedInfo } from "../lib/gameInfo";
 import { coverMeta, genresOf, narrowGames, NO_NARROW, sortGames, SORTS, type InfoOf, type Narrow } from "../lib/arrange";
+import { jumpBackIn } from "../lib/ways";
 import { ArrangeMenu } from "../components/ArrangeMenu";
 import { Art } from "../components/Art";
 import { CoverGrid, isMenuKey } from "../components/CoverGrid";
@@ -154,14 +155,7 @@ export function Library({
     };
   }, [version, unfiltered]);
 
-  const recent = useMemo(
-    () =>
-      all
-        .filter((g) => g.last_played !== null)
-        .sort((a, b) => b.last_played! - a.last_played!)
-        .slice(0, 6),
-    [all],
-  );
+  const recent = useMemo(() => jumpBackIn(all), [all]);
   const ownedStores = useMemo(
     () => [...new Set(all.flatMap((g) => g.entries.map((e) => e.store)))],
     [all],
@@ -226,18 +220,15 @@ export function Library({
     const list = games ?? [];
     if (hiddenView) return [{ title: "Hidden games", games: list }];
     if (scope) return [{ title: scope.title, games: list }];
-    // Starred games lead the wall as a section of their own, and only there:
-    // each game has one place, whatever filter or sort is on.
-    const pinned = prefs.showFavoritesRow;
-    const rest = pinned ? list.filter((g) => !g.favorite) : list;
+    // Favourites have no section of their own: the toolbar's ★ chip shows
+    // them, and each game stays with the installed or not-installed games.
     return [
-      { title: "Favourites", games: pinned ? list.filter((g) => g.favorite) : [] },
-      { title: "Library", games: rest.filter((g) => g.installed) },
+      { title: "Library", games: list.filter((g) => g.installed) },
       // Installed, but on a drive that's unplugged right now.
-      { title: "Drive not connected", games: rest.filter((g) => !g.installed && g.offline_drive) },
-      { title: "Not installed", games: rest.filter((g) => !g.installed && !g.offline_drive) },
+      { title: "Drive not connected", games: list.filter((g) => !g.installed && g.offline_drive) },
+      { title: "Not installed", games: list.filter((g) => !g.installed && !g.offline_drive) },
     ].filter((s) => s.games.length > 0);
-  }, [games, hiddenView, scope?.title, prefs.showFavoritesRow]);
+  }, [games, hiddenView, scope?.title]);
 
   return (
     // A view with nothing in it (no hidden games, an empty collection) drops

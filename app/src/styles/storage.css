@@ -47,9 +47,28 @@
 .drive-share { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .drive-share span { display: block; height: 100%; background: var(--accent); opacity: 0.8; }
 .drive-offline .drive-share span { background: var(--ink-3); }
+/* Row actions show on hover or keyboard focus; they keep their space so the columns don't shift. */
+.drive-actions { display: flex; gap: 2px; flex: none; }
 .drive-games .icon-btn { width: 30px; height: 30px; background: transparent; border-color: transparent; opacity: 0; transition: opacity var(--dur-fast), background var(--dur-fast); }
-.drive-games li:hover .icon-btn, .drive-games .icon-btn:focus-visible { opacity: 1; }
-.drive-gap { width: 30px; flex: none; }
+.drive-games li:hover .icon-btn, .drive-games li:focus-within .icon-btn { opacity: 1; }
+.drive-games .icon-btn:hover { background: var(--line); }
+.drive-gap { width: 62px; flex: none; }
+
+/* On Stats: one line per drive and the way into Storage. */
+.storage-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+.drive-lines { list-style: none; padding: 0; display: grid; gap: var(--space-3); }
+.drive-line { display: grid; grid-template-columns: minmax(110px, 180px) minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); font-size: var(--text-sm); }
+.drive-line > b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drive-line > b span { font-weight: 400; color: var(--ink-2); }
+.drive-line .drive-bar { height: 8px; }
+.drive-line > small { font-size: var(--text-sm); color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; min-width: 9ch; }
+
+/* Uninstall dialog. */
+.uninstall-dialog { width: min(480px, calc(100vw - 64px)); }
+.uninstall-text { color: var(--ink-2); line-height: 1.5; }
+.uninstall-path { font-size: var(--text-xs); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.btn.btn-danger { background: #c4413a; color: #fff; border-color: transparent; font-weight: 600; }
+.btn.btn-danger:hover { background: #d14a42; }
 .drive-more { margin-top: var(--space-3); margin-left: var(--space-2); }
 
 @container (max-width: 640px) {
@@ -61,3 +80,29 @@
 @media (prefers-reduced-motion: reduce) {
   .drive-bar span { animation: none; }
 }
+.uninstall-versions { align-self: flex-start; background: var(--line); }
+.uninstall-versions button[aria-checked="true"] { background: var(--ink); color: var(--base); }
+.uninstall-versions button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Versions of one game: the dialog, and the question in a game's panel. */
+.versions-dialog { width: min(560px, calc(100vw - 64px)); }
+.version-list { list-style: none; padding: 0; display: grid; }
+.version-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--line); }
+.version-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.version-name b { font-weight: 600; }
+.version-name small { font-size: var(--text-xs); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.version-stores { display: flex; gap: 6px; color: var(--ink-3); }
+.version-search { display: flex; flex-direction: column; gap: 6px; font-size: var(--text-sm); color: var(--ink-2); }
+.version-search input {
+  all: unset; box-sizing: border-box; height: 34px; padding: 0 12px; border-radius: var(--radius-control);
+  background: var(--line); border: 1px solid var(--line-strong); color: var(--ink); font-size: var(--text-md);
+}
+.version-search input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.combine-note {
+  display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; padding: var(--space-3);
+  border-radius: var(--radius-panel); background: var(--line); font-size: var(--text-sm); color: var(--ink-2);
+}
+.combine-note b { color: var(--ink); font-weight: 600; }
+.combine-note div { display: flex; align-items: center; gap: var(--space-4); }
+.combine-note .link { align-self: center; color: var(--ink-2); }

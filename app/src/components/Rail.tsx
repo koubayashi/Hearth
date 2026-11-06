@@ -11,8 +11,14 @@ const ITEMS: { id: Route; label: string; icon: IconName }[] = [
   { id: "library", label: "Library", icon: "library" },
   { id: "collections", label: "Collections", icon: "collections" },
   { id: "stats", label: "Stats", icon: "stats" },
-  { id: "storage", label: "Storage", icon: "drive" },
 ];
+
+/** Places with no rail item of their own, opened from inside a page: while
+ *  open, each unfolds under its parent, lit as where you are. */
+const SUBS: Partial<Record<Route, { id: Route; label: string; icon: IconName; leave: string }>> = {
+  library: { id: "hidden", label: "Hidden games", icon: "hidden", leave: "Leave hidden games" },
+  stats: { id: "storage", label: "Storage", icon: "drive", leave: "Leave storage" },
+};
 
 export function Rail({
   route,
@@ -31,8 +37,9 @@ export function Rail({
       className="nav"
       data-nav
       aria-current={route === id ? "page" : undefined}
-      // Hidden games are a place inside the library: Library reads as their parent.
-      data-parent={id === "library" && route === "hidden" ? "" : undefined}
+      // Hidden games are a place inside the library (and Storage inside
+      // Stats): the parent reads as where they live.
+      data-parent={SUBS[id]?.id === route ? "" : undefined}
       onClick={() => onNavigate(id)}
     >
       <Icon name={icon} />
@@ -46,34 +53,38 @@ export function Rail({
         <Icon name="flame" size={22} />
         Hearth
       </div>
-      {ITEMS.map((i) => (
-        <Fragment key={i.id}>
-          {item(i.id, i.label, i.icon)}
-          {/* Hidden games open from Settings and have no rail item of their
-              own. While they're open, one unfolds under Library, lit as
-              where you are, and folds back into it when you leave. */}
-          {i.id === "library" && (
-            <div className="nav-sub-wrap" data-open={route === "hidden" ? "" : undefined} inert={route !== "hidden"}>
-              <div className="nav-sub-clip">
-                <div className="nav nav-sub" aria-current={route === "hidden" ? "page" : undefined}>
-                  <Icon name="hidden" size={16} />
-                  Hidden games
-                  {counts.hidden !== undefined && <small>{counts.hidden}</small>}
-                  <button
-                    className="nav-sub-close"
-                    data-nav
-                    title="Back to library (Esc)"
-                    aria-label="Leave hidden games"
-                    onClick={() => onNavigate("library")}
-                  >
-                    <Icon name="close" size={12} />
-                  </button>
+      {ITEMS.map((i) => {
+        const sub = SUBS[i.id];
+        const open = route === sub?.id;
+        return (
+          <Fragment key={i.id}>
+            {item(i.id, i.label, i.icon)}
+            {/* Hidden games open from Settings, Storage from Stats; neither has
+                a rail item. While one is open it unfolds under its parent,
+                lit as where you are, and folds back when you leave. */}
+            {sub && (
+              <div className="nav-sub-wrap" data-open={open ? "" : undefined} inert={!open}>
+                <div className="nav-sub-clip">
+                  <div className="nav nav-sub" aria-current={open ? "page" : undefined}>
+                    <Icon name={sub.icon} size={16} />
+                    {sub.label}
+                    {counts[sub.id] !== undefined && <small>{counts[sub.id]}</small>}
+                    <button
+                      className="nav-sub-close"
+                      data-nav
+                      title={`Back to ${i.label.toLowerCase()} (Esc)`}
+                      aria-label={sub.leave}
+                      onClick={() => onNavigate(i.id)}
+                    >
+                      <Icon name="close" size={12} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </Fragment>
-      ))}
+            )}
+          </Fragment>
+        );
+      })}
       <div className="spacer" />
       <button className="nav" data-nav title="Fullscreen, for the couch and a controller (Start button)" onClick={onConsole}>
         <Icon name="gamepad" />

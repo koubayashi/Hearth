@@ -15,6 +15,8 @@ import { GameMenu, type PanelAction } from "./GameMenu";
 import { WaysToPlay } from "./WaysToPlay";
 import { SmartEditor } from "./SmartEditor";
 import { PlayHistory } from "./PlayHistory";
+import { CombineSuggestion, openVersions } from "./Versions";
+import { playVersion, versionEntry, versionsOf } from "../lib/versions";
 import { useGameLinks, type SmartLink } from "../lib/smart";
 import { openShelf } from "../lib/nav";
 import type { SmartRole } from "../lib/types";
@@ -82,6 +84,10 @@ export const Poster = forwardRef<
   if (!game) return <aside className="poster" aria-hidden />;
 
   const installStore = storeName(game);
+  // A game combined from versions (GTA V and Enhanced): Play names the one it starts.
+  const versions = versionsOf(game);
+  const version = defaultWay(game) ? null : playVersion(game);
+  const versionVia: Via | undefined = version ? { kind: "entry", id: versionEntry(version).id } : undefined;
   const year = releaseYear(details?.release_date ?? null);
   const studio = details?.developers[0];
   const byline = [year, studio].filter(Boolean).join(" · ");
@@ -201,6 +207,16 @@ export const Poster = forwardRef<
                 ? `Drive ${game.offline_drive} not connected`
                 : "Not installed"}
           </dd>
+          {versions.length > 0 && (
+            <>
+              <dt>Versions</dt>
+              <dd>
+                <button className="link" data-nav title="Play, separate or add versions" onClick={() => openVersions(game)}>
+                  {versions.map((v) => (v.installed ? `${v.label} (installed)` : v.label)).join(", ")}
+                </button>
+              </dd>
+            </>
+          )}
           {details?.release_date && (
             <>
               <dt>Released</dt>
@@ -224,6 +240,8 @@ export const Poster = forwardRef<
             )
           )}
         </dl>
+
+        <CombineSuggestion game={game} />
 
         {details && details.features.length > 0 && (
           <ul className="features" aria-label="Features">
@@ -271,12 +289,20 @@ export const Poster = forwardRef<
               Not installed
             </button>
           ) : (
-            <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game)}>
+            <button ref={primaryRef} className="primary" data-nav onClick={() => onPrimary(game, versionVia)}>
               <Icon name={game.installed || defaultWay(game) ? "play" : "download"} size={16} />
               {defaultWay(game) ? (
                 <>
                   Play <small className="via">{defaultWay(game)!.name}</small>
                 </>
+              ) : version ? (
+                version.installed ? (
+                  <>
+                    Play <small className="via">{version.label}</small>
+                  </>
+                ) : (
+                  `Install ${version.label} from ${STORE_LABEL[versionEntry(version).store]}`
+                )
               ) : game.installed ? (
                 "Play"
               ) : (
@@ -284,13 +310,13 @@ export const Poster = forwardRef<
               )}
             </button>
           )}
-          {game.launch_options.length > 0 && (
+          {(game.launch_options.length > 0 || versions.length > 0) && (
             <button
               ref={waysRef}
               className="icon-btn"
               data-nav
-              aria-label="Other ways to play"
-              title="Other ways to play"
+              aria-label={versions.length > 0 ? "Other versions and ways to play" : "Other ways to play"}
+              title={versions.length > 0 ? "Other versions and ways to play" : "Other ways to play"}
               aria-haspopup="menu"
               aria-expanded={playMenu !== null}
               onMouseDown={(e) => playMenu && e.stopPropagation()}

@@ -16,6 +16,10 @@ export interface StoreEntry {
   launch_exe: string | null;
   /** Its install folder is on a drive that isn't connected right now. */
   offline: boolean;
+  /** The store's own name for it: a version's name once games are combined. */
+  title?: string | null;
+  /** When the store last saw it played, if it says. */
+  last_played?: number | null;
 }
 
 export interface Game {
@@ -52,10 +56,12 @@ export interface LaunchOption {
   working_dir: string | null;
   /** The Play button uses this instead of the store. */
   is_default: boolean;
+  /** Its program isn't on disk any more (a deleted game folder took it). */
+  missing?: boolean;
 }
 
 /** How to start a game when the user picks: the store, or one of its ways to play. */
-export type Via = { kind: "store" } | { kind: "option"; id: number };
+export type Via = { kind: "store" } | { kind: "option"; id: number } | { kind: "entry"; id: number };
 
 export interface LaunchOptionInput {
   id: number | null;

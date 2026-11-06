@@ -32,6 +32,8 @@ const seeds: Seed[] = [
   ["Cyberpunk 2077", 1091500, "gog", false, 64.0, 60],
   ["Hollow Knight", 367520, "steam", true, 31.5, 21],
   ["Celeste", 504230, "epic", false, 0, null],
+  ["Grand Theft Auto V", 271590, "epic", false, 31.0, 400],
+  ["Grand Theft Auto V Enhanced", 3240220, "epic", true, 2.5, 20],
   ["Stardew Valley", 413150, "steam", true, 146.3, 14],
   ["Red Dead Redemption 2", 1174180, "epic", false, 12.8, 200],
   ["Sea of Thieves", 1172620, "xbox", true, 19.4, 30],
@@ -234,6 +236,32 @@ export const mockBackend = {
         return { id: g.id, details: await this.gameDetails(g.id), install: install && g.id % 5 === 2 ? { ...install, bytes: null } : install };
       }),
     );
+  },
+  async combineGames(keep: number, other: number) {
+    const k = games.find((g) => g.id === keep);
+    const i = games.findIndex((g) => g.id === other);
+    if (!k || i < 0) throw new Error("That game is no longer in your library");
+    const [o] = games.splice(i, 1);
+    for (const e of [...k.entries, ...o.entries]) e.title ??= (e.game_id === keep ? k : o).title;
+    k.entries.push(...o.entries.map((e) => ({ ...e, game_id: keep })));
+    k.installed ||= o.installed;
+    k.playtime_secs += o.playtime_secs;
+    changeListeners.forEach((l) => l(null));
+  },
+  async separateVersion(_gameId: number, _entryId: number): Promise<number> {
+    throw new Error("Separating works in the desktop app");
+  },
+  async uninstallPlan(id: number, entryId?: number) {
+    const g = games.find((x) => x.id === id);
+    const e = g?.entries.find((x) => x.installed && (entryId === undefined || x.id === entryId));
+    if (!g || !e?.install_dir) throw new Error(`${g?.title ?? "That game"} isn't installed`);
+    return { store: e.store, path: e.install_dir };
+  },
+  async uninstallGame(id: number, entryId?: number): Promise<unknown> {
+    const plan = await this.uninstallPlan(id, entryId);
+    if (plan.store === "epic") return { kind: "elsewhere", app: "Epic Games Launcher", steps: "In Library, click ⋯ on the game, then Uninstall." };
+    if (plan.store === "xbox") return { kind: "elsewhere", app: "Installed apps", steps: "Search for the game, click ⋯ beside it, then Uninstall." };
+    return plan.store === "manual" ? { kind: "recycled" } : { kind: "started", by: plan.store === "gog" ? "GOG" : "Steam" };
   },
   async storageDrives(_roots: string[]) {
     return [

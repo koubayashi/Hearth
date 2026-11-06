@@ -13,6 +13,8 @@ import { Collections } from "./screens/Collections";
 import { Settings } from "./screens/Settings";
 import { Stats } from "./screens/Stats";
 import { Storage } from "./screens/Storage";
+import { UninstallHost } from "./components/Uninstall";
+import { loadVersionSuggestions, VersionsHost } from "./components/Versions";
 import { legacy } from "./components/Art";
 import { setPrefs, usePrefs } from "./lib/prefs";
 import { ListView } from "./screens/ListView";
@@ -68,15 +70,18 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [prefs.consoleMode, prefs.consoleTipSeen]);
-  // Escape leaves the hidden view, once nothing nearer used it: the game
-  // panel, a menu or a dialog, or a search box clearing itself.
+  // Escape leaves the hidden view (back to the library) and Storage (back to
+  // Stats), once nothing nearer used it: the game panel, a menu or a dialog,
+  // or a search box clearing itself.
   useEffect(() => {
-    if (route !== "hidden") return;
+    const parent: Partial<Record<Route, Route>> = { hidden: "library", storage: "stats" };
+    const back = parent[route];
+    if (!back) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       if ((e.target as HTMLElement | null)?.closest("input, textarea")) return;
       if (document.querySelector('[role="menu"], [role="dialog"]')) return;
-      setRoute("library");
+      setRoute(back);
       setFocused(null);
     };
     window.addEventListener("keydown", onKey);
@@ -93,6 +98,7 @@ export function App() {
     // Every game's panel details, ready before a game is selected.
     void preloadGameInfo();
     void loadSmart();
+    void loadVersionSuggestions();
   }, [version]);
 
   const toggleHidden = async (g: Game) => {
@@ -160,6 +166,8 @@ export function App() {
             setPrefs({ consoleMode: false });
           }}
         />
+        <UninstallHost say={say} />
+        <VersionsHost say={say} />
         <Toast toast={toast} onDone={clearToast} />
       </>
     );
@@ -216,7 +224,7 @@ export function App() {
               onToggleFavorite={toggleFavorite}
             />
           )}
-          {route === "stats" && <Stats version={version} onOpenGame={openGame} onOpenStatus={openStatus} />}
+          {route === "stats" && <Stats version={version} onOpenGame={openGame} onOpenStatus={openStatus} onOpenStorage={() => setRoute("storage")} />}
           {route === "storage" && <Storage version={version} onOpenGame={openGame} say={say} />}
           {route === "settings" && (
             <div className="peek-library" aria-hidden inert>
@@ -238,6 +246,8 @@ export function App() {
           )}
         </main>
       </div>
+      <UninstallHost say={say} />
+      <VersionsHost say={say} />
       <Toast toast={toast} onDone={clearToast} />
     </>
   );

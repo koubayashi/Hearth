@@ -5,28 +5,18 @@ import { formatBytes } from "../lib/format";
 import { driveRoot, groupByDrive, idleHint, installPath, type DriveSpace, type DriveUse, type StoredGame } from "../lib/storage";
 import type { Game } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { openUninstall } from "../components/Uninstall";
 
 /** Rows shown per drive before "Show all". */
 const FIRST_ROWS = 10;
 
 /**
- * What takes space, per drive: how full each drive is, how much of that is
- * games, and the games on it largest first, with how long since each was
- * played so the ones to uninstall stand out.
+ * Installed games and the drives they're on, from saved sizes (nothing is
+ * measured here). Storage and the Storage block on Stats both read it.
  */
-export function Storage({
-  version,
-  onOpenGame,
-  say,
-}: {
-  version: number;
-  onOpenGame: (g: Game) => void;
-  say: (text: string) => void;
-}) {
+export function useDriveUse(version: number) {
   const [games, setGames] = useState<Game[] | null>(null);
   const [drives, setDrives] = useState<DriveSpace[] | null>(null);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const busy = useRef(false);
   useSavedInfo();
 
   useEffect(() => {
@@ -64,6 +54,27 @@ export function Storage({
     bytes: savedInfo(g.id)?.install?.bytes ?? null,
   }));
   const use = drives ? groupByDrive(stored, drives) : null;
+  const refreshDrives = () => api.storageDrives(roots).then(setDrives, () => {});
+  return { loaded: games !== null, onDisk, use, refreshDrives };
+}
+
+/**
+ * What takes space, per drive: how full each drive is, how much of that is
+ * games, and the games on it largest first, with how long since each was
+ * played so the ones to uninstall stand out. Opened from Stats.
+ */
+export function Storage({
+  version,
+  onOpenGame,
+  say,
+}: {
+  version: number;
+  onOpenGame: (g: Game) => void;
+  say: (text: string) => void;
+}) {
+  const { loaded, onDisk, use, refreshDrives } = useDriveUse(version);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const busy = useRef(false);
 
   // Sizes are measured one game at a time, off the UI thread: the ones never
   // measured when the page opens, or every installed game on "Measure again".
@@ -80,14 +91,14 @@ export function Storage({
     busy.current = false;
     setProgress(null);
     // Free space moves too when games update or install.
-    api.storageDrives(roots).then(setDrives, () => {});
+    void refreshDrives();
   };
   const autoMeasured = useRef(false);
   useEffect(() => {
-    if (!games || autoMeasured.current) return;
+    if (!loaded || autoMeasured.current) return;
     autoMeasured.current = true;
     void measure(false);
-  }, [games]);
+  }, [loaded]);
 
   if (!use) return <div className="scroll" />;
 
@@ -212,12 +223,17 @@ function Drive({ d, onOpenGame, say }: { d: DriveUse; onOpenGame: (g: Game) => v
                     {bytes !== null && <span style={{ width: `${Math.max(2, (bytes / largest) * 100)}%` }} />}
                   </span>
                 </button>
-                {/* No folder to open on a missing drive; the space stays so columns line up. */}
+                {/* Nothing to open or remove on a missing drive; the space stays so columns line up. */}
                 {!s && <span className="drive-gap" aria-hidden />}
                 {s && (
-                  <button className="icon-btn" data-nav title="Open install folder" aria-label={`Open the install folder of ${game.title}`} onClick={() => void openFolder(game)}>
-                    <Icon name="folder" size={16} />
-                  </button>
+                  <span className="drive-actions">
+                    <button className="icon-btn" data-nav title="Open install folder" aria-label={`Open the install folder of ${game.title}`} onClick={() => void openFolder(game)}>
+                      <Icon name="folder" size={16} />
+                    </button>
+                    <button className="icon-btn" data-nav title="Uninstall…" aria-label={`Uninstall ${game.title}`} onClick={() => openUninstall(game)}>
+                      <Icon name="trash" size={16} />
+                    </button>
+                  </span>
                 )}
               </li>
             );

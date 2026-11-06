@@ -3,8 +3,11 @@ import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import type { Collection, Game, GameStatus, Via } from "../lib/types";
 import { defaultWay, folderGone, folderProgram, storeName } from "../lib/ways";
-import { STATUSES } from "../lib/types";
+import { STATUSES, STORE_LABEL } from "../lib/types";
 import { Icon, type IconName } from "./Icon";
+import { openUninstall } from "./Uninstall";
+import { openVersions } from "./Versions";
+import { versionEntry, versionsOf } from "../lib/versions";
 
 export type PanelAction = "artwork" | "match" | "ways" | "smart" | "history";
 
@@ -176,11 +179,13 @@ export function GameMenu({
           {item("library", "Change artwork…", () => onPanel("artwork"))}
           {item("collections", "Series and studios…", () => onPanel("smart"))}
           {item("stats", "Play history…", () => onPanel("history"))}
+          {item("collections", "Versions…", () => openVersions(game), versionsOf(game).length === 0 ? "Combine with a remaster or edition" : undefined)}
           {/* Until a game has one, say what they are for: mods are the usual reason. */}
           {item("sliders", "Ways to play…", () => onPanel("ways"), game.launch_options.length === 0 ? "Mods, tools, other programs" : undefined)}
           {sub("external", "Store and files", "open")}
           <hr />
           {item(game.hidden ? "eye" : "hidden", game.hidden ? "Show in library" : "Hide from library", () => onToggleHidden(game))}
+          {game.installed && item("trash", "Uninstall…", () => openUninstall(game))}
         </>
       )}
     </div>,
@@ -214,10 +219,28 @@ function PlayView({
   );
   const store = storeName(game);
   const program = folderProgram(game);
+  const versions = versionsOf(game);
   return (
     <>
       {back}
       {back && <hr />}
+      {versions.length > 0 && (
+        <>
+          <div className="menu-label">Versions</div>
+          {versions.map((v) => {
+            const e = versionEntry(v);
+            return item(
+              v.installed ? "play" : "download",
+              v.installed ? `Play ${v.label}` : `Install ${v.label} from ${STORE_LABEL[e.store]}`,
+              () => onPrimary(game, { kind: "entry", id: e.id }),
+            );
+          })}
+          {item("collections", "Versions…", () => openVersions(game))}
+          {game.launch_options.length > 0 && <hr />}
+        </>
+      )}
+      {(versions.length === 0 || game.launch_options.length > 0) && (
+        <>
       <div className="menu-label">Play button uses the ticked one</div>
       {choice(
         "store",
@@ -237,6 +260,8 @@ function PlayView({
       {game.launch_options.map((o) => choice(String(o.id), `Play with ${o.name}`, o.is_default, { kind: "option", id: o.id }))}
       <hr />
       {item("sliders", "Ways to play…", () => onPanel("ways"))}
+        </>
+      )}
     </>
   );
 }
