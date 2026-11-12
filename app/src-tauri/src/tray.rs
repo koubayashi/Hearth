@@ -52,10 +52,17 @@ const RECENT: usize = 5;
 /// The version a downloaded update would install, for the restart item.
 static UPDATE: Mutex<Option<String>> = Mutex::new(None);
 
-/// The tray menu: recent games to start, a way to stop timing a game the
-/// tracker has wrong, then Open, the update restart while one waits, and Quit.
+/// The tray menu: the update restart while one waits (first, since the tray
+/// is where Hearth lives while you play), recent games to start, a way to
+/// stop timing a game the tracker has wrong, then Open and Quit.
 fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let m = Menu::new(app)?;
+    // Set apart by a separator and named for Hearth, so it can't be taken
+    // for the first recent game.
+    if let Some(v) = lock(&UPDATE).as_deref() {
+        m.append(&MenuItem::with_id(app, "update", format!("Restart to update Hearth ({v})"), true, None::<&str>)?)?;
+        m.append(&PredefinedMenuItem::separator(app)?)?;
+    }
     let recent = {
         let state = app.state::<AppState>();
         let mut games = lock(&state.db).list_games(&LibraryQuery::default()).unwrap_or_default();
@@ -79,9 +86,6 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         m.append(&PredefinedMenuItem::separator(app)?)?;
     }
     m.append(&MenuItem::with_id(app, "open", "Open Hearth", true, None::<&str>)?)?;
-    if let Some(v) = lock(&UPDATE).as_deref() {
-        m.append(&MenuItem::with_id(app, "update", format!("Restart to update to {v}"), true, None::<&str>)?)?;
-    }
     m.append(&MenuItem::with_id(app, "quit", "Quit Hearth", true, None::<&str>)?)?;
     Ok(m)
 }

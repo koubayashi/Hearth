@@ -20,6 +20,7 @@ import { SmartEditor } from "../components/SmartEditor";
 import { PlayHistory } from "../components/PlayHistory";
 import { ConsoleStats } from "./ConsoleStats";
 import { ConsoleSettings } from "./ConsoleSettings";
+import { readyVersion, useUpdate } from "../lib/updates";
 
 type Section = "games" | "stats" | "settings";
 const SECTIONS: { id: Section; label: string }[] = [
@@ -95,6 +96,7 @@ export function Console({
 }) {
   const prefs = usePrefs();
   const [section, setSection] = useState<Section>("games");
+  const update = readyVersion(useUpdate());
   const name = useGamerTag();
   const [statsArt, setStatsArt] = useState<string | null>(null);
   const [games, setGames] = useState<Game[] | null>(null);
@@ -237,8 +239,10 @@ export function Console({
               aria-current={section === s.id ? "page" : undefined}
               onFocus={() => setSection(s.id)}
               onClick={() => setSection(s.id)}
+              aria-label={s.id === "settings" && update ? `Settings, Hearth ${update} is ready` : undefined}
             >
               {s.label}
+              {s.id === "settings" && update && <i className="cx-dot" aria-hidden />}
             </button>
           ))}
         </nav>

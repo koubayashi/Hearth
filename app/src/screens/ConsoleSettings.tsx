@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { api } from "../lib/api";
+import { readyVersion, useUpdate } from "../lib/updates";
 import { TONES, setPrefs, usePrefs, useShownMode } from "../lib/prefs";
 import { setFullscreen } from "../lib/fullscreen";
 import { useStartWithWindows } from "../lib/autostart";
@@ -11,6 +13,10 @@ import { Icon } from "../components/Icon";
  */
 export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }) {
   const p = usePrefs();
+  // An update waiting for a restart leads the list, as in the desktop view.
+  const update = readyVersion(useUpdate());
+  const [updating, setUpdating] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const shown = useShownMode(p);
   const startup = useStartWithWindows();
   // Only names that exist; typing your own needs the desktop view.
@@ -34,6 +40,24 @@ export function ConsoleSettings({ onOpenDesktop }: { onOpenDesktop: () => void }
   return (
     <div className="cx-settings" onKeyDown={onKeyDown}>
       <h1 className="cx-heading">Settings</h1>
+
+      {update && (
+        <Row title={`Hearth ${update} is ready`} text={problem ?? "Restart to install it. Takes a few seconds; your library stays as it is."}>
+          <button
+            className="cx-button"
+            data-nav
+            disabled={updating}
+            onClick={() => {
+              setProblem(null);
+              setUpdating(true);
+              api.installUpdate().catch((e) => (setProblem(String(e)), setUpdating(false)));
+            }}
+          >
+            <Icon name="refresh" size={20} />
+            {updating ? "Restarting…" : "Restart to update"}
+          </button>
+        </Row>
+      )}
 
       <Row title="Tone" text="The background and highlight colour.">
         <div className="cx-tones" role="group" aria-label="Tone">

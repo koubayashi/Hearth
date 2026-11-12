@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { LaunchOptionInput, Via } from "./types";
-import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, UpdateStatus } from "./types";
 import type { DriveSpace } from "./storage";
 import { mockBackend } from "./mock";
 
@@ -94,9 +94,12 @@ const backend = isTauri()
       onSmartChanged: on("smart-changed"),
       onAutoBackup: on("auto-backup"),
       onSyncError: on("sync-error"),
-      updateReady: () => invoke<string | null>("update_ready"),
+      updateStatus: () => invoke<UpdateStatus>("update_status"),
+      releaseNotes: () => invoke<string | null>("release_notes"),
+      checkUpdates: () => invoke<void>("check_updates"),
+      seenUpdate: () => invoke<void>("seen_update"),
       installUpdate: () => invoke<void>("install_update"),
-      onUpdateReady: on("update-ready"),
+      onUpdateStatus: on("update-status"),
     }
   : mockBackend;
 

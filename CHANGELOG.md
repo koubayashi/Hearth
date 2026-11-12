@@ -6,6 +6,20 @@ version that has no section here.
 
 ## Unreleased
 
+### New
+
+- **Hearth tells you when an update is ready.** A dot on Settings in the
+  sidebar (hover it to see which version), and Settings opens with the
+  update at the top: what's new in it and **Restart to update**. The tray
+  menu puts the restart first while one waits. The console shows it too.
+- **"Updated to Hearth 0.x"** after an update, once, with **What's new**
+  leading to the release notes. They stay in Settings › Updates, and show
+  without internet.
+- **Settings › Updates shows every step:** checking, downloading (how
+  far along), ready to install, or why a check failed, with **Try
+  again**. It says when Hearth last checked, and **Check now** checks
+  straight away.
+
 ### Better
 
 - **Hearth notices installs by itself.** Come back to its window and it

@@ -19,6 +19,7 @@ import { legacy } from "./components/Art";
 import { setPrefs, usePrefs } from "./lib/prefs";
 import { ListView } from "./screens/ListView";
 import { Console } from "./screens/Console";
+import { markSeen, useUpdate } from "./lib/updates";
 
 export function App() {
   const [route, setRoute] = useState<Route>("library");
@@ -106,6 +107,30 @@ export function App() {
   const say = (text: string, action?: ToastMsg["action"]) => setToast({ id: Date.now(), text, action });
   const clearToast = useCallback(() => setToast(null), []);
 
+  // After an update, once: "Updated to Hearth 0.x", until closed. Its notes
+  // open in Settings › Updates. (Started in the tray, the interface isn't
+  // loaded at all, so this waits for the window to open.)
+  const updatedTo = useUpdate()?.updated_to ?? null;
+  const [settingsAt, setSettingsAt] = useState<"updates" | undefined>(undefined);
+  useEffect(() => {
+    if (!updatedTo) return;
+    setToast({
+      id: Date.now(),
+      text: `Updated to Hearth ${updatedTo}`,
+      persist: true,
+      onDismiss: markSeen,
+      action: {
+        label: "What's new",
+        run: () => {
+          setSettingsAt("updates");
+          setRoute("settings");
+          setFocused(null);
+          setPrefs({ consoleMode: false });
+        },
+      },
+    });
+  }, [updatedTo]);
+
   useEffect(() => {
     api.gameCounts().then(setCounts);
     // Every game's panel details, ready before a game is selected.
@@ -191,7 +216,7 @@ export function App() {
       <Backdrop src={showsArt ? (focused?.hero ?? null) : null} />
       <TitleBar />
       <div className="app">
-        <Rail route={route} counts={counts} onConsole={() => setPrefs({ consoleMode: true })} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false), setRevealId(null), setStartShelf(undefined))} />
+        <Rail route={route} counts={counts} onConsole={() => setPrefs({ consoleMode: true })} onNavigate={(r) => (setRoute(r), setFocused(null), setPeek(false), setRevealId(null), setStartShelf(undefined), setSettingsAt(undefined))} />
         <main className={`main${peek && route === "settings" ? " peeking" : ""}`}>
           {libraryLike && prefs.libraryView === "list" && (
             <ListView
@@ -255,7 +280,7 @@ export function App() {
             </div>
           )}
           {route === "settings" && (
-            <Settings onPeek={setPeek} hiddenCount={counts.hidden ?? 0} onShowHidden={() => (setRoute("hidden"), setFocused(null), setPeek(false))} />
+            <Settings key={settingsAt ?? "settings"} startAt={settingsAt} onPeek={setPeek} hiddenCount={counts.hidden ?? 0} onShowHidden={() => (setRoute("hidden"), setFocused(null), setPeek(false))} />
           )}
         </main>
       </div>

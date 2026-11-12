@@ -1,5 +1,5 @@
 import type { LaunchOption, LaunchOptionInput, Via } from "./types";
-import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, StoreId } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, StoreId, UpdateStatus } from "./types";
 
 // ?sgdb in the URL shows Settings as if a key were saved, to design that state.
 const demoSgdb = typeof location !== "undefined" && location.search.includes("sgdb");
@@ -401,11 +401,30 @@ export const mockBackend = {
   onSmartChanged: noop,
   onAutoBackup: noop,
   onSyncError: noop,
-  async updateReady(): Promise<string | null> {
-    return null;
+  // ?update=checking|downloading|ready|failed|updated shows that update state.
+  async updateStatus(): Promise<UpdateStatus> {
+    const state = new URLSearchParams(location.search).get("update");
+    const base: UpdateStatus = {
+      phase: "idle", version: null, notes: null, done: 0, total: null,
+      last_checked: Math.floor(Date.now() / 1000) - 2 * 3600, error: null, updated_to: null, dev: state === null,
+    };
+    const next = { version: "0.3.1", notes: DEMO_NOTES };
+    switch (state) {
+      case "checking": return { ...base, phase: "checking" };
+      case "downloading": return { ...base, ...next, phase: "downloading", done: 4_300_000, total: 10_200_000 };
+      case "ready": return { ...base, ...next, phase: "ready" };
+      case "failed": return { ...base, last_checked: base.last_checked! - 22 * 3600, error: "Couldn't reach GitHub. Check your internet connection." };
+      case "updated": return { ...base, updated_to: "0.3.0" };
+      default: return base;
+    }
   },
+  async releaseNotes(): Promise<string | null> {
+    return DEMO_NOTES;
+  },
+  async checkUpdates() {},
+  async seenUpdate() {},
   async installUpdate() {},
-  onUpdateReady: noop,
+  onUpdateStatus: noop,
   async listGames(q: LibraryQuery): Promise<Game[]> {
     const search = q.search ? norm(q.search) : "";
     return games
@@ -437,3 +456,16 @@ export const mockBackend = {
     if (g) g.favorite = favorite;
   },
 };
+
+const DEMO_NOTES = `A small one: Hearth keeps up with your installs by itself.
+
+### Better
+
+- **Hearth notices installs by itself.** Come back to its window and it
+  checks what's installed.
+- **F5 refreshes your library**, like Settings › Refresh library.
+
+### Fixed
+
+- **"Playing now" counts up**, and Played includes the session still
+  running.`;

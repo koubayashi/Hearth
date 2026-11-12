@@ -185,3 +185,21 @@ export interface SmartIndex {
   /** "franchise" comes from Wikidata only, and shows as a series. */
   links: { game_id: number; role: SmartRole | "franchise"; entity: string; by_user: boolean }[];
 }
+
+/** Where Hearth's own update stands (updates.rs `Status`). */
+export interface UpdateStatus {
+  phase: "idle" | "checking" | "downloading" | "ready" | "installing";
+  /** The version being downloaded or waiting to install. */
+  version: string | null;
+  /** Its release notes: the version's CHANGELOG.md section, as Markdown. */
+  notes: string | null;
+  done: number;
+  total: number | null;
+  /** Unix seconds of the last check that reached GitHub. */
+  last_checked: number | null;
+  /** Why the last check or install failed, in plain words. */
+  error: string | null;
+  /** Hearth was updated to this version and hasn't said so yet. */
+  updated_to: string | null;
+  dev: boolean;
+}

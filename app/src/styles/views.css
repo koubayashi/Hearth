@@ -311,3 +311,10 @@
 @media (prefers-reduced-motion: reduce) {
   .cx-track, .cx-tile, .cx-divider, .cx-art img { transition: none; }
 }
+
+/* A waiting update, beside the console's Settings, as on the rail. */
+.cx-menu-item { position: relative; }
+.cx-dot {
+  position: absolute; top: 8px; right: 4px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--base);
+}

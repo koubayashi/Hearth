@@ -4,6 +4,7 @@ import { StoreIcon } from "./StoreIcon";
 import { pickName, useAccounts } from "../lib/gamertag";
 import { usePrefs } from "../lib/prefs";
 import type { StoreId } from "../lib/types";
+import { readyVersion, useUpdate } from "../lib/updates";
 
 export type Route = "library" | "collections" | "stats" | "storage" | "hidden" | "settings";
 
@@ -31,7 +32,10 @@ export function Rail({
   counts: Partial<Record<Route, number>>;
   onNavigate: (r: Route) => void;
 }) {
-  const item = (id: Route, label: string, icon: IconName) => (
+  // An update waiting for a restart: a dot on the Settings icon, explained
+  // by its tooltip; Settings then opens with the update at the top.
+  const update = readyVersion(useUpdate());
+  const item = (id: Route, label: string, icon: IconName, note?: string) => (
     <button
       key={id}
       className="nav"
@@ -40,9 +44,17 @@ export function Rail({
       // Hidden games are a place inside the library (and Storage inside
       // Stats): the parent reads as where they live.
       data-parent={SUBS[id]?.id === route ? "" : undefined}
+      title={note ? `${label}: ${note}` : undefined}
+      aria-label={note ? `${label}, ${note}` : undefined}
       onClick={() => onNavigate(id)}
     >
-      <Icon name={icon} />
+      {note ? (
+        <span className="nav-dot">
+          <Icon name={icon} />
+        </span>
+      ) : (
+        <Icon name={icon} />
+      )}
       {label}
       {counts[id] !== undefined && <small>{counts[id]}</small>}
     </button>
@@ -90,7 +102,7 @@ export function Rail({
         <Icon name="gamepad" />
         Console
       </button>
-      {item("settings", "Settings", "settings")}
+      {item("settings", "Settings", "settings", update ? `Hearth ${update} is ready` : undefined)}
       <Profile onOpen={() => onNavigate("settings")} />
     </nav>
   );

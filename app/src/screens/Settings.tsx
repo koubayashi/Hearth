@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { getVersion } from "@tauri-apps/api/app";
+import { UpdateReadyBanner, UpdatesSection } from "../components/Updates";
 import { useStartWithWindows } from "../lib/autostart";
 import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
@@ -808,59 +808,6 @@ function BackupSection() {
   );
 }
 
-function UpdatesSection() {
-  const [version, setVersion] = useState<string | null>(null);
-  const [ready, setReady] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (isTauri()) getVersion().then(setVersion).catch(() => {});
-    const load = () => api.updateReady().then(setReady).catch(() => {});
-    load();
-    const off = api.onUpdateReady(load);
-    return () => void off.then((f) => f());
-  }, []);
-  const install = async () => {
-    setProblem(null);
-    setBusy(true);
-    try {
-      await api.installUpdate();
-    } catch (e) {
-      setProblem(String(e));
-      setBusy(false);
-    }
-  };
-  return (
-    <section id="settings-updates">
-      <h2>Updates</h2>
-      <div className="setting-group glass">
-        <div className="setting">
-          <div className="text">
-            <b>{ready ? `Hearth ${ready} is ready` : version ? `Hearth ${version}` : "Hearth"}</b>
-            <span>
-              {ready
-                ? "Restart to install it. Takes a few seconds; your library stays as it is."
-                : import.meta.env.DEV
-                  ? "This is a development build, so it doesn't check for updates."
-                  : "New versions download in the background and wait here for a restart."}
-            </span>
-          </div>
-          {ready && (
-            <button className="btn btn-primary" data-nav disabled={busy} onClick={install}>
-              {busy ? "Restarting…" : "Restart to update"}
-            </button>
-          )}
-        </div>
-        {problem && (
-          <p className="note error" role="status">
-            {problem}
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function Startup() {
   const { enabled, toggle } = useStartWithWindows();
   return (
@@ -891,11 +838,17 @@ export function Settings({
   onPeek = () => {},
   hiddenCount = 0,
   onShowHidden = () => {},
+  startAt,
 }: {
   onPeek?: (on: boolean) => void;
   hiddenCount?: number;
   onShowHidden?: () => void;
+  /** Open scrolled to a section: "updates" from the "Updated to" toast. */
+  startAt?: "updates";
 }) {
+  useEffect(() => {
+    if (startAt) document.getElementById(`settings-${startAt}`)?.scrollIntoView({ block: "start" });
+  }, [startAt]);
   const p = usePrefs();
   const accounts = useAccounts();
   // Appearance: swatches and the colour picker show the mode on screen.
@@ -913,6 +866,7 @@ export function Settings({
           <h1>Settings</h1>
           <RefreshButton />
         </header>
+        <UpdateReadyBanner />
 
         <section id="settings-stores">
           <h2>Stores</h2>
@@ -1096,7 +1050,7 @@ export function Settings({
         </section>
 
         <BackupSection />
-        <UpdatesSection />
+        <UpdatesSection notesOpen={startAt === "updates"} />
         </div>
       </div>
     </div>
