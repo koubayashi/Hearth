@@ -16,6 +16,14 @@ version that has no section here.
   menu (text boxes keep cut, copy and paste), and browser shortcuts like
   Ctrl+R, Ctrl+P and Alt+← no longer reload, print or leave the page.
 
+### Fixed
+
+- **"Playing now" counts up.** A game's panel showed the time once, when
+  it opened, and stayed there ("Playing now · 1m" after hours). It now
+  updates while you play, and **Played** includes the session still
+  running. The same in the Console view. Your time was always recorded
+  correctly; only the display was stuck.
+
 ## 0.3.0
 
 A big one: your library learns what's taking space on your drives,

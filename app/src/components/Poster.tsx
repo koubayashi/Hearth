@@ -6,6 +6,7 @@ import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatPlaytime, releaseYear } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import { useGameInfo } from "../lib/gameInfo";
+import { liveSecs, useNowSecs } from "../lib/clock";
 import { Art } from "./Art";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
@@ -58,6 +59,9 @@ export const Poster = forwardRef<
   const { details, install } = useGameInfo(game, nonce);
   const { showScores, blurPosterArt } = usePrefs();
   const links = useGameLinks(game?.id ?? null);
+  // While the game runs, its times grow on screen; they used to be worked
+  // out once and stay at "Playing now · 1m".
+  const live = liveSecs(playingSince, useNowSecs(playingSince !== null));
 
   useEffect(() => {
     setMenu(null);
@@ -188,7 +192,8 @@ export const Poster = forwardRef<
           <dt>Played</dt>
           <dd>
             <button className="link" data-nav title="Every session, by month" onClick={() => setHistory(true)}>
-              {formatGamePlaytime(game.playtime_secs, game.last_played)}
+              {/* With the session still running added in. */}
+              {formatGamePlaytime(game.playtime_secs + live, playingSince ?? game.last_played)}
             </button>
           </dd>
           {/* "Playing now" sits with Last played, so it can't be confused with
@@ -196,7 +201,7 @@ export const Poster = forwardRef<
           <dt>Last played</dt>
           <dd className={playingSince ? "playing" : undefined}>
             {playingSince
-              ? `Playing now · ${formatPlaytime(Math.max(60, Math.floor(Date.now() / 1000) - playingSince))}`
+              ? live < 60 ? "Playing now" : `Playing now · ${formatPlaytime(live)}`
               : formatGameLastPlayed(game.last_played, game.playtime_secs)}
           </dd>
           <dt>Install</dt>

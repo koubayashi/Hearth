@@ -6,6 +6,7 @@ import { STATUSES, STORE_LABEL } from "../lib/types";
 import { formatLastPlayed, formatPlaytime, inSentence } from "../lib/format";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { usePrefs } from "../lib/prefs";
+import { liveSecs } from "../lib/clock";
 import { useGamerTag } from "../lib/gamertag";
 import { Art, legacy } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
@@ -211,6 +212,9 @@ export function Console({
   }, []);
 
   const playingSince = game ? (playing.find((p) => p.game_id === game.id)?.started_at ?? null) : null;
+  // The running session, counted in as it grows (the clock above ticks).
+  const live = liveSecs(playingSince, Math.floor(now.getTime() / 1000));
+  const played = game ? game.playtime_secs + live : 0;
   const status = game?.status ? STATUSES.find((s) => s.id === game.status)?.label : null;
   const stores = game ? [...new Set(game.entries.map((e) => e.store))] : [];
 
@@ -382,13 +386,13 @@ export function Console({
               <h1 className="cx-title">{game.title}</h1>
               <p className="cx-meta">
                 {playingSince ? (
-                  <span className="cx-now">Playing now</span>
+                  <span className="cx-now">{live < 60 ? "Playing now" : `Playing now · ${formatPlaytime(live)}`}</span>
                 ) : (
                   <span>{game.installed ? "Ready to play" : game.offline_drive ? `Drive ${game.offline_drive} not connected` : "Not installed"}</span>
                 )}
-                {game.playtime_secs > 0 && <span>{formatPlaytime(game.playtime_secs)} played</span>}
+                {played > 0 && <span>{formatPlaytime(played)} played</span>}
                 {game.last_played !== null && <span>Last played {inSentence(formatLastPlayed(game.last_played))}</span>}
-                {game.playtime_secs === 0 && game.last_played === null && <span>Never played</span>}
+                {played === 0 && game.last_played === null && <span>Never played</span>}
                 {status && <span>{status}</span>}
                 {stores.map((s) => (
                   <span key={s} className="cx-store">
