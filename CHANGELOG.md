@@ -4,7 +4,10 @@ What changed in each Hearth release, newest first. Each version's section
 becomes its GitHub release notes, so the release build won't publish a
 version that has no section here.
 
-## Unreleased
+## 0.3.1
+
+Hearth tells you when an update is ready, notices installs by itself, and
+the time while you play counts up.
 
 ### New
 
@@ -26,9 +29,6 @@ version that has no section here.
   checks what's installed: a game restored from the Recycle Bin, or
   installed or uninstalled in its store, shows up without a refresh.
 - **F5 refreshes your library**, like Settings › Refresh library.
-- **Hearth feels less like a web page:** right-clicking shows no browser
-  menu (text boxes keep cut, copy and paste), and browser shortcuts like
-  Ctrl+R, Ctrl+P and Alt+← no longer reload, print or leave the page.
 
 ### Fixed
 
@@ -37,6 +37,13 @@ version that has no section here.
   updates while you play, and **Played** includes the session still
   running. The same in the Console view. Your time was always recorded
   correctly; only the display was stuck.
+
+### Removed
+
+- **The browser's right-click menu** (Back, Reload, Print, Inspect…), so
+  Hearth feels less like a web page. Text boxes keep cut, copy and paste.
+- **Browser shortcuts** like Ctrl+R, Ctrl+P and Alt+←, which reloaded,
+  printed or left the page by accident.
 
 ## 0.3.0
 
