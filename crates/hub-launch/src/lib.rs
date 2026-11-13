@@ -1,5 +1,6 @@
 //! Starting games and store installers.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -30,33 +31,24 @@ pub enum LaunchError {
 }
 
 pub fn run(action: &LaunchAction) -> Result<(), LaunchError> {
-    let mut params = String::new();
-    let (mut cmd, what) = match action {
-        LaunchAction::Uri { uri } => {
-            // `explorer.exe <uri>` hands the URI to its protocol handler without
-            // going through a shell, so nothing in the URI is interpreted.
-            let mut c = Command::new("explorer.exe");
-            c.arg(uri);
-            (c, uri.clone())
-        }
-        LaunchAction::Process { exe, args, working_dir } => {
-            let mut c = Command::new(exe);
-            c.args(args);
-            params = args
-                .iter()
-                .map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() })
-                .collect::<Vec<_>>()
-                .join(" ");
-            // A bare program name ("explorer.exe") has an empty parent, which
-            // Windows refuses as a start folder (os error 123); let it inherit ours.
-            let own_dir = exe.parent().filter(|p| !p.as_os_str().is_empty());
-            if let Some(dir) = working_dir.as_deref().or(own_dir) {
-                c.current_dir(dir);
-            }
-            (c, exe.display().to_string())
-        }
+    let (exe, args, working_dir) = match action {
+        LaunchAction::Uri { uri } => return open(uri),
+        LaunchAction::Process { exe, args, working_dir } => (exe, args, working_dir),
     };
-    spawn(&mut cmd, &params).map_err(|source| LaunchError::Spawn { what, source })
+    let mut cmd = Command::new(exe);
+    cmd.args(args);
+    let params = args
+        .iter()
+        .map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() })
+        .collect::<Vec<_>>()
+        .join(" ");
+    // A bare program name ("explorer.exe") has an empty parent, which
+    // Windows refuses as a start folder (os error 123); let it inherit ours.
+    let own_dir = exe.parent().filter(|p| !p.as_os_str().is_empty());
+    if let Some(dir) = working_dir.as_deref().or(own_dir) {
+        cmd.current_dir(dir);
+    }
+    spawn(&mut cmd, &params).map_err(|source| LaunchError::Spawn { what: exe.display().to_string(), source })
 }
 
 /// Starts `cmd`. A program whose manifest asks for administrator rights can't
@@ -72,53 +64,79 @@ fn spawn(cmd: &mut Command, params: &str) -> std::io::Result<()> {
     }
 }
 
-#[cfg(windows)]
 fn run_elevated(cmd: &Command, params: &str) -> std::io::Result<()> {
-    use std::ffi::OsStr;
+    shell_execute("runas", cmd.get_program(), params, cmd.get_current_dir())
+}
+
+/// Opens a URI with its protocol handler, or a folder or file as
+/// double-clicking it would. The shell gets `target` whole: passed on
+/// explorer.exe's command line, a folder like `D:\Games\Warhammer 40,000`
+/// was split at the comma and the wrong one opened.
+pub fn open(target: &str) -> Result<(), LaunchError> {
+    shell_execute("open", OsStr::new(target), "", None)
+        .map_err(|source| LaunchError::Spawn { what: target.to_string(), source })
+}
+
+#[cfg(windows)]
+fn shell_execute(verb: &str, file: &OsStr, params: &str, dir: Option<&Path>) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW};
+    use windows_sys::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+    use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW};
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
     fn wide(s: &OsStr) -> Vec<u16> {
         s.encode_wide().chain(Some(0)).collect()
     }
-    let verb = wide(OsStr::new("runas"));
-    let file = wide(cmd.get_program());
+    let verb = wide(OsStr::new(verb));
+    let file = wide(file);
     let params = wide(OsStr::new(params));
-    let dir = cmd.get_current_dir().map(|d| wide(d.as_os_str()));
+    let dir = dir.map(|d| wide(d.as_os_str()));
 
     // SAFETY: plain C struct; every pointer it holds outlives the call.
     let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
     info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    // Finished before returning: the calling thread may have no message loop.
+    info.fMask = SEE_MASK_NOASYNC;
     info.lpVerb = verb.as_ptr();
     info.lpFile = file.as_ptr();
     info.lpParameters = params.as_ptr();
     info.lpDirectory = dir.as_ref().map_or(std::ptr::null(), |d| d.as_ptr());
     info.nShow = SW_SHOWNORMAL;
-    if unsafe { ShellExecuteExW(&mut info) } == 0 {
+    // The shell may hand the target to a COM extension, so COM must be up on
+    // this thread. Where it's up already this only counts up (balanced below),
+    // or fails harmlessly when it's up in the other mode.
+    // SAFETY: balanced below when it succeeded.
+    let com = unsafe { CoInitializeEx(std::ptr::null(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32) } >= 0;
+    let ok = unsafe { ShellExecuteExW(&mut info) } != 0;
+    // Read now: CoUninitialize may overwrite it.
+    let error = std::io::Error::last_os_error();
+    if com {
+        unsafe { CoUninitialize() };
+    }
+    if !ok {
         // Declining the UAC prompt lands here too (os error 1223).
-        return Err(std::io::Error::last_os_error());
+        return Err(error);
     }
     Ok(())
 }
 
 #[cfg(not(windows))]
-fn run_elevated(_cmd: &Command, _params: &str) -> std::io::Result<()> {
-    Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+fn shell_execute(_verb: &str, _file: &OsStr, _params: &str, _dir: Option<&Path>) -> std::io::Result<()> {
+    Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
 }
 
 /// Runs a program the user picked as a way to play: an .exe directly, a .bat
 /// or .cmd script in its own console window, anything else (a shortcut) as
 /// Windows would open it. Arguments go through exactly as typed, as in a
-/// shortcut. It starts in `working_dir`, or the program's own folder, since
-/// scripts often use paths relative to where they live.
+/// shortcut (see `takes_arguments`). It starts in `working_dir`, or the
+/// program's own folder, since scripts often use paths relative to where they
+/// live.
 pub fn run_program(path: &Path, args: &str, working_dir: Option<&Path>) -> Result<(), LaunchError> {
     let what = path.display().to_string();
     if !path.is_file() {
         return Err(LaunchError::Missing { what });
     }
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    let mut cmd = match ext.as_str() {
+    let mut cmd = match extension(path).as_str() {
         "exe" | "com" => {
             let mut c = Command::new(path);
             raw_args(&mut c, args);
@@ -135,15 +153,24 @@ pub fn run_program(path: &Path, args: &str, working_dir: Option<&Path>) -> Resul
         // Shortcuts and anything else: Windows opens it with its own settings
         // (a shortcut keeps its own arguments and start folder).
         _ => {
-            let mut c = Command::new("explorer.exe");
-            c.arg(path);
-            c
+            return shell_execute("open", path.as_os_str(), "", working_dir.or(path.parent()))
+                .map_err(|source| LaunchError::Spawn { what, source })
         }
     };
     if let Some(dir) = working_dir.or(path.parent()) {
         cmd.current_dir(dir);
     }
     spawn(&mut cmd, args).map_err(|source| LaunchError::Spawn { what, source })
+}
+
+/// Whether `run_program` passes arguments to this file: a program or script
+/// does; a shortcut or document is opened by Windows, which has no way to.
+pub fn takes_arguments(path: &Path) -> bool {
+    matches!(extension(path).as_str(), "exe" | "com" | "bat" | "cmd")
+}
+
+fn extension(path: &Path) -> String {
+    path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase()
 }
 
 #[cfg(windows)]
@@ -176,8 +203,16 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
-    /// A program named without a folder (as "Open install folder" names
-    /// explorer.exe) starts, rather than failing on an empty start folder.
+    #[test]
+    fn only_programs_and_scripts_take_arguments() {
+        assert!(takes_arguments(Path::new(r"D:\Games\Server\Start.CMD")));
+        assert!(takes_arguments(Path::new(r"D:\Games\Mod Loader\loader.exe")));
+        assert!(!takes_arguments(Path::new(r"D:\Games\Mod Loader.lnk")));
+        assert!(!takes_arguments(Path::new(r"D:\Games\readme")));
+    }
+
+    /// A program named without a folder (as "cmd.exe") starts, rather than
+    /// failing on an empty start folder.
     #[test]
     fn starts_a_program_named_without_a_folder() {
         let action = LaunchAction::Process { exe: "cmd.exe".into(), args: vec!["/C".into(), "exit".into()], working_dir: None };

@@ -4,7 +4,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use hub_core::{LaunchOption, StoreId};
+use hub_core::{LaunchOption, StoreEntry, StoreId};
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -25,6 +25,16 @@ pub enum Via {
 
 fn changed(app: &AppHandle) {
     let _ = app.emit("library-changed", ());
+}
+
+/// The store Play goes through with two versions installed: the one played
+/// last; on a tie (neither played), the first. The interface's Play button
+/// picks the same way (`launchEntry` in ways.ts).
+pub fn installed_to_play(entries: &[StoreEntry]) -> Option<&StoreEntry> {
+    entries
+        .iter()
+        .filter(|e| e.installed && !e.offline)
+        .min_by_key(|e| std::cmp::Reverse(e.last_played.unwrap_or(0)))
 }
 
 /// Starts a way to play.
@@ -55,6 +65,10 @@ pub fn save_launch_option(app: AppHandle, option: WayInput) -> CmdResult<i64> {
     }
     if !Path::new(option.path.trim()).is_file() {
         return Err("That program can't be found. Choose it again with Browse.".into());
+    }
+    // Windows opens a shortcut itself, with the arguments saved in it.
+    if !option.args.trim().is_empty() && !hub_launch::takes_arguments(Path::new(option.path.trim())) {
+        return Err("Only a program (.exe) or script (.bat, .cmd) takes arguments. For a shortcut, add them in the shortcut's Properties, or leave Arguments empty.".into());
     }
     if let Some(dir) = option.working_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
         if !Path::new(dir).is_dir() {
@@ -148,6 +162,39 @@ pub fn set_default_launch(app: AppHandle, game_id: i64, option: Option<i64>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn entry(id: i64, store: StoreId, installed: bool, last_played: Option<i64>) -> StoreEntry {
+        StoreEntry {
+            id,
+            game_id: 1,
+            store,
+            store_game_id: format!("game-{id}"),
+            installed,
+            install_dir: None,
+            hidden: false,
+            store_playtime_secs: None,
+            store_baseline_secs: None,
+            launch_exe: None,
+            offline: false,
+            title: None,
+            last_played,
+        }
+    }
+
+    #[test]
+    fn play_picks_the_installed_version_played_last_else_the_first() {
+        let pick = |entries: &[StoreEntry]| installed_to_play(entries).map(|e| e.id);
+        let never = [entry(1, StoreId::Steam, true, None), entry(2, StoreId::Gog, true, None)];
+        assert_eq!(pick(&never), Some(1));
+        let tied = [entry(1, StoreId::Steam, true, Some(500)), entry(2, StoreId::Gog, true, Some(500))];
+        assert_eq!(pick(&tied), Some(1));
+        let later = [entry(1, StoreId::Steam, true, Some(100)), entry(2, StoreId::Gog, true, Some(900)), entry(3, StoreId::Epic, false, Some(2000))];
+        assert_eq!(pick(&later), Some(2));
+        let mut offline = entry(2, StoreId::Gog, true, Some(900));
+        offline.offline = true;
+        assert_eq!(pick(&[entry(1, StoreId::Steam, true, None), offline]), Some(1));
+        assert_eq!(pick(&[entry(1, StoreId::Steam, false, None)]), None);
+    }
 
     #[test]
     fn a_picked_program_stays_inside_the_game_folder() {

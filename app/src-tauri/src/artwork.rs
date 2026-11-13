@@ -169,6 +169,7 @@ pub async fn apply_automatically(app: &AppHandle) {
     let targets = lock(&state.db).sgdb_targets(now() - RECHECK_SECS, PER_SYNC).unwrap_or_default();
     let mut changed = 0;
     for (id, title, steam_app) in targets {
+        let before = changed;
         let r = match game_ref(app, &title, steam_app).await {
             Ok(r) => r,
             // Bad key or rate limited: stop for now, try again next sync.
@@ -187,7 +188,8 @@ pub async fn apply_automatically(app: &AppHandle) {
             }
         }
         let _ = lock(&state.db).mark_sgdb_checked(id, now());
-        if changed > 0 && changed % 20 == 0 {
+        // Every 20 pictures, not after every game once 20 is reached.
+        if changed / 20 > before / 20 {
             let _ = app.emit("library-changed", ());
         }
         // Be gentle with a free community API.

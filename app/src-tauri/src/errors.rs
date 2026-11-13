@@ -6,7 +6,6 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use hub_launch::LaunchAction;
 use tauri::{AppHandle, Manager};
 
 use crate::{now, CmdResult};
@@ -57,12 +56,7 @@ pub fn report_error(app: AppHandle, message: String) {
 #[tauri::command]
 pub fn open_error_log(app: AppHandle) -> CmdResult<()> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    hub_launch::run(&LaunchAction::Process {
-        exe: "explorer.exe".into(),
-        args: vec![dir.to_string_lossy().into_owned()],
-        working_dir: None,
-    })
-    .map_err(|e| e.to_string())
+    hub_launch::open(&dir.to_string_lossy()).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

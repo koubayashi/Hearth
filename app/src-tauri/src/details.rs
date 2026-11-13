@@ -35,6 +35,11 @@ fn saved(app: &AppHandle, id: i64) -> CmdResult<Option<Option<GameDetails>>> {
     Ok(fresh.then(|| json.and_then(|j| serde_json::from_str(&j).ok())))
 }
 
+/// Whether `fetch` would ask Steam for this game rather than read the disk.
+pub(crate) fn stale(app: &AppHandle, id: i64) -> bool {
+    matches!(saved(app, id), Ok(None))
+}
+
 /// Fetches details for every game that has none current, most recently played
 /// first, so selecting a game reads them from disk instead of waiting on Steam
 /// (as Playnite fetches metadata when it imports a game). One request a second
@@ -59,7 +64,7 @@ pub async fn prefetch(app: &AppHandle) {
     // interface reload the whole library.
     let mut changed = false;
     for id in ids {
-        if !matches!(saved(app, id), Ok(None)) {
+        if !stale(app, id) {
             continue;
         }
         changed |= fetch(app, id).await.is_ok_and(|(_, described)| described);
@@ -167,7 +172,8 @@ pub struct SavedInfo {
 /// Every game's saved details and install info, from disk only, in one call.
 /// The panel keeps them in memory so selecting a game draws it whole in the
 /// first frame; asking per selection left the panel filling in piece by piece.
-#[tauri::command]
+/// Off the UI thread: it reads the whole library.
+#[tauri::command(async)]
 pub fn saved_game_info(app: AppHandle) -> CmdResult<Vec<SavedInfo>> {
     let state = app.state::<AppState>();
     let db = lock(&state.db);
@@ -256,8 +262,7 @@ pub fn open_install_folder(app: AppHandle, id: i64) -> CmdResult<()> {
     if !Path::new(&dir).is_dir() {
         return Err(format!("The folder {dir} doesn't exist anymore"));
     }
-    hub_launch::run(&LaunchAction::Process { exe: "explorer.exe".into(), args: vec![dir], working_dir: None })
-        .map_err(err)
+    hub_launch::open(&dir).map_err(err)
 }
 
 /// The game's page in its store: Steam's client page when Hearth knows the
@@ -265,7 +270,9 @@ pub fn open_install_folder(app: AppHandle, id: i64) -> CmdResult<()> {
 #[tauri::command]
 pub async fn open_store_page(app: AppHandle, id: i64) -> CmdResult<()> {
     let g = game(&app, id)?;
-    let uri = if let Some(e) = g.entries.iter().find(|e| e.store == StoreId::Steam) {
+    // Only a plain app id: the id may come from a restored backup.
+    let steam = g.entries.iter().find(|e| e.store == StoreId::Steam && !e.store_game_id.is_empty() && e.store_game_id.bytes().all(|b| b.is_ascii_digit()));
+    let uri = if let Some(e) = steam {
         format!("steam://store/{}", e.store_game_id)
     } else if g.entries.iter().any(|e| e.store == StoreId::Epic) {
         "com.epicgames.launcher://store".to_string()

@@ -1,7 +1,7 @@
 //! Series, developers and publishers for the "browse by" shelves: looked up
 //! on Wikidata after each sync, a batch at a time, and fixed by the user.
 
-use hub_core::SmartIndex;
+use hub_core::{EntityParent, SmartIndex};
 use hub_providers::wikidata::{pick, Item};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -124,9 +124,31 @@ pub fn set_entity_parent(app: AppHandle, child: String, parent: String, on: bool
     if child == parent {
         return Err("Something can't be part of itself".into());
     }
-    lock(&app.state::<AppState>().db).set_entity_parent(&child, &parent, on).map_err(err)?;
+    let state = app.state::<AppState>();
+    let db = lock(&state.db);
+    // A loop (A in B, B in A) would leave both off every shelf.
+    if on && within(&db.smart_index().map_err(err)?.parents, &parent, &child) {
+        return Err("That's already part of this one, so it can't also contain it".into());
+    }
+    db.set_entity_parent(&child, &parent, on).map_err(err)?;
+    drop(db);
     let _ = app.emit("smart-changed", ());
     Ok(())
+}
+
+/// Whether `inner` is part of `outer`, directly or through other parents.
+fn within(parents: &[EntityParent], inner: &str, outer: &str) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    let mut todo = vec![inner];
+    while let Some(id) = todo.pop() {
+        if id == outer {
+            return true;
+        }
+        if seen.insert(id) {
+            todo.extend(parents.iter().filter(|p| p.child == id).map(|p| p.parent.as_str()));
+        }
+    }
+    false
 }
 
 /// A new series of the user's own, with this game in it.
@@ -143,4 +165,26 @@ pub fn create_series(app: AppHandle, game_id: i64, name: String) -> CmdResult<St
     drop(db);
     let _ = app.emit("library-changed", ());
     Ok(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn link(child: &str, parent: &str) -> EntityParent {
+        EntityParent { child: child.into(), parent: parent.into() }
+    }
+
+    #[test]
+    fn finds_what_a_series_is_already_part_of() {
+        // Northshore Leeds is in Northshore Games, which is in Bright Holdings.
+        let parents = [link("leeds", "northshore"), link("northshore", "bright"), link("other", "bright")];
+        assert!(within(&parents, "leeds", "bright"));
+        assert!(within(&parents, "leeds", "northshore"));
+        assert!(!within(&parents, "bright", "leeds"));
+        assert!(!within(&parents, "other", "northshore"));
+        // A loop already saved doesn't make it spin.
+        let looped = [link("a", "b"), link("b", "a")];
+        assert!(!within(&looped, "a", "c"));
+    }
 }

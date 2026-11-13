@@ -46,7 +46,7 @@ fn installed_entry(app: &AppHandle, id: i64, version: Option<i64>) -> CmdResult<
     let entry = game
         .entries
         .iter()
-        .find(|e| e.installed && !e.offline && e.install_dir.is_some() && version.map_or(true, |v| v == e.id))
+        .find(|e| e.installed && !e.offline && e.install_dir.is_some() && version.is_none_or(|v| v == e.id))
         .cloned()
         .ok_or_else(|| format!("{} isn't installed", game.title))?;
     Ok((game, entry))
@@ -133,19 +133,31 @@ fn rescan_when_gone(app: AppHandle, dir: PathBuf) {
 }
 
 /// A folder game's folder, never a drive or one of the watched game folders
-/// themselves (the folder holding every game).
+/// themselves (the folder holding every game), nor a folder holding one, or
+/// holding another store's game (a launcher's folder found as a game).
 fn check_recyclable(app: &AppHandle, dir: &Path) -> CmdResult<()> {
-    let norm = |p: &Path| p.to_string_lossy().trim_end_matches(['\\', '/']).to_lowercase();
-    let d = norm(dir);
-    let is_root = dir.parent().is_none() || dir.components().count() <= 2;
-    let is_watched = crate::folders::current(app).iter().any(|f| norm(Path::new(f)) == d);
-    if d.is_empty() || is_root || is_watched {
+    let watched = crate::folders::current(app);
+    let others = lock(&app.state::<AppState>().db).store_install_dirs(StoreId::Manual).map_err(err)?;
+    if !single_game(dir, watched.iter().chain(&others)) {
         return Err(format!("Hearth won't remove {}: it isn't a single game's folder", dir.display()));
     }
     if !dir.is_dir() {
         return Err(format!("{} isn't there any more", dir.display()));
     }
     Ok(())
+}
+
+/// `dir` isn't a drive and none of the folders to `keep` is it or inside it.
+fn single_game<'a>(dir: &Path, mut keep: impl Iterator<Item = &'a String>) -> bool {
+    let is_root = dir.parent().is_none() || dir.components().count() <= 2;
+    !is_root && !keep.any(|k| inside(dir, Path::new(k)))
+}
+
+/// Whether `path` is `dir` or lies inside it, ignoring case as Windows does.
+fn inside(dir: &Path, path: &Path) -> bool {
+    let name = |c: std::path::Component| c.as_os_str().to_string_lossy().to_lowercase();
+    let mut rest = path.components();
+    dir.components().all(|d| rest.next().is_some_and(|c| name(c) == name(d)))
 }
 
 #[cfg(windows)]
@@ -176,4 +188,28 @@ fn recycle(dir: &Path) -> CmdResult<()> {
 #[cfg(not(windows))]
 fn recycle(_dir: &Path) -> CmdResult<()> {
     Err("Only on Windows".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_single_games_folder_is_recycled() {
+        let keep = [r"D:\Games".to_string(), r"F:\Media\Games".to_string(), r"D:\Launchers\Galaxy\Games\Skyfall".to_string(), r"E:\Steam\steamapps\common\Driftwood".to_string()];
+        let ok = |d: &str| single_game(Path::new(d), keep.iter());
+        assert!(ok(r"D:\Games\Lantern Keep"));
+        assert!(ok(r"D:\Games\Warhammer 40,000"));
+        // A sibling whose name starts the same isn't inside.
+        assert!(ok(r"D:\Launchers\Galaxy\Games\Skyfall 2"));
+        // Drives, a watched folder, and folders holding another store's game.
+        assert!(!ok(r"D:\"));
+        assert!(!ok(""));
+        assert!(!ok(r"d:\games\"));
+        assert!(!ok(r"D:\Launchers\Galaxy"));
+        assert!(!ok(r"d:\launchers\galaxy\games\skyfall"));
+        assert!(!ok(r"E:\Steam"));
+        // A folder holding a watched folder.
+        assert!(!ok(r"F:\Media"));
+    }
 }

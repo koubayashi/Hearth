@@ -374,8 +374,10 @@ pub fn tray_menu_hide(app: AppHandle) {
     hide_menu(&app);
 }
 
+// Async on purpose: it may build the main window, and building a window inside
+// a synchronous command deadlocks the main thread on Windows.
 #[tauri::command]
-pub fn open_hearth(app: AppHandle) {
+pub async fn open_hearth(app: AppHandle) {
     hide_menu(&app);
     show_main(&app);
 }
@@ -400,14 +402,18 @@ pub fn set_playing(app: &AppHandle, playing: &[NowPlaying]) {
     // Only redrawn when the tooltip or the pause mark changes.
     static SHOWN: Mutex<Option<(String, bool)>> = Mutex::new(None);
     let now = (tip, !paused.is_empty());
-    let mut shown = lock(&SHOWN);
-    if shown.as_ref() == Some(&now) {
-        return;
+    {
+        let mut shown = lock(&SHOWN);
+        if shown.as_ref() == Some(&now) {
+            return;
+        }
+        *shown = Some(now.clone());
     }
-    let _ = tray.set_tooltip(Some(now.0.clone()));
+    // Set with the lock released: from another thread these wait on the main
+    // thread, which may itself be waiting on this lock.
+    let _ = tray.set_tooltip(Some(now.0));
     let Some(icon) = app.default_window_icon() else { return };
     let _ = tray.set_icon(Some(if now.1 { with_pause_mark(icon) } else { icon.clone() }));
-    *shown = Some(now);
 }
 
 /// The app icon with a small pause badge in its lower right corner.

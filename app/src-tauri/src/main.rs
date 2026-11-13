@@ -77,7 +77,8 @@ pub(crate) fn now() -> i64 {
         .unwrap_or(0)
 }
 
-#[tauri::command]
+// Off the UI thread, as `game_counts`: both read the whole library.
+#[tauri::command(async)]
 fn list_games(state: State<AppState>, query: LibraryQuery) -> CmdResult<Vec<Game>> {
     lock(&state.db).list_games(&query).map_err(err)
 }
@@ -90,7 +91,7 @@ struct GameCounts {
     hidden: usize,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn game_counts(state: State<AppState>) -> CmdResult<GameCounts> {
     let (library, hidden) = lock(&state.db).game_counts().map_err(err)?;
     Ok(GameCounts { library, hidden })
@@ -142,17 +143,14 @@ fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdRe
     if let Some(option) = chosen {
         return ways::run(option);
     }
-    if let Some(drive) = &game.offline_drive {
+    // A version picked by hand that isn't on the missing drive (another
+    // store's, or one to install) doesn't need that drive.
+    let elsewhere = version.is_some_and(|e| !e.offline);
+    if let Some(drive) = game.offline_drive.as_ref().filter(|_| !elsewhere) {
         return Err(format!("{} is on drive {drive}, which isn't connected. Connect it to play.", game.title));
     }
     let entry = version
-        .or_else(|| {
-            // With two versions installed, the one played last.
-            game.entries
-                .iter()
-                .filter(|e| e.installed && !e.offline)
-                .max_by_key(|e| e.last_played.unwrap_or(0))
-        })
+        .or_else(|| ways::installed_to_play(&game.entries))
         // Nothing installed: install from a store, not from a deleted folder.
         .or_else(|| game.entries.iter().find(|e| e.store != hub_core::StoreId::Manual))
         .or(game.entries.first())
@@ -608,7 +606,14 @@ async fn fill_missing_art(app: &AppHandle) {
     let ids = lock(&app.state::<AppState>().db).games_missing_cover().unwrap_or_default();
     let mut changed = false;
     for id in ids {
-        let Ok((details, described)) = details::fetch(app, id).await else { continue };
+        // Saved details cost nothing; asking Steam waits a second after, as
+        // the prefetch does, or a big library of folder games hits its limit.
+        let asking = details::stale(app, id);
+        let fetched = details::fetch(app, id).await;
+        if asking {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+        let Ok((details, described)) = fetched else { continue };
         changed |= described;
         if let Some(d) = details {
             let art = Steam::art_urls(&d.steam_app_id.to_string());
@@ -622,11 +627,56 @@ async fn fill_missing_art(app: &AppHandle) {
     }
 }
 
+/// Background work that runs one at a time: asked for again while it runs
+/// (a second sync, "Reset artwork" clicked twice), it runs once more after,
+/// rather than a second copy beside it.
+struct OneAtATime(Mutex<(bool, bool)>);
+
+impl OneAtATime {
+    const fn new() -> Self {
+        Self(Mutex::new((false, false)))
+    }
+
+    async fn run<F: std::future::Future<Output = ()>>(&'static self, mut work: impl FnMut() -> F) {
+        {
+            let mut s = lock(&self.0);
+            if s.0 {
+                s.1 = true;
+                return;
+            }
+            s.0 = true;
+        }
+        /// Frees it if the work panics, which would otherwise stop it for
+        /// good until a restart.
+        struct Running(&'static OneAtATime);
+        impl Drop for Running {
+            fn drop(&mut self) {
+                if std::thread::panicking() {
+                    *lock(&self.0 .0) = (false, false);
+                }
+            }
+        }
+        let _running = Running(self);
+        loop {
+            work().await;
+            let mut s = lock(&self.0);
+            if !std::mem::take(&mut s.1) {
+                s.0 = false;
+                return;
+            }
+        }
+    }
+}
+
 /// Store artwork first (so every game has something), then SteamGridDB's.
 pub(crate) async fn refresh_art(app: &AppHandle) {
-    fill_missing_art(app).await;
-    refresh_steam_art(app).await;
-    artwork::apply_automatically(app).await;
+    static ART: OneAtATime = OneAtATime::new();
+    ART.run(|| async {
+        fill_missing_art(app).await;
+        refresh_steam_art(app).await;
+        artwork::apply_automatically(app).await;
+    })
+    .await;
 }
 
 /// Puts the real Steam artwork addresses on every Steam-sourced cover.
@@ -757,12 +807,19 @@ pub(crate) fn sync_all(app: AppHandle) {
         let _ = app.emit("library-changed", ());
         // The stores are read; art and details below are background extras.
         let _ = app.emit("sync-finished", ());
-        // Each of these says so itself when it changed something.
-        refresh_art(&app).await;
-        saves::refresh(&app).await;
-        details::prefetch(&app).await;
-        // After details: they give games from other stores a Steam id to match by.
-        smart::refresh(&app).await;
+        // Each of these says so itself when it changed something. A sync
+        // finishing while they run (a renewed sign-in) has them run again
+        // after, not a second set beside them.
+        static EXTRAS: OneAtATime = OneAtATime::new();
+        EXTRAS
+            .run(|| async {
+                refresh_art(&app).await;
+                saves::refresh(&app).await;
+                details::prefetch(&app).await;
+                // After details: they give games from other stores a Steam id to match by.
+                smart::refresh(&app).await;
+            })
+            .await;
     });
 }
 
