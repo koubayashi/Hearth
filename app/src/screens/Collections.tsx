@@ -27,19 +27,25 @@ export function Collections({ initialShelf, ...props }: LibraryProps & { initial
   const [favoriteCount, setFavoriteCount] = useState(0);
   const [naming, setNaming] = useState<{ id: number | null; name: string } | null>(null);
   const [allGames, setAllGames] = useState<Game[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const fail = (e: unknown) => setError(String(e));
   const index = useSmartIndex();
   const looking = useSmartLooking();
   const smart = useMemo(() => buildSmart(index, new Set(allGames.map((g) => g.id))), [index, allGames]);
 
   useEffect(() => {
-    api.listCollections().then(setCollections);
-    api.listGames({ install: "all", stores: [], search: null, hidden_only: false }).then((games: Game[]) => {
-      const c = { playing: 0, backlog: 0, completed: 0, abandoned: 0 };
-      games.forEach((g) => g.status && c[g.status]++);
-      setFavoriteCount(games.filter((g) => g.favorite).length);
-      setCounts(c);
-      setAllGames(games);
-    });
+    setError(null);
+    api.listCollections().then(setCollections).catch(fail);
+    api
+      .listGames({ install: "all", stores: [], search: null, hidden_only: false })
+      .then((games: Game[]) => {
+        const c = { playing: 0, backlog: 0, completed: 0, abandoned: 0 };
+        games.forEach((g) => g.status && c[g.status]++);
+        setFavoriteCount(games.filter((g) => g.favorite).length);
+        setCounts(c);
+        setAllGames(games);
+      })
+      .catch(fail);
   }, [props.version]);
 
   // A deleted collection falls back to the first shelf.
@@ -51,14 +57,18 @@ export function Collections({ initialShelf, ...props }: LibraryProps & { initial
 
   const save = async () => {
     if (!naming?.name.trim()) return setNaming(null);
-    if (naming.id === null) {
-      const id = await api.createCollection(naming.name);
-      setShelf({ kind: "collection", id });
-    } else {
-      await api.renameCollection(naming.id, naming.name);
+    try {
+      if (naming.id === null) {
+        const id = await api.createCollection(naming.name);
+        setShelf({ kind: "collection", id });
+      } else {
+        await api.renameCollection(naming.id, naming.name);
+      }
+      setNaming(null);
+      setCollections(await api.listCollections());
+    } catch (e) {
+      fail(e);
     }
-    setNaming(null);
-    setCollections(await api.listCollections());
   };
 
   const current = shelf.kind === "collection" ? collections.find((c) => c.id === shelf.id) : null;
@@ -143,10 +153,13 @@ export function Collections({ initialShelf, ...props }: LibraryProps & { initial
             <button
               className="link"
               data-nav
-              onClick={async () => {
-                await api.deleteCollection(current.id);
-                setCollections(await api.listCollections());
-              }}
+              onClick={() =>
+                api
+                  .deleteCollection(current.id)
+                  .then(() => api.listCollections())
+                  .then(setCollections)
+                  .catch(fail)
+              }
             >
               Delete collection
             </button>
@@ -173,6 +186,11 @@ export function Collections({ initialShelf, ...props }: LibraryProps & { initial
         ))}
       </div>
       {shelf.kind === "entity" && <EntityTrail shelf={shelf} smart={smart} onShelf={setShelf} />}
+      {error && (
+        <p className="note error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 

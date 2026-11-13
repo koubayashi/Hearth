@@ -44,9 +44,8 @@ export interface Prefs {
   consoleTipSeen: boolean;
   /** "Combine these versions?" pairs the user said are different games. */
   dismissedCombines: string[];
-  /** Time away from a running game (no input, or another window in front)
-   *  isn't counted. Read by the tracker from prefs.json. */
-  /** Idle time (the game open while you're away): counted as play, or kept separate. */
+  /** Idle time (the game open while you're away): counted as play, or kept
+   *  separate. Read by the tracker from prefs.json. */
   idleTime: IdleMode;
 }
 

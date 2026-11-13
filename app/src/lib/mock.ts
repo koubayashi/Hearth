@@ -442,6 +442,7 @@ export const mockBackend = {
   },
   onAccountsChanged: noop,
   onSyncStarted: noop,
+  onSyncFinished: noop,
   onSmartStatus: noop,
   onSmartChanged: noop,
   onAutoBackup: noop,

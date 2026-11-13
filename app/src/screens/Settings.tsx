@@ -470,7 +470,7 @@ function NameSetting({ accounts }: { accounts: Accounts | null }) {
 function RefreshButton() {
   const [syncing, setSyncing] = useState(false);
   useEffect(() => {
-    const offs = [api.onSyncStarted(() => setSyncing(true)), api.onLibraryChanged(() => setSyncing(false))];
+    const offs = [api.onSyncStarted(() => setSyncing(true)), api.onSyncFinished(() => setSyncing(false))];
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
   return (
@@ -479,7 +479,7 @@ function RefreshButton() {
       data-nav
       disabled={syncing}
       title="Hearth checks every store when it starts. Run it again after installing something."
-      onClick={() => (setSyncing(true), api.syncNow())}
+      onClick={() => (setSyncing(true), api.syncNow().catch(() => setSyncing(false)))}
     >
       <Icon name="refresh" size={15} />
       {syncing ? "Refreshing…" : "Refresh library"}

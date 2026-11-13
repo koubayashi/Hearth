@@ -100,6 +100,7 @@ const backend = isTauri()
       onLibraryChanged: on("library-changed"),
       onAccountsChanged: on("accounts-changed"),
       onSyncStarted: on("sync-started"),
+      onSyncFinished: on("sync-finished"),
       onSmartStatus: on("smart-status"),
       onSmartChanged: on("smart-changed"),
       onAutoBackup: on("auto-backup"),

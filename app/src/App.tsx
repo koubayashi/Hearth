@@ -168,8 +168,16 @@ export function App() {
   };
 
   useEffect(() => {
+    // A burst of changes (a sync's steps, background art and details) reloads
+    // the library once, not once per event.
+    let pending: ReturnType<typeof setTimeout> | undefined;
     const offs = [
-      api.onLibraryChanged(refresh),
+      api.onLibraryChanged(() => {
+        pending ??= setTimeout(() => {
+          pending = undefined;
+          refresh();
+        }, 250);
+      }),
       api.onSyncError((msg) => say(String(msg))),
       api.onNowPlaying((p) => {
         const next = p as NowPlaying[];
@@ -181,7 +189,10 @@ export function App() {
       }),
     ];
     api.nowPlaying().then(setPlaying);
-    return () => offs.forEach((o) => void o.then((f) => f()));
+    return () => {
+      clearTimeout(pending);
+      offs.forEach((o) => void o.then((f) => f()));
+    };
   }, []);
 
   const libraryLike = route === "library" || route === "hidden";

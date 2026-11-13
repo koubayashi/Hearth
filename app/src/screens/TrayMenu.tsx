@@ -50,13 +50,35 @@ export function TrayMenu() {
     if (!opened || !ref.current) return;
     void api.trayMenuFit(Math.ceil(ref.current.getBoundingClientRect().height), true);
   }, [opened]);
-  // Contents changed while it's open (a pause, an update arriving): resize only.
-  const reflow = playing.length + (readyVersion(update) ? 1 : 0);
-  useLayoutEffect(() => {
-    if (ref.current) void api.trayMenuFit(Math.ceil(ref.current.getBoundingClientRect().height), false);
-  }, [reflow]);
+  // Contents changed height while it's open (a pause note, an update, the
+  // Recent list): resize only.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => void api.trayMenuFit(Math.ceil(el.getBoundingClientRect().height), false));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  const byId = new Map(games.map((g) => [g.id, g]));
+  // A hidden game being timed isn't in the library list; fetch it on its own
+  // so it still gets its card with Pause and Stop.
+  const [hiddenTimed, setHiddenTimed] = useState<Game[]>([]);
+  const missing = playing
+    .map((p) => p.game_id)
+    .filter((id) => !games.some((g) => g.id === id))
+    .join(",");
+  useEffect(() => {
+    if (!missing) return setHiddenTimed([]);
+    let live = true;
+    Promise.all(missing.split(",").map((id) => api.getGame(Number(id))))
+      .then((gs) => live && setHiddenTimed(gs.filter((g): g is Game => !!g)))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [missing]);
+
+  const byId = new Map([...games, ...hiddenTimed].map((g) => [g.id, g]));
   const timed = playing.map((p) => ({ p, g: byId.get(p.game_id) })).filter((x): x is { p: NowPlaying; g: Game } => !!x.g);
   const recent = games
     .filter((g) => g.installed && g.last_played !== null && !g.hidden && !playing.some((p) => p.game_id === g.id))

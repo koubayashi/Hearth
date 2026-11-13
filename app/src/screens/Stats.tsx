@@ -24,17 +24,39 @@ export function Stats({
   onOpenStatus: (status: GameStatus) => void;
 }) {
   const [data, setData] = useState<{ games: Game[]; sessions: PlaySession[] } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const name = useGamerTag();
 
   useEffect(() => {
+    let live = true;
     Promise.all([
       api.listGames({ install: "all", stores: [], search: null, hidden_only: false }),
       api.playSessions(),
-    ]).then(([games, sessions]) => setData({ games, sessions }));
+    ])
+      .then(([games, sessions]) => {
+        if (!live) return;
+        setData({ games, sessions });
+        setLoadError(null);
+      })
+      .catch((e) => live && setLoadError(String(e)));
+    return () => {
+      live = false;
+    };
   }, [version]);
 
   const s = useMemo(() => (data ? computeStats(data.games, data.sessions) : null), [data]);
-  if (!s) return <div className="scroll" />;
+  if (!s) {
+    return (
+      <div className="scroll">
+        {loadError && (
+          <div className="empty" role="alert">
+            <h3>Couldn't load your stats</h3>
+            {loadError}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const podium = s.top.slice(0, 3);
   const rest = s.top.slice(3);
