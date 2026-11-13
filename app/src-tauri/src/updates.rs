@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::{Error as UpdateError, Update, UpdaterExt};
 
-use crate::{lock, now, tracking, tray, CmdResult};
+use crate::{lock, now, tracking, CmdResult};
 
 const FIRST_CHECK: Duration = Duration::from_secs(60);
 const CHECK_EVERY: Duration = Duration::from_secs(12 * 3600);
@@ -237,7 +237,6 @@ async fn fetch(app: &AppHandle) -> tauri_plugin_updater::Result<()> {
         )
         .await?;
     *lock(&state.ready) = Some((update, bytes));
-    tray::set_update(app, Some(&version));
     set(app, |s| s.phase = Phase::Ready);
     Ok(())
 }

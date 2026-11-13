@@ -12,6 +12,8 @@ import "./styles/views.css";
 import "./styles/ways.css";
 import "./styles/storage.css";
 import "./styles/system.css";
+import "./styles/tray.css";
+import { TrayMenu } from "./screens/TrayMenu";
 
 reportUnhandledErrors();
 applyPrefs();
@@ -25,9 +27,16 @@ const editable = (t: EventTarget | null) =>
 window.addEventListener("contextmenu", (e) => {
   if (!editable(e.target)) e.preventDefault();
 });
-installSpatialNav();
-startGamepadBridge();
-installFullscreenKey();
+// The tray icon's menu is this same interface in a small window of its own
+// (tray.rs). It has none of the main window's controller or full-screen keys.
+const trayMenu = new URLSearchParams(location.search).has("tray");
+if (trayMenu) {
+  document.documentElement.classList.add("tray-window");
+} else {
+  installSpatialNav();
+  startGamepadBridge();
+  installFullscreenKey();
+}
 
 // ?crash in the demo shows the crash screen, to design that state.
 const demoCrash = api.demo && location.search.includes("crash");
@@ -37,6 +46,6 @@ function Crash(): never {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <CrashBoundary>{demoCrash ? <Crash /> : <App />}</CrashBoundary>
+    <CrashBoundary>{trayMenu ? <TrayMenu /> : demoCrash ? <Crash /> : <App />}</CrashBoundary>
   </StrictMode>,
 );

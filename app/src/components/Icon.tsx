@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 // One stroke family (24px grid, 1.8 stroke, round joins) for every icon.
 
 const paths = {
@@ -79,15 +81,34 @@ const paths = {
       <circle cx="9" cy="15" r="1.2" />
     </>
   ),
+  /** A game being timed: counts up, and can pause. */
+  stopwatch: (
+    <>
+      <circle cx="12" cy="13.5" r="7.5" />
+      <path d="M12 13.5V10M10 3h4M18.2 6.8l1.3-1.3" />
+    </>
+  ),
+  power: <path d="M12 3v9M6.3 7.2a8 8 0 1 0 11.4 0" />,
 } as const;
 
-export type IconName = keyof typeof paths | "play" | "flame";
+export type IconName = keyof typeof paths | "play" | "flame" | "pause" | "stop";
+
+const filled: Partial<Record<IconName, ReactNode>> = {
+  play: <path d="M7 4.5v15l13-7.5z" />,
+  pause: (
+    <>
+      <rect x="6.5" y="5" width="4" height="14" rx="1" />
+      <rect x="13.5" y="5" width="4" height="14" rx="1" />
+    </>
+  ),
+  stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
+};
 
 export function Icon({ name, size = 18, className }: { name: IconName; size?: number; className?: string }) {
-  if (name === "play") {
+  if (filled[name]) {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <path d="M7 4.5v15l13-7.5z" />
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+        {filled[name]}
       </svg>
     );
   }
@@ -111,7 +132,7 @@ export function Icon({ name, size = 18, className }: { name: IconName; size?: nu
       className={className}
       aria-hidden
     >
-      {paths[name]}
+      {paths[name as keyof typeof paths]}
     </svg>
   );
 }

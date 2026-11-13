@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { formatPlaytime } from "../lib/format";
 import { gameHistory, LONG_SESSION } from "../lib/history";
 import { hours } from "../lib/stats";
-import type { Game, PlaySession } from "../lib/types";
+import type { Game, IdleMode, PlaySession } from "../lib/types";
 import { Icon } from "./Icon";
 
 const day = (unix: number) =>
@@ -24,6 +24,17 @@ export function PlayHistory({ game, onClose }: { game: Game; onClose: () => void
   // The session whose Remove was pressed once and now asks to be sure.
   const [confirming, setConfirming] = useState<number | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [mode, setMode] = useState<IdleMode | null>(game.idle_mode ?? null);
+
+  const chooseMode = async (m: IdleMode | null) => {
+    setProblem(null);
+    try {
+      await api.setIdleMode(game.id, m);
+      setMode(m);
+    } catch (e) {
+      setProblem(String(e));
+    }
+  };
 
   useEffect(() => {
     api.playSessions().then(setSessions, (e) => setProblem(String(e)));
@@ -42,7 +53,7 @@ export function PlayHistory({ game, onClose }: { game: Game; onClose: () => void
   };
 
   // Stores keep their own totals; say how the two figures relate when they differ.
-  const before = h ? game.playtime_secs - h.secs : 0;
+  const before = h ? game.playtime_secs - (game.idle_secs ?? 0) - h.secs : 0;
   const peak = h ? Math.max(...h.weeks) : 0;
 
   return (
@@ -158,6 +169,24 @@ export function PlayHistory({ game, onClose }: { game: Game; onClose: () => void
             </div>
           </>
         )}
+
+        <div className="history-idle">
+          <div className="text">
+            <b>Idle time</b>
+            <span>
+              {(game.idle_secs ?? 0) > 0
+                ? `${formatPlaytime(game.idle_secs ?? 0)} so far with ${game.title} open and nobody playing.`
+                : `Time ${game.title} is open while you're away or in another window.`}
+            </span>
+          </div>
+          <div className="seg seg-boxed" role="group" aria-label={`Idle time for ${game.title}`}>
+            {([null, "count", "separate"] as const).map((m) => (
+              <button key={m ?? "setting"} data-nav aria-pressed={mode === m} onClick={() => chooseMode(m)}>
+                {m === null ? "As in Settings" : m === "count" ? "Count as play" : "Keep separate"}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {problem && (
           <p className="note error" role="alert">

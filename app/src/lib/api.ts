@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { LaunchOptionInput, Via } from "./types";
-import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, UpdateStatus } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, IdleMode, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, UpdateStatus } from "./types";
 import type { DriveSpace } from "./storage";
 import { mockBackend } from "./mock";
 
@@ -39,6 +39,15 @@ const backend = isTauri()
       epicSubmitCode: (code: string) => invoke<void>("epic_submit_code", { code }),
       openSteamKeyPage: () => invoke<void>("open_steam_key_page"),
       nowPlaying: () => invoke<NowPlaying[]>("now_playing"),
+      pauseTiming: (id: number) => invoke<void>("pause_timing", { id }),
+      resumeTiming: (id: number) => invoke<void>("resume_timing", { id }),
+      stopTiming: (id: number) => invoke<void>("stop_timing", { id }),
+      trayMenuFit: (height: number, show: boolean) => invoke<void>("tray_menu_fit", { height, show }),
+      trayMenuHide: () => invoke<void>("tray_menu_hide"),
+      openHearth: () => invoke<void>("open_hearth"),
+      quitHearth: () => invoke<void>("quit_hearth"),
+      onTrayOpen: on("tray-open"),
+      onTrayKey: on("tray-key"),
       playSessions: () => invoke<PlaySession[]>("play_sessions"),
       deletePlaySession: (id: number) => invoke<void>("delete_play_session", { id }),
       backupExport: (path: string, prefs: string) => invoke<void>("backup_export", { path, prefs }),
@@ -64,6 +73,7 @@ const backend = isTauri()
       searchStore: (term: string) => invoke<StoreHit[]>("search_store", { term }),
       sgdbSetKey: (key: string) => invoke<void>("sgdb_set_key", { key }),
       setStatus: (id: number, status: GameStatus | null) => invoke<void>("set_status", { id, status }),
+      setIdleMode: (id: number, mode: IdleMode | null) => invoke<void>("set_idle_mode", { id, mode }),
       listCollections: () => invoke<Collection[]>("list_collections"),
       createCollection: (name: string) => invoke<number>("create_collection", { name }),
       renameCollection: (id: number, name: string) => invoke<void>("rename_collection", { id, name }),

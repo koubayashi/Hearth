@@ -12,6 +12,7 @@ import { Art, legacy } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
 import { Icon } from "../components/Icon";
+import { PauseButton, SittingText } from "../components/Timing";
 import { StoreIcon } from "../components/StoreIcon";
 import { ArtworkPicker } from "../components/ArtworkPicker";
 import { StoreMatch } from "../components/StoreMatch";
@@ -213,9 +214,9 @@ export function Console({
     return () => clearInterval(t);
   }, []);
 
-  const playingSince = game ? (playing.find((p) => p.game_id === game.id)?.started_at ?? null) : null;
+  const session = game ? (playing.find((p) => p.game_id === game.id) ?? null) : null;
   // The running session, counted in as it grows (the clock above ticks).
-  const live = liveSecs(playingSince, Math.floor(now.getTime() / 1000));
+  const live = liveSecs(session, Math.floor(now.getTime() / 1000));
   const played = game ? game.playtime_secs + live : 0;
   const status = game?.status ? STATUSES.find((s) => s.id === game.status)?.label : null;
   const stores = game ? [...new Set(game.entries.map((e) => e.store))] : [];
@@ -389,8 +390,10 @@ export function Console({
             >
               <h1 className="cx-title">{game.title}</h1>
               <p className="cx-meta">
-                {playingSince ? (
-                  <span className="cx-now">{live < 60 ? "Playing now" : `Playing now · ${formatPlaytime(live)}`}</span>
+                {session ? (
+                  <span className="cx-now">
+                    <SittingText session={session} now={Math.floor(now.getTime() / 1000)} />
+                  </span>
                 ) : (
                   <span>{game.installed ? "Ready to play" : game.offline_drive ? `Drive ${game.offline_drive} not connected` : "Not installed"}</span>
                 )}
@@ -429,6 +432,7 @@ export function Console({
                     "Install"
                   )}
                 </button>
+                {session && <PauseButton session={session} className="cx-button" />}
                 {game.launch_options.length > 0 && (
                   <button
                     ref={waysRef}

@@ -1,7 +1,7 @@
 //! Statuses (playing, backlog, completed, abandoned) and the user's own
 //! collections.
 
-use hub_core::{Collection, GameStatus};
+use hub_core::{Collection, GameStatus, IdleMode};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{err, lock, AppState, CmdResult};
@@ -53,6 +53,14 @@ pub fn delete_collection(app: AppHandle, id: i64) -> CmdResult<()> {
 #[tauri::command]
 pub fn set_in_collection(app: AppHandle, collection: i64, game: i64, member: bool) -> CmdResult<()> {
     lock(&app.state::<AppState>().db).set_in_collection(collection, game, member).map_err(err)?;
+    changed(&app);
+    Ok(())
+}
+
+/// One game's own choice about idle time (None: follow the setting).
+#[tauri::command]
+pub fn set_idle_mode(app: AppHandle, id: i64, mode: Option<IdleMode>) -> CmdResult<()> {
+    lock(&app.state::<AppState>().db).set_idle_mode(id, mode).map_err(err)?;
     changed(&app);
     Ok(())
 }

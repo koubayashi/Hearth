@@ -13,6 +13,7 @@ mod gog_account;
 mod saves;
 mod smart;
 mod snap_layouts;
+mod presence;
 mod rescan;
 mod storage;
 mod uninstall;
@@ -202,6 +203,24 @@ fn delete_play_session(app: AppHandle, state: State<AppState>, id: i64) -> CmdRe
 #[tauri::command]
 fn now_playing(app: AppHandle) -> Vec<tracking::NowPlaying> {
     tracking::now_playing(&app)
+}
+
+/// Pause from the tray or a game's panel; it resumes by itself once you're
+/// back in the game.
+#[tauri::command]
+async fn pause_timing(app: AppHandle, id: i64) {
+    tracking::pause(&app, id);
+}
+
+#[tauri::command]
+async fn resume_timing(app: AppHandle, id: i64) {
+    tracking::resume(&app, id);
+}
+
+/// Hearth has it wrong: stop timing this game until it closes.
+#[tauri::command]
+async fn stop_timing(app: AppHandle, id: i64) {
+    tracking::stop(&app, id);
 }
 
 #[derive(Serialize)]
@@ -822,6 +841,7 @@ fn main() {
             updates::watch(app.handle().clone());
             tracking::recover(app.handle());
             tracking::start(app.handle().clone());
+            presence::start();
             sync_all(app.handle().clone());
 
             // Started with Windows: stay in the tray, without even loading the
@@ -869,6 +889,13 @@ fn main() {
             gog_account::gog_sign_in,
             gog_account::gog_sign_out,
             now_playing,
+            pause_timing,
+            resume_timing,
+            stop_timing,
+            tray::tray_menu_fit,
+            tray::tray_menu_hide,
+            tray::open_hearth,
+            tray::quit_hearth,
             steam_set_api_key,
             steam_sign_in,
             steam_sign_out,
@@ -903,6 +930,7 @@ fn main() {
             smart::set_entity_parent,
             artwork::reset_artwork,
             collections::set_status,
+            collections::set_idle_mode,
             collections::list_collections,
             collections::create_collection,
             collections::rename_collection,

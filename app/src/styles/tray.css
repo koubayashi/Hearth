@@ -1,0 +1,80 @@
+/* ---------- the time being counted, wherever a running game shows ---------- */
+.sitting { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sitting.live { color: var(--accent); font-weight: 600; }
+.sitting.paused { color: var(--ink-2); font-weight: 500; }
+.btn.sm { height: 26px; padding: 0 10px; gap: 6px; font-size: var(--text-xs); }
+.btn.sm.icon { width: 26px; padding: 0; }
+.poster dd.sitting-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.lv-sitting b { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------- the tray icon's menu, in its own small window (tray.rs) ---------- */
+/* Windows' acrylic is under the page, but the tone is the material: mostly
+   opaque, so the menu reads as Hearth's deep glass rather than Windows' grey,
+   with a breath of the accent at the top and a lit edge, like the app's panels. */
+html.tray-window, html.tray-window body { background: transparent; overflow: hidden; }
+html.tray-window #root { height: auto; max-width: 324px; }
+
+/* Windows rounds the window at 8px and draws no border of its own (tray.rs).
+   Its edge is a hairline of the accent, along the same curve. */
+.tray {
+  padding: 6px; outline: none; font-size: var(--text-sm); color: var(--ink);
+  border-radius: 8px;
+  background:
+    radial-gradient(130% 120px at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent),
+    linear-gradient(180deg, color-mix(in srgb, var(--ink) 3%, transparent), transparent 45%),
+    var(--base);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  animation: tray-in 150ms var(--ease-out);
+}
+@keyframes tray-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .tray { animation: none; } }
+@media (prefers-reduced-transparency: reduce) { .tray { background: var(--base-2); } }
+@media (prefers-contrast: more) { .tray { background: var(--base); box-shadow: inset 0 0 0 1px var(--ink); } }
+
+.tray-sep { height: 1px; margin: 6px 2px; background: var(--line); }
+.tray-cap { padding: 6px 8px 3px; font-size: var(--text-xs); font-weight: 600; color: var(--ink-3); }
+.tray-note { padding: 6px 10px 2px; font-size: var(--text-xs); color: var(--ink-2); }
+
+.tray-row {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 36px; padding: 4px 8px; border-radius: var(--radius-control); cursor: default;
+}
+button.tray-row:hover, button.tray-row:focus-visible { background: var(--line); }
+button.tray-row:active { background: var(--line-strong); }
+button.tray-row:is(:focus-visible, [data-kbd]) { background: var(--line); outline: 2px solid var(--ink); outline-offset: -2px; }
+.tray .btn[data-kbd] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tray .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray .m { font-size: var(--text-xs); color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tray .ic { width: 24px; display: grid; place-items: center; color: var(--ink-2); }
+
+/* A recent game: its date gives way to "Play" under the pointer or focus. */
+.tray-game .go { display: none; color: var(--accent); font-weight: 600; }
+.tray-game:is(:hover, :focus-visible, [data-kbd]) .go { display: inline; }
+.tray-game:is(:hover, :focus-visible, [data-kbd]) .when { display: none; }
+
+.tray-thumb { flex: none; width: 24px; height: 32px; overflow: hidden; border-radius: 3px; background: var(--line); }
+.tray-thumb > img, .tray-thumb > .art-fallback { display: block; width: 100%; height: 100%; object-fit: cover; font-size: 0; }
+
+.tray-update .tray-dot { flex: none; width: 8px; height: 8px; margin: 0 8px; border-radius: 50%; background: var(--accent); }
+
+/* A game being timed: the one live thing, so the one thing with its art. */
+.tray-card {
+  position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: center; gap: 10px;
+  padding: 10px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.tray-card + .tray-card { margin-top: 4px; }
+.tray-card-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.tray-card::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--base) 45%, transparent), var(--base) 72%);
+}
+.tray-card .tray-thumb { width: 36px; height: 48px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
+.tray-card.paused .tray-thumb { filter: grayscale(0.7) brightness(0.8); }
+.tray-card .two { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tray-card .two .t { font-weight: 600; }
+.tray-card .sitting { font-size: var(--text-xs); }
+.tray-card .acts { display: flex; gap: 4px; }
+.poster dd small.idle-split { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.history-idle { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.history-idle .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.history-idle .text span { font-size: var(--text-xs); color: var(--ink-3); }

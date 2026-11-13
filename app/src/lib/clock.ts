@@ -1,3 +1,4 @@
+import type { NowPlaying } from "./types";
 import { useEffect, useState } from "react";
 
 /** Unix seconds now, refreshed every `everyMs` while `ticking`: for times
@@ -14,5 +15,9 @@ export function useNowSecs(ticking: boolean, everyMs = 30_000): number {
   return now;
 }
 
-/** Seconds of the session still running, or 0. */
-export const liveSecs = (playingSince: number | null, now: number) => (playingSince ? Math.max(0, now - playingSince) : 0);
+/** Seconds of the session still running, or 0 (nothing running, or paused).
+ *  Earlier parts of a paused sitting are already in the game's playtime. */
+export const liveSecs = (p: NowPlaying | null | undefined, now: number) => (p?.started_at ? Math.max(0, now - p.started_at) : 0);
+
+/** The time on screen while a game runs: this sitting so far, pauses left out. */
+export const sittingSecs = (p: NowPlaying | null | undefined, now: number) => (p ? p.before_secs + liveSecs(p, now) : 0);

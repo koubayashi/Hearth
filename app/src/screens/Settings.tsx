@@ -810,6 +810,7 @@ function BackupSection() {
 
 function Startup() {
   const { enabled, toggle } = useStartWithWindows();
+  const { idleTime } = usePrefs();
   return (
     <section id="settings-playtime">
       <h2>Playtime</h2>
@@ -828,6 +829,23 @@ function Startup() {
             disabled={enabled === null}
             onClick={toggle}
           />
+        </div>
+        <div className="setting">
+          <div className="text">
+            <b>Idle time</b>
+            <span>
+              {idleTime === "count"
+                ? "Every minute a game is open counts, from launch to close, as the stores count it."
+                : "A game left open with no input for 10 minutes, or behind another window for 5 (10 if it still shows on another screen), is idle. That time is shown on its own, and play picks up when you're back in the game."}
+            </span>
+          </div>
+          <div className="seg seg-boxed" role="group" aria-label="Idle time">
+            {(["count", "separate"] as const).map((m) => (
+              <button key={m} data-nav aria-pressed={idleTime === m} onClick={() => setPrefs({ idleTime: m })}>
+                {m === "count" ? "Count as play" : "Keep separate"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </section>

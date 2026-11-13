@@ -4,6 +4,45 @@ What changed in each Hearth release, newest first. Each version's section
 becomes its GitHub release notes, so the release build won't publish a
 version that has no section here.
 
+## Unreleased
+
+### New
+
+- **The tray menu in Hearth's own look.** Right-click the tray icon: the
+  game you're playing at the top with its art and its time, your recent
+  games with their covers, **Open Hearth** and **Quit Hearth**, and the
+  update first when one is ready. Arrow keys move, Enter picks, Esc or a
+  click elsewhere closes it. Left-click still opens Hearth.
+- **Pause timing.** Pause a game from the tray, its panel or the Console
+  view, and the time stops while the game stays open. It picks up again
+  by itself as soon as you're back in the game and press anything; there's
+  **Resume** too. Paused time shows in History as a gap between two
+  sessions.
+- **Idle time, kept separate.** A game left open with no keyboard, mouse or
+  controller input for 10 minutes, or behind another window for 5 (10 if it
+  still shows on another screen), is idle from when you left. Typing in
+  Discord or a browser doesn't count as playing. Play picks up again as soon
+  as you're back in the game. While idle the game shows **Idle**, and the
+  tray icon gets a small pause mark. A game's panel shows the split under
+  its total, as in "38h active · 2h idle", once there are 10 minutes of it.
+  Locking the screen counts as idle too.
+- **Settings › Playtime › Idle time**: **Keep separate**, or **Count as
+  play** to count every minute a game is open, as the stores do. A game can
+  have its own choice, from its play history.
+- The **Playing** status is now **In progress**, with a half-filled dot,
+  so it can't be mistaken for a game running now.
+- A stopwatch marks the time being counted now, in the tray, the game's
+  panel and the Console view, so it can't be taken for a total.
+
+### Fixed
+
+- The list view's "Playing now" time stayed where it was when the game was
+  selected. It counts up now, and Play time includes the session running.
+
+### Removed
+
+- The plain Windows tray menu, replaced by Hearth's own.
+
 ## 0.3.1
 
 Hearth tells you when an update is ready, notices installs by itself, and

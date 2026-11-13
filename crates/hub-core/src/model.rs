@@ -110,6 +110,12 @@ pub struct Game {
     /// Ways to play the user added (a script, a mod loader, another exe).
     #[serde(default)]
     pub launch_options: Vec<LaunchOption>,
+    /// Of `playtime_secs`, the time the game ran while you were idle.
+    #[serde(default)]
+    pub idle_secs: i64,
+    /// This game's own choice about idle time; None follows the setting.
+    #[serde(default)]
+    pub idle_mode: Option<IdleMode>,
 }
 
 /// A way to play a game besides its store's own launch, e.g. a server
@@ -155,6 +161,30 @@ impl GameStatus {
 
     pub fn parse(s: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|x| x.as_str() == s)
+    }
+}
+
+/// What happens to a game's idle time (running while you're away or in
+/// another window).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IdleMode {
+    /// Counts as play, as the stores count it: launch to close.
+    Count,
+    /// Kept apart from play and shown on its own.
+    Separate,
+}
+
+impl IdleMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IdleMode::Count => "count",
+            IdleMode::Separate => "separate",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [IdleMode::Count, IdleMode::Separate].into_iter().find(|x| x.as_str() == s)
     }
 }
 

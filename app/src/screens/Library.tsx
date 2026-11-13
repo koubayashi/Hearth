@@ -239,7 +239,7 @@ export function Library({
       <Poster
         ref={primaryRef}
         game={focused}
-        playingSince={playing.find((p) => p.game_id === focused?.id)?.started_at ?? null}
+        session={playing.find((p) => p.game_id === focused?.id) ?? null}
         onPrimary={onPrimary}
         onToggleHidden={onToggleHidden}
         onToggleFavorite={onToggleFavorite}

@@ -1,5 +1,5 @@
 import type { LaunchOption, LaunchOptionInput, Via } from "./types";
-import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, StoreId, UpdateStatus } from "./types";
+import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, IdleMode, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, StoreId, UpdateStatus } from "./types";
 
 // ?sgdb in the URL shows Settings as if a key were saved, to design that state.
 const demoSgdb = typeof location !== "undefined" && location.search.includes("sgdb");
@@ -93,6 +93,20 @@ const allSeeds: Seed[] =
         return [round ? `${title} ${round + 1}` : title, ...rest];
       })
     : seeds;
+
+const playingListeners = new Set<(payload: unknown) => void>();
+const demoPlayingParam = typeof location !== "undefined" ? new URLSearchParams(location.search).get("playing") : null;
+let demoPlaying: NowPlaying[] = (() => {
+  if (demoPlayingParam === null) return [];
+  const now = Math.floor(Date.now() / 1000);
+  const first: NowPlaying = demoPlayingParam === "paused"
+    ? { game_id: 1, title: "", started_at: null, before_secs: 4320, paused: "manual" }
+    : { game_id: 1, title: "", started_at: now - 4320, before_secs: 0, paused: null };
+  const second: NowPlaying = { game_id: 3, title: "", started_at: null, before_secs: 480, paused: "away" };
+  return demoPlayingParam === "2" ? [first, second] : [first];
+})();
+
+const withTitles = () => demoPlaying.map((p) => ({ ...p, title: games.find((g) => g.id === p.game_id)?.title ?? "" }));
 
 const games: Game[] = allSeeds.map(([title, appid, store, installed, hours, daysAgo], i) => ({
   id: i + 1,
@@ -188,7 +202,30 @@ export const mockBackend = {
   async xboxSignOut() {},
   async gogSignIn() {},
   async gogSignOut() {},
-  nowPlaying: async (): Promise<NowPlaying[]> => [],
+  // ?playing shows a game being timed, ?playing=paused one paused, ?playing=2
+  // two games. Pause and Resume work, for the tray menu and the panel.
+  nowPlaying: async (): Promise<NowPlaying[]> => withTitles(),
+  async pauseTiming(id: number) {
+    const now = Math.floor(Date.now() / 1000);
+    demoPlaying = demoPlaying.map((p) =>
+      p.game_id === id && p.started_at ? { ...p, before_secs: p.before_secs + now - p.started_at, started_at: null, paused: "manual" } : p,
+    );
+    playingListeners.forEach((l) => l(withTitles()));
+  },
+  async resumeTiming(id: number) {
+    demoPlaying = demoPlaying.map((p) => (p.game_id === id ? { ...p, started_at: Math.floor(Date.now() / 1000), paused: null } : p));
+    playingListeners.forEach((l) => l(withTitles()));
+  },
+  async stopTiming(id: number) {
+    demoPlaying = demoPlaying.filter((p) => p.game_id !== id);
+    playingListeners.forEach((l) => l(withTitles()));
+  },
+  async trayMenuFit(_height: number, _show: boolean) {},
+  async trayMenuHide() {},
+  async openHearth() {},
+  async quitHearth() {},
+  onTrayOpen: noop,
+  onTrayKey: noop,
   // A few months of evening sessions on a handful of games, deterministic.
   async playSessions(): Promise<PlaySession[]> {
     const out: PlaySession[] = [];
@@ -272,6 +309,10 @@ export const mockBackend = {
   },
   async openInstallFolder(_id: number) {},
   async openStorePage(_id: number) {},
+  async setIdleMode(id: number, mode: IdleMode | null) {
+    const g = games.find((g) => g.id === id);
+    if (g) g.idle_mode = mode;
+  },
   async setStatus(id: number, status: GameStatus | null) {
     const g = games.find((g) => g.id === id);
     if (g) g.status = status;
@@ -387,7 +428,11 @@ export const mockBackend = {
   async removeGameFolder(_path: string): Promise<string[]> {
     return [];
   },
-  onNowPlaying: noop,
+  onNowPlaying: async (cb: (payload: unknown) => void) => {
+    const entry = (p: unknown) => cb(p);
+    playingListeners.add(entry);
+    return () => void playingListeners.delete(entry);
+  },
   onLibraryChanged: async (cb: (payload: unknown) => void) => {
     // Each subscription is its own entry, as with Tauri's events: React's dev
     // mode subscribes the same handler twice and unsubscribes one.

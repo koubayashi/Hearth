@@ -686,7 +686,9 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 .status-pick .status-dot { width: 12px; }
 .status-dot { width: 18px; display: grid; place-items: center; flex: none; }
 .status-dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
-.status-dot.playing::before { background: #6fcf97; }
+/* In progress: a half-filled circle, partway through. Not green: a green
+   dot reads as "running now", which is the stopwatch's job. */
+.status-dot.playing::before { width: 7px; height: 7px; background: linear-gradient(90deg, var(--ink-2) 50%, transparent 50%); box-shadow: 0 0 0 1.5px var(--ink-2); }
 .status-dot.backlog::before { background: #f2c94c; }
 .status-dot.completed::before { background: #56ccf2; }
 .status-dot.abandoned::before { background: #eb5757; }

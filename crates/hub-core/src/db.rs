@@ -41,6 +41,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/012_smart_again.sql"),
     include_str!("../migrations/013_smart_compilations.sql"),
     include_str!("../migrations/014_versions.sql"),
+    include_str!("../migrations/015_idle.sql"),
 ];
 
 pub struct Db {
@@ -946,6 +947,7 @@ impl Db {
         }
         tx.execute("UPDATE store_entries SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
         tx.execute("UPDATE sessions SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
+        tx.execute("UPDATE idle_time SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
         tx.execute(
             "INSERT OR IGNORE INTO collection_games (collection_id, game_id)
              SELECT collection_id, ?1 FROM collection_games WHERE game_id = ?2",
@@ -1069,6 +1071,34 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Time a game ran while its player was idle: part of the time it was
+    /// open, not of the time played.
+    pub fn record_idle(&self, game_id: i64, started_at: i64, ended_at: i64) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO idle_time (game_id, started_at, ended_at) VALUES (?1, ?2, ?3)",
+            params![game_id, started_at, ended_at],
+        )?;
+        Ok(())
+    }
+
+    /// One game's own choice about idle time; None follows the setting.
+    pub fn set_idle_mode(&self, game_id: i64, mode: Option<IdleMode>) -> Result<()> {
+        self.conn.execute("UPDATE games SET idle_mode = ?2 WHERE id = ?1", params![game_id, mode.map(IdleMode::as_str)])?;
+        Ok(())
+    }
+
+    /// Games with their own choice about idle time.
+    pub fn idle_modes(&self) -> Result<Vec<(i64, IdleMode)>> {
+        let mut stmt = self.conn.prepare("SELECT id, idle_mode FROM games WHERE idle_mode IS NOT NULL")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, mode) = row?;
+            out.extend(IdleMode::parse(&mode).map(|m| (id, m)));
+        }
+        Ok(out)
+    }
+
     /// Forget one recorded session (a game left running overnight); the
     /// game's playtime and last played follow, as both come from sessions.
     pub fn delete_session(&self, id: i64) -> Result<()> {
@@ -1189,6 +1219,18 @@ impl Db {
             }
         }
 
+        let mut idle: HashMap<i64, i64> = HashMap::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT game_id, SUM(ended_at - started_at) FROM idle_time
+                 WHERE ?1 IS NULL OR game_id = ?1 GROUP BY game_id",
+            )?;
+            for row in stmt.query_map([only], |r| Ok((r.get(0)?, r.get(1)?)))? {
+                let (id, secs) = row?;
+                idle.insert(id, secs);
+            }
+        }
+
         let mut in_collections: HashMap<i64, Vec<i64>> = HashMap::new();
         {
             let mut stmt = self.conn.prepare(
@@ -1214,7 +1256,7 @@ impl Db {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at, status, save_played_secs FROM games
+            "SELECT id, title, favorite, added_at, cover, hero, logo, description, save_seen_at, status, save_played_secs, idle_mode FROM games
              WHERE ?1 IS NULL OR id = ?1",
         )?;
         let rows = stmt.query_map([only], |r| {
@@ -1230,15 +1272,19 @@ impl Db {
                 r.get::<_, Option<i64>>(8)?,
                 r.get::<_, Option<String>>(9)?,
                 r.get::<_, Option<i64>>(10)?,
+                r.get::<_, Option<String>>(11)?,
             ))
         })?;
 
         let mut drives = Drives::default();
         let mut games = Vec::new();
         for row in rows {
-            let (id, title, favorite, added_at, cover, hero, logo, description, save_seen, status, save_played) = row?;
+            let (id, title, favorite, added_at, cover, hero, logo, description, save_seen, status, save_played, idle_mode) = row?;
+            let idle_secs = idle.get(&id).copied().unwrap_or(0);
             let with_last = entries.remove(&id).unwrap_or_default();
-            let (hub_secs, hub_last) = sessions.get(&id).copied().unwrap_or((0, 0));
+            let (played_secs, hub_last) = sessions.get(&id).copied().unwrap_or((0, 0));
+            // Idle time is time the game was open, as a store counts it.
+            let hub_secs = played_secs + idle_secs;
 
             let store_total = with_last
                 .iter()
@@ -1292,6 +1338,8 @@ impl Db {
                 collections: in_collections.remove(&id).unwrap_or_default(),
                 offline_drive,
                 launch_options: ways.remove(&id).unwrap_or_default(),
+                idle_secs,
+                idle_mode: idle_mode.as_deref().and_then(IdleMode::parse),
             });
         }
         Ok(games)
@@ -1583,6 +1631,32 @@ mod tests {
         e.store_playtime_secs = Some(5400);
         db.sync_store(StoreId::Steam, &[e], 3000).unwrap();
         assert_eq!(db.game(id).unwrap().unwrap().playtime_secs, 5400);
+    }
+
+    #[test]
+    fn idle_time_is_part_of_the_time_open_but_kept_apart() {
+        let mut db = Db::open_in_memory().unwrap();
+        let mut e = entry(StoreId::Steam, "1", "Hades", true);
+        e.store_playtime_secs = Some(3600);
+        db.sync_store(StoreId::Steam, &[e.clone()], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+
+        // Played 30 min, then left it open 10 min.
+        db.record_session(id, 1000, 2800, SessionSource::Tracker).unwrap();
+        db.record_idle(id, 2800, 3400).unwrap();
+        let g = db.game(id).unwrap().unwrap();
+        assert_eq!((g.playtime_secs, g.idle_secs), (6000, 600));
+        // Steam counted all 40 minutes: the same total, not 50 minutes.
+        e.store_playtime_secs = Some(6000);
+        db.sync_store(StoreId::Steam, &[e], 4000).unwrap();
+        assert_eq!(db.game(id).unwrap().unwrap().playtime_secs, 6000);
+        // Idle time isn't play: History doesn't list it.
+        assert_eq!(db.sessions().unwrap().len(), 1);
+
+        assert_eq!(db.game(id).unwrap().unwrap().idle_mode, None);
+        db.set_idle_mode(id, Some(IdleMode::Count)).unwrap();
+        assert_eq!(db.game(id).unwrap().unwrap().idle_mode, Some(IdleMode::Count));
+        assert_eq!(db.idle_modes().unwrap(), [(id, IdleMode::Count)]);
     }
 
     /// A drive letter that isn't connected on this machine.

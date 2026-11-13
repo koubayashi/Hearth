@@ -1,13 +1,15 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Game, Via } from "../lib/types";
+import type { Game, NowPlaying, Via } from "../lib/types";
 import { defaultWay, folderGone, FOLDER_GONE_HINT, storeName } from "../lib/ways";
 import { STATUSES, STORE_LABEL } from "../lib/types";
-import { formatBytes, formatGameLastPlayed, formatGamePlaytime, formatPlaytime, releaseYear } from "../lib/format";
+import { formatBytes, formatGameLastPlayed, formatGamePlaytime, releaseYear } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import { useGameInfo } from "../lib/gameInfo";
 import { liveSecs, useNowSecs } from "../lib/clock";
+import { idleSplit } from "../lib/idle";
 import { Art } from "./Art";
+import { PauseButton, SittingText } from "./Timing";
 import { Icon } from "./Icon";
 import { StoreIcon } from "./StoreIcon";
 import { StoreMatch } from "./StoreMatch";
@@ -31,8 +33,8 @@ export const Poster = forwardRef<
   HTMLButtonElement,
   {
     game: Game | null;
-    /** Unix seconds when the tracker saw this game start, if it is running now. */
-    playingSince: number | null;
+    /** The tracker's timing of this game, if it is running now. */
+    session: NowPlaying | null;
     onPrimary: (g: Game, via?: Via) => void;
     onToggleHidden: (g: Game) => void;
     onToggleFavorite: (g: Game) => void;
@@ -43,7 +45,7 @@ export const Poster = forwardRef<
      *  look like the library. */
     plain?: boolean;
   }
->(function Poster({ game, playingSince, onPrimary, onToggleHidden, onToggleFavorite, onBack, request, plain = false }, primaryRef) {
+>(function Poster({ game, session, onPrimary, onToggleHidden, onToggleFavorite, onBack, request, plain = false }, primaryRef) {
   // Where the "More options" button sits while its menu is open.
   const [menu, setMenu] = useState<DOMRect | null>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -57,11 +59,13 @@ export const Poster = forwardRef<
   const waysRef = useRef<HTMLButtonElement>(null);
   const [nonce, setNonce] = useState(0);
   const { details, install } = useGameInfo(game, nonce);
-  const { showScores, blurPosterArt } = usePrefs();
+  const { showScores, blurPosterArt, idleTime } = usePrefs();
   const links = useGameLinks(game?.id ?? null);
   // While the game runs, its times grow on screen; they used to be worked
   // out once and stay at "Playing now · 1m".
-  const live = liveSecs(playingSince, useNowSecs(playingSince !== null));
+  const now = useNowSecs(session !== null);
+  const live = liveSecs(session, now);
+  const split = game ? idleSplit(game, idleTime, live) : null;
 
   useEffect(() => {
     setMenu(null);
@@ -193,17 +197,21 @@ export const Poster = forwardRef<
           <dd>
             <button className="link" data-nav title="Every session, by month" onClick={() => setHistory(true)}>
               {/* With the session still running added in. */}
-              {formatGamePlaytime(game.playtime_secs + live, playingSince ?? game.last_played)}
+              {formatGamePlaytime(game.playtime_secs + live, session?.started_at ?? game.last_played)}
             </button>
+            {split && <small className="idle-split">{split}</small>}
           </dd>
           {/* "Playing now" sits with Last played, so it can't be confused with
-              the Playing status chip above. */}
+              the In progress status chip above. */}
           <dt>Last played</dt>
-          <dd className={playingSince ? "playing" : undefined}>
-            {playingSince
-              ? live < 60 ? "Playing now" : `Playing now · ${formatPlaytime(live)}`
-              : formatGameLastPlayed(game.last_played, game.playtime_secs)}
-          </dd>
+          {session ? (
+            <dd className="sitting-row">
+              <SittingText session={session} now={now} />
+              <PauseButton session={session} />
+            </dd>
+          ) : (
+            <dd>{formatGameLastPlayed(game.last_played, game.playtime_secs)}</dd>
+          )}
           <dt>Install</dt>
           <dd>
             {game.installed

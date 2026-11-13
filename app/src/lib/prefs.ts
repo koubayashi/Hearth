@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { SortKey } from "./arrange";
+import type { IdleMode } from "./types";
 
 export type Tone = "graphite" | "gallery" | "ember" | "spruce" | "rosewood" | "harbor" | "mono";
 /** "system" follows Windows' app mode (Settings > Personalization > Colors). */
@@ -43,6 +44,10 @@ export interface Prefs {
   consoleTipSeen: boolean;
   /** "Combine these versions?" pairs the user said are different games. */
   dismissedCombines: string[];
+  /** Time away from a running game (no input, or another window in front)
+   *  isn't counted. Read by the tracker from prefs.json. */
+  /** Idle time (the game open while you're away): counted as play, or kept separate. */
+  idleTime: IdleMode;
 }
 
 /** Each tone's ground and accent in both modes, for the swatches (tokens.css has the full sets). */
@@ -63,11 +68,15 @@ export const shownMode = (p: Prefs): "dark" | "light" =>
   p.mode === "system" ? (systemDark?.matches === false ? "light" : "dark") : p.mode;
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", consoleTipSeen: false, dismissedCombines: [] };
+const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", consoleTipSeen: false, dismissedCombines: [], idleTime: "separate" };
 
 function load(): Prefs {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    // Before "Idle time" there was a "Don't count time away" switch.
+    if (saved.idleTime === undefined && saved.pauseWhenAway === false) saved.idleTime = "count";
+    delete saved.pauseWhenAway;
+    return { ...DEFAULTS, ...saved };
   } catch {
     return DEFAULTS;
   }
@@ -103,6 +112,17 @@ function recolor(apply: () => void) {
 systemDark?.addEventListener("change", () => {
   if (current.mode === "system") recolor(() => applyPrefs(current));
 });
+
+// Another window (the tray menu, or the main window while the menu is open)
+// changed the settings: take them, so tone and mode match everywhere.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== KEY) return;
+    current = load();
+    applyPrefs(current);
+    listeners.forEach((l) => l());
+  });
+}
 
 export function usePrefs(): Prefs {
   return useSyncExternalStore(

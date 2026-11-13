@@ -9,6 +9,8 @@ import { Art } from "../components/Art";
 import { isMenuKey } from "../components/CoverGrid";
 import { GameMenu, type PanelAction } from "../components/GameMenu";
 import { Icon } from "../components/Icon";
+import { PauseButton } from "../components/Timing";
+import { liveSecs, sittingSecs, useNowSecs } from "../lib/clock";
 import { HiddenBar } from "../components/HiddenBar";
 import { savedInfo, useGameInfo, useSavedInfo } from "../lib/gameInfo";
 import { NO_NARROW, sortGames, type InfoOf } from "../lib/arrange";
@@ -323,7 +325,7 @@ export function ListView({
           plain={hiddenView}
           nonce={nonce}
           playRef={playRef}
-          playingSince={playing.find((p) => p.game_id === focused.id)?.started_at ?? null}
+          session={playing.find((p) => p.game_id === focused.id) ?? null}
           onPrimary={onPrimary}
           onToggleHidden={onToggleHidden}
           onToggleFavorite={onToggleFavorite}
@@ -344,7 +346,7 @@ function Detail({
   nonce,
   plain,
   playRef,
-  playingSince,
+  session,
   onPrimary,
   onToggleHidden,
   onToggleFavorite,
@@ -360,7 +362,7 @@ function Detail({
   /** No wide art: the hidden view. */
   plain: boolean;
   playRef: React.RefObject<HTMLButtonElement | null>;
-  playingSince: number | null;
+  session: NowPlaying | null;
   onPrimary: (g: Game, via?: Via) => void;
   onToggleHidden: (g: Game) => void;
   onToggleFavorite: (g: Game) => void;
@@ -368,6 +370,7 @@ function Detail({
   onBack: () => void;
 }) {
   const { details, install } = useGameInfo(game, nonce);
+  const now = useNowSecs(session !== null);
   const [logoFailed, setLogoFailed] = useState(false);
   useEffect(() => setLogoFailed(false), [game.id]);
   const stores = [...new Set(game.entries.map((e) => e.store))];
@@ -435,19 +438,26 @@ function Detail({
             <Icon name="chevronDown" />
           </button>
         )}
-        <div className="lv-stat">
-          <span>{playingSince ? "Playing now" : "Last played"}</span>
-          <b>
-            {playingSince
-              ? formatPlaytime(Math.max(60, Math.floor(Date.now() / 1000) - playingSince))
-              : formatGameLastPlayed(game.last_played, game.playtime_secs)}
-          </b>
-        </div>
+        {session ? (
+          <div className="lv-stat lv-sitting">
+            <span>{session.paused ? (session.paused === "away" ? "Idle" : "Paused") : "Playing now"}</span>
+            <b>
+              <Icon name={session.paused ? "pause" : "stopwatch"} size={session.paused ? 11 : 14} />
+              {session.paused && sittingSecs(session, now) < 60 ? "Under a minute" : formatPlaytime(Math.max(60, sittingSecs(session, now)))}
+            </b>
+          </div>
+        ) : (
+          <div className="lv-stat">
+            <span>Last played</span>
+            <b>{formatGameLastPlayed(game.last_played, game.playtime_secs)}</b>
+          </div>
+        )}
+        {session && <PauseButton session={session} />}
         <div className="lv-stat">
           <span>Play time</span>
           <b>
             <button className="link" data-nav title="Every session, by month" onClick={onHistory}>
-              {formatGamePlaytime(game.playtime_secs, game.last_played)}
+              {formatGamePlaytime(game.playtime_secs + liveSecs(session, now), session?.started_at ?? game.last_played)}
             </button>
           </b>
         </div>

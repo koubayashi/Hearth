@@ -33,3 +33,6 @@ DESIGN.md
 *.db-shm
 *.db.incoming
 *.hearthbackup
+
+# Local test tools (the fake game for away detection)
+/tools/probe/

@@ -37,6 +37,10 @@ export interface Game {
   description: string | null;
   entries: StoreEntry[];
   status: GameStatus | null;
+  /** Of playtime_secs, the time the game ran while you were idle. */
+  idle_secs?: number;
+  /** This game's own choice about idle time; null follows the setting. */
+  idle_mode?: IdleMode | null;
   /** Ids of the collections this game is in. */
   collections: number[];
   /** "E:" when the game's only install is on a drive that isn't connected. */
@@ -73,9 +77,11 @@ export interface LaunchOptionInput {
 }
 
 export type GameStatus = "playing" | "backlog" | "completed" | "abandoned";
+/** What happens to idle time: it counts as play, or is kept separate. */
+export type IdleMode = "count" | "separate";
 
 export const STATUSES: { id: GameStatus; label: string }[] = [
-  { id: "playing", label: "Playing" },
+  { id: "playing", label: "In progress" },
   { id: "backlog", label: "Backlog" },
   { id: "completed", label: "Completed" },
   { id: "abandoned", label: "Abandoned" },
@@ -126,8 +132,12 @@ export interface Accounts {
 export interface NowPlaying {
   game_id: number;
   title: string;
-  /** Unix seconds. */
-  started_at: number;
+  /** When the session being counted started (unix seconds); null while paused. */
+  started_at: number | null;
+  /** Seconds counted earlier this sitting, before a pause. */
+  before_secs: number;
+  /** "manual": the Pause button. "away": Hearth saw you step away. */
+  paused: "manual" | "away" | null;
 }
 
 /** Store-page details, from Steam's public store API. */
