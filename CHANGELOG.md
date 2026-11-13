@@ -33,6 +33,9 @@ version that has no section here.
   so it can't be mistaken for a game running now.
 - A stopwatch marks the time being counted now, in the tray, the game's
   panel and the Console view, so it can't be taken for a total.
+- **Taskbar jump list.** Right-click Hearth's taskbar button: your five
+  most recent games, each with its own icon, start straight from there,
+  and **Console** opens Hearth in the Console view.
 
 ### Fixed
 

@@ -10,6 +10,7 @@ mod drives;
 mod errors;
 mod folders;
 mod gog_account;
+mod jumplist;
 mod saves;
 mod smart;
 mod snap_layouts;
@@ -117,6 +118,10 @@ fn set_favorite(state: State<AppState>, id: i64, favorite: bool) -> CmdResult<()
 /// install.
 #[tauri::command]
 fn launch_game(state: State<AppState>, id: i64, via: Option<ways::Via>) -> CmdResult<()> {
+    play(&state, id, via)
+}
+
+pub(crate) fn play(state: &AppState, id: i64, via: Option<ways::Via>) -> CmdResult<()> {
     let game = lock(&state.db)
         .game(id)
         .map_err(err)?
@@ -827,7 +832,11 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if jumplist::handle_args(app, &args) {
+                tray::show_main(app);
+            }
+        }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
@@ -836,6 +845,7 @@ fn main() {
         .manage(autobackup::AutoBackup::default())
         .manage(updates::Updates::default())
         .manage(backup::PendingWays::default())
+        .manage(jumplist::Pending::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -945,13 +955,17 @@ fn main() {
 
             // Started with Windows: stay in the tray, without even loading the
             // interface, until the user opens Hearth.
-            if std::env::args().any(|a| a == "--minimized") {
+            // Started from the jump list with a game: it starts, Hearth stays
+            // in the tray.
+            let args: Vec<String> = std::env::args().collect();
+            if args.iter().any(|a| a == "--minimized") || !jumplist::handle_args(app.handle(), &args) {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.destroy();
                 }
             } else {
                 tray::show_main(app.handle());
             }
+            jumplist::watch(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -995,6 +1009,7 @@ fn main() {
             tray::tray_menu_hide,
             tray::open_hearth,
             tray::quit_hearth,
+            jumplist::take_jump_request,
             steam_set_api_key,
             steam_sign_in,
             steam_sign_out,

@@ -103,6 +103,21 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [prefs.consoleMode, prefs.consoleTipSeen]);
+  // The taskbar jump list's Console task, or one of its games that couldn't
+  // start: waiting when Hearth opened from it, else announced (jumplist.rs).
+  useEffect(() => {
+    const take = () =>
+      api
+        .takeJumpRequest()
+        .then((r) => {
+          if (r.console) setPrefs({ consoleMode: true });
+          if (r.error) say(r.error);
+        })
+        .catch(() => {});
+    void take();
+    const off = api.onJumpList(() => void take());
+    return () => void off.then((f) => f());
+  }, []);
   // Escape leaves the hidden view (back to the library) and Storage (back to
   // Stats), once nothing nearer used it: the game panel, a menu or a dialog,
   // or a search box clearing itself.

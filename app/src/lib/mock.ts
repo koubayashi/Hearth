@@ -223,6 +223,9 @@ export const mockBackend = {
   async trayMenuFit(_height: number, _show: boolean) {},
   async trayMenuHide() {},
   async openHearth() {},
+  async takeJumpRequest() {
+    return { console: false, error: null as string | null };
+  },
   async quitHearth() {},
   onTrayOpen: noop,
   onTrayKey: noop,
@@ -447,6 +450,7 @@ export const mockBackend = {
   onSmartChanged: noop,
   onAutoBackup: noop,
   onSyncError: noop,
+  onJumpList: noop,
   // ?update=checking|downloading|ready|failed|updated shows that update state.
   async updateStatus(): Promise<UpdateStatus> {
     const state = new URLSearchParams(location.search).get("update");
