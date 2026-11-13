@@ -32,6 +32,16 @@ impl<T> Locked<T> for std::sync::Mutex<T> {
     }
 }
 
+/// An HTTP client that gives up after 30 seconds: a request that hangs (sleep,
+/// Wi-Fi switch) must not hold up the sync forever.
+pub(crate) fn http_client(user_agent: &str) -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent(user_agent)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("http client")
+}
+
 /// Artwork URLs a store can supply directly, before the metadata service exists.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Artwork {

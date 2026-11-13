@@ -23,7 +23,7 @@ pub struct Saves {
 impl Default for Saves {
     fn default() -> Self {
         Self {
-            http: reqwest::Client::builder().user_agent("Hearth/0.1 (game library)").build().expect("http client"),
+            http: crate::http_client("Hearth/0.1 (game library)"),
         }
     }
 }
@@ -267,10 +267,21 @@ pub fn resolve(path: &str, places: &Places, install_dir: Option<&Path>) -> Optio
     if !local || out.split('\\').any(|p| p.trim() == "..") {
         return None;
     }
-    // A path that resolves to a bare known folder would date every game.
-    let bare = [&places.appdata, &places.local_appdata, &places.user_profile, &places.documents, &places.program_data]
-        .iter()
-        .any(|p| out.eq_ignore_ascii_case(&p.to_string_lossy()));
+    // A path that resolves to a bare known folder would date every game; the
+    // bare install folder would date the game on every patch.
+    let bare = [
+        Some(places.appdata.as_path()),
+        Some(&places.local_appdata),
+        Some(&places.user_profile),
+        Some(&places.documents),
+        Some(&places.saved_games),
+        Some(&places.program_data),
+        Some(&places.public),
+        install_dir,
+    ]
+    .into_iter()
+    .flatten()
+    .any(|p| out.eq_ignore_ascii_case(p.to_string_lossy().replace('/', "\\").trim_end_matches('\\')));
     (!bare && out.len() > 3).then_some(out)
 }
 
@@ -517,6 +528,11 @@ mod tests {
         assert_eq!(resolve(r"{{p|game}}\save", &p, None), None, "needs an install folder");
         assert_eq!(resolve(r"{{p|game}}\save", &p, Some(Path::new(r"D:\Games\X"))).as_deref(), Some(r"D:\Games\X\save"));
         assert_eq!(resolve(r"{{p|appdata}}\", &p, None), None, "a bare known folder would date everything");
+        assert_eq!(resolve(r"{{p|userprofile\Saved Games}}", &p, None), None);
+        assert_eq!(resolve(r"{{p|public}}\", &p, None), None);
+        let game = Path::new(r"D:\Games\X\");
+        assert_eq!(resolve(r"{{p|game}}", &p, Some(game)), None, "a patch would date the game as played");
+        assert_eq!(resolve(r"{{p|game}}/", &p, Some(game)), None);
     }
 
     #[test]

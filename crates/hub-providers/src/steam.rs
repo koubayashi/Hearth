@@ -73,7 +73,7 @@ impl Steam {
         Self {
             root,
             auth: Mutex::new(auth),
-            http: reqwest::Client::builder().user_agent("Hearth/0.1").build().expect("http client"),
+            http: crate::http_client("Hearth/0.1"),
         }
     }
 

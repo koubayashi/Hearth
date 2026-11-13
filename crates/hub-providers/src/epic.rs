@@ -146,10 +146,7 @@ impl Epic {
         Self {
             manifests: PathBuf::from(r"C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests"),
             catalog_cache,
-            http: reqwest::Client::builder()
-                .user_agent("Hearth/0.1 (+https://github.com)")
-                .build()
-                .expect("http client"),
+            http: crate::http_client("Hearth/0.1 (+https://github.com)"),
             session: Mutex::new(session),
             catalog: Mutex::new(catalog),
             on_session,
@@ -160,11 +157,6 @@ impl Epic {
     /// When each game was last played, from the Epic launcher's own logs.
     fn last_played(&self) -> HashMap<String, i64> {
         crate::epic_logs::log_dir().map(|d| crate::epic_logs::last_played(&d)).unwrap_or_default()
-    }
-
-    pub fn with_manifests(mut self, dir: impl Into<PathBuf>) -> Self {
-        self.manifests = dir.into();
-        self
     }
 
     pub fn account_name(&self) -> Option<String> {
@@ -283,6 +275,10 @@ impl Epic {
 
     async fn get<T: serde::de::DeserializeOwned>(&self, url: &str, s: &Session) -> anyhow::Result<T> {
         let res = self.http.get(url).bearer_auth(&s.access_token).send().await?;
+        // A revoked token: start the silent re-sign-in, as GOG does.
+        if res.status().as_u16() == 401 {
+            bail!(SESSION_EXPIRED);
+        }
         if !res.status().is_success() {
             bail!("Epic returned {} for {}", res.status(), url.split('?').next().unwrap_or(url));
         }

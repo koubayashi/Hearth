@@ -39,7 +39,7 @@ pub struct Metadata {
 impl Default for Metadata {
     fn default() -> Self {
         Self {
-            http: reqwest::Client::builder().user_agent("Hearth/0.1").build().expect("http client"),
+            http: crate::http_client("Hearth/0.1"),
         }
     }
 }
@@ -63,28 +63,36 @@ impl Metadata {
 
     /// The real artwork addresses for Steam apps. Steam moved most artwork to
     /// content-hashed paths, so guessed URLs 404 for newer or updated games.
+    /// A batch that fails is skipped, so one bad batch doesn't drop the rest.
     pub async fn steam_art(&self, app_ids: &[u64]) -> anyhow::Result<std::collections::HashMap<u64, crate::Artwork>> {
         let mut out = std::collections::HashMap::new();
         for chunk in app_ids.chunks(50) {
-            let ids: Vec<serde_json::Value> = chunk.iter().map(|id| serde_json::json!({ "appid": id })).collect();
-            let input = serde_json::json!({
-                "ids": ids,
-                "context": { "language": "english", "country_code": "US" },
-                "data_request": { "include_assets": true },
-            });
-            let body: serde_json::Value = self
-                .http
-                .get(ASSETS_URL)
-                .query(&[("input_json", input.to_string())])
-                .send()
-                .await?
-                .error_for_status()?
-                .json()
-                .await
-                .context("reading Steam artwork")?;
-            out.extend(parse_assets(&body));
+            match self.steam_art_batch(chunk).await {
+                Ok(art) => out.extend(art),
+                Err(e) => eprintln!("Steam artwork batch failed: {e:#}"),
+            }
         }
         Ok(out)
+    }
+
+    async fn steam_art_batch(&self, chunk: &[u64]) -> anyhow::Result<std::collections::HashMap<u64, crate::Artwork>> {
+        let ids: Vec<serde_json::Value> = chunk.iter().map(|id| serde_json::json!({ "appid": id })).collect();
+        let input = serde_json::json!({
+            "ids": ids,
+            "context": { "language": "english", "country_code": "US" },
+            "data_request": { "include_assets": true },
+        });
+        let body: serde_json::Value = self
+            .http
+            .get(ASSETS_URL)
+            .query(&[("input_json", input.to_string())])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
+            .context("reading Steam artwork")?;
+        Ok(parse_assets(&body))
     }
 
     /// Finds the Steam store page for a game from another store, by title.

@@ -152,7 +152,7 @@ impl GogWeb {
         let catalog_file = data_dir.join("gog-catalog.json");
         let catalog = std::fs::read_to_string(&catalog_file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         Self {
-            http: reqwest::Client::builder().user_agent("Hearth/0.1").build().expect("http client"),
+            http: crate::http_client("Hearth/0.1"),
             session: Mutex::new(session),
             on_session,
             renewing: tokio::sync::Mutex::new(()),
@@ -285,12 +285,15 @@ impl GogWeb {
             let c = self.catalog.locked();
             ids.iter().filter(|id| !c.get(*id).is_some_and(|p| p.described)).cloned().collect()
         };
+        // Only rewrite the cache file when something new was learned.
+        let mut changed = false;
         for batch in unknown.chunks(50) {
             let url = format!("https://api.gog.com/products?ids={}&expand=description", batch.join(","));
             let Ok(res) = self.http.get(url).send().await else { continue };
             let Ok(products) = res.json::<Vec<ApiProduct>>().await else { continue };
             let mut c = self.catalog.locked();
             for p in products {
+                changed = true;
                 let description = p
                     .description
                     .map(|d| crate::metadata::plain_text(if d.lead.trim().is_empty() { &d.full } else { &d.lead }))
@@ -322,7 +325,11 @@ impl GogWeb {
                     p.logo = image(g.logo);
                 }
                 p.art_checked = true;
+                changed = true;
             }
+        }
+        if !changed {
+            return;
         }
         let json = serde_json::to_string(&*self.catalog.locked());
         if let Ok(json) = json {

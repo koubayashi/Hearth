@@ -63,7 +63,7 @@ pub struct SteamGridDb {
 impl SteamGridDb {
     pub fn new(key: Option<String>) -> Self {
         Self {
-            http: reqwest::Client::builder().user_agent("Hearth/0.1").build().expect("http client"),
+            http: crate::http_client("Hearth/0.1"),
             key: Mutex::new(key.filter(|k| !k.is_empty())),
         }
     }

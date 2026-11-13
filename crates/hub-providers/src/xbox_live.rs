@@ -277,7 +277,7 @@ pub struct XboxLive {
 impl XboxLive {
     pub fn new(session: Option<Session>, on_session: SessionHook) -> Self {
         Self {
-            http: reqwest::Client::builder().user_agent("Hearth/0.1").build().expect("http client"),
+            http: crate::http_client("Hearth/0.1"),
             session: Mutex::new(session),
             on_session,
             renewing: tokio::sync::Mutex::new(()),
