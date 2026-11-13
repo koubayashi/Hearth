@@ -14,6 +14,7 @@ DECISIONS.md
 BACKLOG.md
 PRODUCT.md
 DESIGN.md
+FIX_LIST.md
 *.tsbuildinfo
 
 # Secrets: the updater signing key lives in ~/.tauri, sign-ins in Credential

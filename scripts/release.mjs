@@ -12,6 +12,15 @@ if (!/^\d+\.\d+\.\d+$/.test(version ?? "")) {
   process.exit(1);
 }
 const run = (cmd) => execSync(cmd, { stdio: "inherit" });
+// The release build takes its notes from this section and fails without one,
+// but only after the tag is pushed. Same check, before anything changes.
+const changelog = readFileSync("CHANGELOG.md", "utf8").split(/\r?\n/);
+const start = changelog.indexOf(`## ${version}`);
+const end = changelog.findIndex((line, i) => i > start && line.startsWith("## "));
+if (start < 0 || !changelog.slice(start + 1, end < 0 ? undefined : end).join("").trim()) {
+  console.error(`CHANGELOG.md needs a non-empty "## ${version}" section first.`);
+  process.exit(1);
+}
 // Untracked files are fine: the release commits only the version files.
 if (execSync("git status --porcelain --untracked-files=no").toString().trim()) {
   console.error("Commit or stash your changes first.");

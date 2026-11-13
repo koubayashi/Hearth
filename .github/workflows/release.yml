@@ -50,7 +50,14 @@ jobs:
           npm version $version --no-git-tag-version --allow-same-version
           Pop-Location
 
-      - run: cargo test --workspace --exclude hearth
+      # The app crate embeds the built frontend, so build it before testing.
+      - run: npm run build
+        working-directory: app
+
+      - run: npm test
+        working-directory: app
+
+      - run: cargo test --workspace
 
       # The release notes are this version's section of CHANGELOG.md: from
       # "## 0.3.0" to the next "## ". No section, no release: a version
