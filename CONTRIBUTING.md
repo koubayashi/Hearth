@@ -81,7 +81,7 @@ For interface changes, also try them in the app, in both the covers and list lay
 ## What not to change without asking first
 
 - The app identifier (`dev.hearth.app`), the updater public key and the update endpoint in `app/src-tauri/tauri.conf.json`. Changing them cuts installed copies off from their data or their updates.
-- `.github/workflows/release.yml`. Its actions are pinned to commits on purpose, because the update signing key passes through them.
+- `.github/workflows/release.yml`. Its actions are pinned to commits on purpose, because they run in the job that signs updates. Only the "Sign the update" step gets the signing key; keep it that way.
 - Versions and releases. The maintainer cuts releases with `scripts/release.mjs`.
 
 ## Never commit

@@ -10,9 +10,9 @@ on:
 permissions:
   contents: write
 
-# Actions are pinned to commits, not tags: the updater signing key passes
-# through tauri-action, and a moved tag could hand it to someone who could then
-# ship updates every installed Hearth trusts. To bump one, look up the new
+# Actions are pinned to commits, not tags: they run in the job that later holds
+# the updater signing key, and a moved tag could hand it to someone who could
+# then ship updates every installed Hearth trusts. To bump one, look up the new
 # tag's commit: git ls-remote https://github.com/<owner>/<repo> <tag>
 
 jobs:
@@ -80,15 +80,53 @@ jobs:
           $delimiter = "NOTES_" + [guid]::NewGuid().ToString("N")
           "body<<$delimiter`n$text`n$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+      # Built without the signing key: the build runs every dependency's build
+      # script and the frontend tooling, none of which needs it. Without the key
+      # Tauri refuses to make updater artifacts, so they're off here; for NSIS
+      # the update is the installer itself, signed in the next step.
+      - name: Build the installer
+        working-directory: app
+        shell: pwsh
+        run: |
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content "$env:RUNNER_TEMP/no-updater.json"
+          npx tauri build --config "$env:RUNNER_TEMP/no-updater.json"
+
+      # The only step that sees the key.
+      - name: Sign the update
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: app
-          tagName: ${{ github.ref_name }}
-          releaseName: Hearth ${{ github.ref_name }}
-          releaseBody: ${{ steps.notes.outputs.body }}
-          releaseDraft: false
-          prerelease: false
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $setup = "target/release/bundle/nsis/Hearth_${version}_x64-setup.exe"
+          if (-not (Test-Path $setup)) { throw "No installer at $setup" }
+          Push-Location app
+          npx tauri signer sign --app-version $version "../$setup"
+          Pop-Location
+          if (-not (Test-Path "$setup.sig")) { throw "The installer wasn't signed" }
+
+      # latest.json as tauri-action wrote it: the installer's address and
+      # signature, which installed copies check before updating.
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ steps.notes.outputs.body }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.TrimStart("v")
+          $name = "Hearth_${version}_x64-setup.exe"
+          $setup = "target/release/bundle/nsis/$name"
+          $update = [ordered]@{
+            signature = (Get-Content "$setup.sig" -Raw).Trim()
+            url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$name"
+          }
+          [ordered]@{
+            version = $version
+            notes = $env:NOTES
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{ "windows-x86_64" = $update; "windows-x86_64-nsis" = $update }
+          } | ConvertTo-Json -Depth 4 | Set-Content latest.json -Encoding utf8NoBOM
+          $env:NOTES | Set-Content notes.md -Encoding utf8NoBOM
+          gh release create $tag $setup "$setup.sig" latest.json --repo $env:GITHUB_REPOSITORY --title "Hearth $tag" --notes-file notes.md
