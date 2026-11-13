@@ -55,7 +55,7 @@ pub fn game_folders(app: AppHandle) -> Vec<String> {
 
 #[tauri::command]
 pub fn add_game_folder(app: AppHandle, path: String) -> CmdResult<Vec<String>> {
-    let path = path.trim().trim_end_matches(['\\', '/']).to_string();
+    let path = tidy(&path);
     if !Path::new(&path).is_dir() {
         return Err(format!("{path} isn't a folder on this PC"));
     }
@@ -71,4 +71,28 @@ pub fn add_game_folder(app: AppHandle, path: String) -> CmdResult<Vec<String>> {
 pub fn remove_game_folder(app: AppHandle, path: String) -> CmdResult<Vec<String>> {
     let folders = current(&app).into_iter().filter(|f| !f.eq_ignore_ascii_case(&path)).collect();
     set(&app, folders)
+}
+
+/// Drops spaces and a trailing slash, but keeps a drive root's (`D:\`):
+/// Windows reads a bare `D:` as the current folder on D.
+fn tidy(path: &str) -> String {
+    let path = path.trim().trim_end_matches(['\\', '/']);
+    if path.len() == 2 && path.ends_with(':') {
+        format!("{path}\\")
+    } else {
+        path.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tidy;
+
+    #[test]
+    fn a_drive_root_keeps_its_backslash() {
+        assert_eq!(tidy(" D:\\ "), "D:\\");
+        assert_eq!(tidy("D:"), "D:\\");
+        assert_eq!(tidy("D:\\Games\\"), "D:\\Games");
+        assert_eq!(tidy("D:/Games/"), "D:/Games");
+    }
 }

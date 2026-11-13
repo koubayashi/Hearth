@@ -92,12 +92,8 @@ struct GameCounts {
 
 #[tauri::command]
 fn game_counts(state: State<AppState>) -> CmdResult<GameCounts> {
-    let db = lock(&state.db);
-    let count = |hidden_only| {
-        let q = LibraryQuery { hidden_only, ..Default::default() };
-        db.list_games(&q).map(|g| g.len()).map_err(err)
-    };
-    Ok(GameCounts { library: count(false)?, hidden: count(true)? })
+    let (library, hidden) = lock(&state.db).game_counts().map_err(err)?;
+    Ok(GameCounts { library, hidden })
 }
 
 #[tauri::command]
@@ -585,7 +581,9 @@ async fn fill_missing_art(app: &AppHandle) {
     let ids = lock(&app.state::<AppState>().db).games_missing_cover().unwrap_or_default();
     let mut changed = false;
     for id in ids {
-        if let Ok(Some(d)) = details::game_details(app.clone(), id).await {
+        let Ok((details, described)) = details::fetch(app, id).await else { continue };
+        changed |= described;
+        if let Some(d) = details {
             let art = Steam::art_urls(&d.steam_app_id.to_string());
             if let (Some(c), Some(h), Some(l)) = (art.cover, art.hero, art.logo) {
                 changed |= lock(&app.state::<AppState>().db).set_game_art_if_missing(id, &c, &h, &l).is_ok();
@@ -617,13 +615,16 @@ async fn refresh_steam_art(app: &AppHandle) {
     let Ok(art) = state.metadata.steam_art(&ids).await else { return };
     let db = lock(&state.db);
     let mut changed = false;
-    for (game, app_id) in targets {
-        let Some(a) = u64::try_from(app_id).ok().and_then(|id| art.get(&id)) else { continue };
-        if let Some(cover) = &a.cover {
-            let hero = a.hero.as_deref().unwrap_or(cover);
-            changed |= db.set_game_art(game, cover, hero, a.logo.as_deref().unwrap_or("")).is_ok();
+    let _ = db.in_transaction(|db| {
+        for (game, app_id) in targets {
+            let Some(a) = u64::try_from(app_id).ok().and_then(|id| art.get(&id)) else { continue };
+            if let Some(cover) = &a.cover {
+                let hero = a.hero.as_deref().unwrap_or(cover);
+                changed |= db.set_game_art(game, cover, hero, a.logo.as_deref().unwrap_or("")).unwrap_or(false);
+            }
         }
-    }
+        Ok(())
+    });
     drop(db);
     if changed {
         let _ = app.emit("library-changed", ());
@@ -647,6 +648,7 @@ pub(crate) fn sync_all(app: AppHandle) {
     impl Drop for Busy {
         fn drop(&mut self) {
             lock(&self.0.state::<AppState>().syncing).busy = false;
+            let _ = self.0.emit("sync-finished", ());
         }
     }
     tauri::async_runtime::spawn(async move {
@@ -695,20 +697,24 @@ pub(crate) fn sync_all(app: AppHandle) {
                 eprintln!("sync {}: {e}", store.as_str());
                 continue;
             }
-            for g in &games {
-                let art = provider.artwork(&g.store_game_id);
-                let _ = db.set_art_if_missing(
-                    store,
-                    &g.store_game_id,
-                    art.cover.as_deref(),
-                    art.hero.as_deref(),
-                    art.logo.as_deref(),
-                );
-                let described = provider.description(&g.store_game_id);
-                if let Some(d) = described.and_then(|d| hub_providers::metadata::useful_description(&g.title, &d)) {
-                    let _ = db.set_description_if_missing(store, &g.store_game_id, &d);
+            // One transaction: one disk flush for the whole store, not two per game.
+            let _ = db.in_transaction(|db| {
+                for g in &games {
+                    let art = provider.artwork(&g.store_game_id);
+                    let _ = db.set_art_if_missing(
+                        store,
+                        &g.store_game_id,
+                        art.cover.as_deref(),
+                        art.hero.as_deref(),
+                        art.logo.as_deref(),
+                    );
+                    let described = provider.description(&g.store_game_id);
+                    if let Some(d) = described.and_then(|d| hub_providers::metadata::useful_description(&g.title, &d)) {
+                        let _ = db.set_description_if_missing(store, &g.store_game_id, &d);
+                    }
                 }
-            }
+                Ok(())
+            });
         }
         // Cleared here by hand (with `again`); the guard must not clear it
         // again later, when a new sync may have set it.
@@ -722,9 +728,11 @@ pub(crate) fn sync_all(app: AppHandle) {
         }
         tracking::refresh_dirs(&app);
         let _ = app.emit("library-changed", ());
+        // The stores are read; art and details below are background extras.
+        let _ = app.emit("sync-finished", ());
+        // Each of these says so itself when it changed something.
         refresh_art(&app).await;
         saves::refresh(&app).await;
-        let _ = app.emit("library-changed", ());
         details::prefetch(&app).await;
         // After details: they give games from other stores a Steam id to match by.
         smart::refresh(&app).await;
@@ -749,8 +757,15 @@ fn main() {
             std::fs::create_dir_all(&dir)?;
             errors::install_panic_hook(dir.clone());
             let db = Db::open(&dir.join("library.db"))?;
-            // Re-check games that had no store match last time.
-            let _ = db.clear_detail_misses();
+            // Re-check games that had no store match after an update (the
+            // matcher may have improved); otherwise a miss waits its week.
+            let version = app.package_info().version.to_string();
+            let marker = dir.join("misses-cleared");
+            if std::fs::read_to_string(&marker).ok().as_deref() != Some(version.as_str())
+                && db.clear_detail_misses().is_ok()
+            {
+                let _ = std::fs::write(&marker, &version);
+            }
             // Xbox art saved before it was asked for at a sensible size.
             let _ = db.rewrite_art(hub_providers::xbox_live::sized);
             // Store descriptions saved before they were checked for content.

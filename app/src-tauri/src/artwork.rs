@@ -149,11 +149,13 @@ pub fn set_artwork(app: AppHandle, id: i64, kind: ArtKind, url: String) -> CmdRe
     Ok(())
 }
 
-/// Back to the store's own artwork (and automatic SteamGridDB picks).
+/// Back to the store's own artwork right away; SteamGridDB's picks follow in
+/// the background.
 #[tauri::command]
-pub async fn reset_artwork(app: AppHandle, id: i64) -> CmdResult<()> {
+pub fn reset_artwork(app: AppHandle, id: i64) -> CmdResult<()> {
     lock(&app.state::<AppState>().db).reset_art(id).map_err(err)?;
-    crate::refresh_art(&app).await;
+    let _ = app.emit("library-changed", ());
+    tauri::async_runtime::spawn(async move { crate::refresh_art(&app).await });
     Ok(())
 }
 

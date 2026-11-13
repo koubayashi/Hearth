@@ -2,7 +2,8 @@
 //! focus: a game restored from the Recycle Bin, installed or uninstalled in
 //! its store while Hearth sat in the background. Only local scans (store
 //! install files, the registry, game folders), never the stores' servers;
-//! the full sync with the stores stays on startup, its timer and Refresh.
+//! the full sync with the stores has no timer: it runs at startup, on
+//! Refresh, after a store sign-in, and when drives or game folders change.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -66,7 +67,7 @@ async fn rescan_installed(app: AppHandle) {
     crate::tracking::log(&app, "rescan: installed games changed");
     crate::tracking::refresh_dirs(&app);
     let _ = app.emit("library-changed", ());
-    // A game installed for the first time needs its artwork.
+    // A game installed for the first time needs its artwork (it says so
+    // itself when it changed anything).
     crate::refresh_art(&app).await;
-    let _ = app.emit("library-changed", ());
 }

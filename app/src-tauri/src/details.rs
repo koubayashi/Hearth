@@ -41,29 +41,53 @@ fn saved(app: &AppHandle, id: i64) -> CmdResult<Option<Option<GameDetails>>> {
 /// keeps well under Steam's store limit; it runs after each library refresh,
 /// and a second refresh while it runs doesn't start another.
 pub async fn prefetch(app: &AppHandle) {
-    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static RUNNING: AtomicBool = AtomicBool::new(false);
+    if RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
+    /// Clears `RUNNING` however the prefetch ends, even by a panic.
+    struct Running;
+    impl Drop for Running {
+        fn drop(&mut self) {
+            RUNNING.store(false, Ordering::SeqCst);
+        }
+    }
+    let _running = Running;
     let ids = lock(&app.state::<AppState>().db).game_ids().unwrap_or_default();
+    // One "library changed" at the end, not one per game: each makes the
+    // interface reload the whole library.
+    let mut changed = false;
     for id in ids {
         if !matches!(saved(app, id), Ok(None)) {
             continue;
         }
-        let _ = game_details(app.clone(), id).await;
+        changed |= fetch(app, id).await.is_ok_and(|(_, described)| described);
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
-    RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+    if changed {
+        let _ = app.emit("library-changed", ());
+    }
 }
 
 #[tauri::command]
 pub async fn game_details(app: AppHandle, id: i64) -> CmdResult<Option<GameDetails>> {
+    let (details, described) = fetch(&app, id).await?;
+    if described {
+        let _ = app.emit("library-changed", ());
+    }
+    Ok(details)
+}
+
+/// The game's details, saved or asked for, and whether the game was given a
+/// description on the way (the caller then says the library changed).
+pub(crate) async fn fetch(app: &AppHandle, id: i64) -> CmdResult<(Option<GameDetails>, bool)> {
     let state = app.state::<AppState>();
-    if let Some(details) = saved(&app, id)? {
-        return Ok(details);
+    if let Some(details) = saved(app, id)? {
+        return Ok((details, false));
     }
 
-    let g = game(&app, id)?;
+    let g = game(app, id)?;
     let steam_id = g
         .entries
         .iter()
@@ -83,14 +107,13 @@ pub async fn game_details(app: AppHandle, id: i64) -> CmdResult<Option<GameDetai
     // Descriptions: Steam's, else the game's own store's (saved during the
     // library refresh), else GOG's catalogue by title as a last resort.
     let has_summary = details.as_ref().is_some_and(|d| d.summary.is_some());
+    let mut described = false;
     if !has_summary && g.description.is_none() {
         if let Ok(Some(text)) = state.metadata.gog_description(&g.title).await {
-            if lock(&state.db).set_game_description(id, &text).is_ok() {
-                let _ = app.emit("library-changed", ());
-            }
+            described = lock(&state.db).set_game_description(id, &text).is_ok();
         }
     }
-    Ok(details)
+    Ok((details, described))
 }
 
 #[derive(serde::Serialize)]
