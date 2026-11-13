@@ -25,6 +25,10 @@ pub enum DbError {
 
 pub type Result<T> = std::result::Result<T, DbError>;
 
+/// Time the tracker recorded: game id, the store entry it ran from (when
+/// known), start, end.
+pub type Span = (i64, Option<i64>, i64, i64);
+
 /// Ordered schema migrations; index + 1 is the `user_version` it produces.
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/001_init.sql"),
@@ -62,14 +66,16 @@ impl Db {
         // trusted_schema off: a library file from elsewhere (a restored
         // backup) can't run functions from inside its own schema.
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA trusted_schema = OFF;")?;
-        let version: usize = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        // Read as i64: rusqlite has no usize conversion. A negative version
+        // (only a damaged file) upgrades from the start and fails loudly.
+        let version = usize::try_from(conn.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?).unwrap_or(0);
         let mut conn = conn;
         // Each step with its version number in one transaction: Hearth killed
         // halfway leaves the library as it was, to upgrade again next time.
         for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
             let tx = conn.transaction()?;
             tx.execute_batch(sql)?;
-            tx.pragma_update(None, "user_version", i + 1)?;
+            tx.pragma_update(None, "user_version", (i + 1) as i64)?;
             tx.commit()?;
         }
         Ok(Self { conn })
@@ -80,16 +86,28 @@ impl Db {
     /// folders and appearance settings stored inside it. Sign-ins are never in
     /// the library, so never in a backup.
     pub fn backup_to(&self, dest: &Path, meta: &[(&str, &str)]) -> Result<()> {
-        if dest.exists() {
-            std::fs::remove_file(dest)?;
-        }
-        self.conn.execute("VACUUM INTO ?1", [dest.to_string_lossy()])?;
-        let copy = Connection::open(dest)?;
-        copy.execute_batch("CREATE TABLE backup_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
-        for (k, v) in meta {
-            copy.execute("INSERT INTO backup_meta (key, value) VALUES (?1, ?2)", [k, v])?;
-        }
-        Ok(())
+        // Written beside `dest` and moved over it once complete: a failure
+        // (a full disk) leaves the backup that was there before.
+        let mut tmp = dest.as_os_str().to_owned();
+        tmp.push(".tmp");
+        let tmp = PathBuf::from(tmp);
+        let write = || -> Result<()> {
+            if tmp.exists() {
+                std::fs::remove_file(&tmp)?;
+            }
+            self.conn.execute("VACUUM INTO ?1", [tmp.to_string_lossy()])?;
+            let copy = Connection::open(&tmp)?;
+            copy.execute_batch("CREATE TABLE backup_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
+            for (k, v) in meta {
+                copy.execute("INSERT INTO backup_meta (key, value) VALUES (?1, ?2)", [k, v])?;
+            }
+            drop(copy);
+            std::fs::rename(&tmp, dest)?;
+            Ok(())
+        };
+        write().inspect_err(|_| {
+            let _ = std::fs::remove_file(&tmp);
+        })
     }
 
     /// How many rows Hearth has written since the library was opened: a cheap
@@ -153,11 +171,11 @@ impl Db {
         let c = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|_| DbError::NotABackup)?;
         c.execute_batch("PRAGMA trusted_schema = OFF;").map_err(|_| DbError::NotABackup)?;
-        let version: usize = c.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(|_| DbError::NotABackup)?;
-        if version == 0 {
+        let version: i64 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(|_| DbError::NotABackup)?;
+        if version < 1 {
             return Err(DbError::NotABackup);
         }
-        if version > MIGRATIONS.len() {
+        if version > MIGRATIONS.len() as i64 {
             return Err(DbError::BackupTooNew);
         }
         let mut stmt = c.prepare("SELECT key, value FROM backup_meta").map_err(|_| DbError::NotABackup)?;
@@ -218,14 +236,16 @@ impl Db {
                     tx.execute(
                         // Stores like Epic report a total but no date: when the
                         // total grows between syncs, the game was played since.
-                        "UPDATE store_entries SET installed = ?2, install_dir = ?3,
+                        &format!("UPDATE store_entries SET installed = ?2, install_dir = ?3,
                             store_last_played = COALESCE(?5,
                                 CASE WHEN store_playtime_secs IS NOT NULL AND ?4 > store_playtime_secs
                                      THEN ?6 ELSE store_last_played END),
                             store_playtime_secs = COALESCE(?4, store_playtime_secs),
-                            store_baseline_secs = COALESCE(store_baseline_secs, ?4),
+                            store_baseline_secs = COALESCE(store_baseline_secs, MAX(0, ?4 - {})),
                             title = ?7
                          WHERE id = ?1",
+                            hub_secs_sql("store_entries.game_id")
+                        ),
                         params![
                             id,
                             e.installed,
@@ -262,9 +282,12 @@ impl Db {
                         }
                     };
                     tx.execute(
-                        "INSERT INTO store_entries (game_id, store, store_game_id, installed,
-                            install_dir, store_playtime_secs, store_baseline_secs, store_last_played, title)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8)",
+                        &format!(
+                            "INSERT INTO store_entries (game_id, store, store_game_id, installed,
+                                install_dir, store_playtime_secs, store_baseline_secs, store_last_played, title)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, MAX(0, ?6 - {}), ?7, ?8)",
+                            hub_secs_sql("?1")
+                        ),
                         params![
                             game_id,
                             store.as_str(),
@@ -333,23 +356,31 @@ impl Db {
     }
 
     /// What the tracker just ended (tracker sessions and idle time, each as
-    /// game id, start, end) and its running sessions, saved together: a crash
-    /// can't leave an ended session in the checkpoint to be recovered twice.
-    pub fn save_tracking(&mut self, ended: &[(i64, i64, i64)], idle: &[(i64, i64, i64)], active: &[(i64, i64, i64)]) -> Result<()> {
+    /// game id, the store entry it ran from, start, end) and its running
+    /// sessions, saved together: a crash can't leave an ended session in the
+    /// checkpoint to be recovered twice. A game that's gone (combined into
+    /// another a moment ago) is skipped, so it can't stop the rest saving.
+    pub fn save_tracking(&mut self, ended: &[Span], idle: &[Span], active: &[(i64, i64, i64)]) -> Result<()> {
         let tx = self.conn.transaction()?;
-        for (game, started, until) in ended {
+        for (game, entry, started, until) in ended {
             tx.execute(
-                "INSERT INTO sessions (game_id, started_at, ended_at, source) VALUES (?1, ?2, ?3, 'tracker')",
-                params![game, started, until],
+                "INSERT INTO sessions (game_id, entry_id, started_at, ended_at, source)
+                 SELECT ?1, ?2, ?3, ?4, 'tracker' WHERE EXISTS (SELECT 1 FROM games WHERE id = ?1)",
+                params![game, entry, started, until],
             )?;
         }
-        for (game, started, until) in idle {
-            tx.execute("INSERT INTO idle_time (game_id, started_at, ended_at) VALUES (?1, ?2, ?3)", params![game, started, until])?;
+        for (game, entry, started, until) in idle {
+            tx.execute(
+                "INSERT INTO idle_time (game_id, entry_id, started_at, ended_at)
+                 SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM games WHERE id = ?1)",
+                params![game, entry, started, until],
+            )?;
         }
         tx.execute("DELETE FROM active_sessions", [])?;
         for (game, started, seen) in active {
             tx.execute(
-                "INSERT OR REPLACE INTO active_sessions (game_id, started_at, last_seen) VALUES (?1, ?2, ?3)",
+                "INSERT OR REPLACE INTO active_sessions (game_id, started_at, last_seen)
+                 SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM games WHERE id = ?1)",
                 params![game, started, seen],
             )?;
         }
@@ -1035,12 +1066,22 @@ impl Db {
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )?;
         let title = title.unwrap_or(game_title);
+        // The entries the panel shows as this version (see versions.ts).
+        let key = version_key(&title);
         let moving: Vec<i64> = {
             let mut stmt = tx.prepare(
-                "SELECT id FROM store_entries WHERE game_id = ?1 AND (id = ?2 OR title = ?3)",
+                "SELECT e.id, COALESCE(e.title, g.title) FROM store_entries e JOIN games g ON g.id = e.game_id
+                 WHERE e.game_id = ?1",
             )?;
-            let rows = stmt.query_map(params![game_id, entry_id, title], |r| r.get(0))?;
-            rows.collect::<rusqlite::Result<_>>()?
+            let rows = stmt.query_map([game_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+            let mut ids = Vec::new();
+            for row in rows {
+                let (id, t) = row?;
+                if id == entry_id || version_key(&t) == key {
+                    ids.push(id);
+                }
+            }
+            ids
         };
         let total: i64 = tx.query_row("SELECT COUNT(*) FROM store_entries WHERE game_id = ?1", [game_id], |r| r.get(0))?;
         if moving.len() as i64 >= total {
@@ -1134,9 +1175,18 @@ impl Db {
 
     /// Forget one recorded session (a game left running overnight); the
     /// game's playtime and last played follow, as both come from sessions.
+    /// The idle time right after it (the away pause that ended it) goes too:
+    /// a game left running overnight is mostly idle time.
     pub fn delete_session(&self, id: i64) -> Result<()> {
-        self.conn.execute("DELETE FROM sessions WHERE id = ?1", [id])?;
-        Ok(())
+        self.in_transaction(|db| {
+            db.conn.execute(
+                "DELETE FROM idle_time WHERE EXISTS
+                    (SELECT 1 FROM sessions s WHERE s.id = ?1 AND s.game_id = idle_time.game_id AND s.ended_at = idle_time.started_at)",
+                [id],
+            )?;
+            db.conn.execute("DELETE FROM sessions WHERE id = ?1", [id])?;
+            Ok(())
+        })
     }
 
     /// Every recorded play session of games that aren't hidden, oldest first
@@ -1163,13 +1213,14 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Install folders of installed games, for the tracker to match processes against.
-    pub fn install_dirs(&self) -> Result<Vec<(i64, String)>> {
+    /// Install folders of installed games, for the tracker to match processes
+    /// against: (game id, store entry id, folder).
+    pub fn install_dirs(&self) -> Result<Vec<(i64, Option<i64>, String)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT game_id, install_dir FROM store_entries
+            "SELECT game_id, id, install_dir FROM store_entries
              WHERE installed = 1 AND install_dir IS NOT NULL",
         )?;
-        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -1440,6 +1491,30 @@ impl Drives {
         }
         *self.0.entry(root.clone()).or_insert_with(|| root.exists())
     }
+}
+
+/// Which version of a combined game a store title is, as the panel groups
+/// them (`words` in app/src/lib/versions.ts): case, ™®© and `: - – — _ , .`
+/// don't count, but other characters do ("GTA V" and "GTAV" are two).
+fn version_key(title: &str) -> String {
+    title
+        .replace(['™', '®', '©'], "")
+        .split(|c: char| c.is_whitespace() || ":-–—_,.".contains(c))
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// SQL for everything Hearth timed for `game` (play and idle time, as the
+/// displayed total counts both). A store's first total already includes it,
+/// so it comes off the baseline: 20 h timed before the store's total was
+/// known would otherwise count twice.
+fn hub_secs_sql(game: &str) -> String {
+    format!(
+        "((SELECT COALESCE(SUM(ended_at - started_at), 0) FROM sessions WHERE game_id = {game})
+         + (SELECT COALESCE(SUM(ended_at - started_at), 0) FROM idle_time WHERE game_id = {game}))"
+    )
 }
 
 /// Lowercased alphanumerics only, so "DOOM Eternal™" and "Doom Eternal" match.
@@ -1933,10 +2008,96 @@ mod tests {
         db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "x", "Blackwood", true)], 0).unwrap();
         let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
         db.checkpoint_active(&[(id, 1000, 1600)]).unwrap();
-        db.save_tracking(&[(id, 1000, 1700)], &[(id, 1700, 2300)], &[]).unwrap();
+        db.save_tracking(&[(id, None, 1000, 1700)], &[(id, None, 1700, 2300)], &[]).unwrap();
         assert!(db.take_active().unwrap().is_empty(), "nothing left to recover twice");
         let g = db.game(id).unwrap().unwrap();
         assert_eq!((g.playtime_secs, g.idle_secs), (1300, 600), "idle is part of the time open");
+    }
+
+    #[test]
+    fn time_for_a_game_combined_away_doesnt_stop_the_rest_saving() {
+        let (mut db, base, enh) = two_versions();
+        db.combine_games(base, enh).unwrap();
+        // The tracker still knew Enhanced by its old id.
+        db.save_tracking(&[(enh, None, 5000, 5600), (base, None, 6000, 6600)], &[(enh, None, 5600, 5900)], &[(enh, 7000, 7100), (base, 7000, 7100)])
+            .unwrap();
+        let g = db.game(base).unwrap().unwrap();
+        assert_eq!(g.playtime_secs, 1900 + 600, "the session of the game that's still there is saved");
+        assert_eq!(db.take_active().unwrap(), [(base, 7000, 7100)]);
+    }
+
+    #[test]
+    fn time_played_after_combining_goes_back_with_its_version() {
+        let (mut db, base, enh) = two_versions();
+        db.combine_games(base, enh).unwrap();
+        // The same version on Steam, named a little differently.
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "3240220", "Grand Theft Auto V: Enhanced™", false)], 0)
+            .unwrap();
+        let g = db.game(base).unwrap().unwrap();
+        let enh_entry = g.entries.iter().find(|e| e.store_game_id == "enh").unwrap().id;
+        db.save_tracking(&[(base, Some(enh_entry), 5000, 5600)], &[(base, Some(enh_entry), 5600, 5900)], &[]).unwrap();
+        let back = db.separate_version(base, enh_entry).unwrap();
+        let (a, b) = (db.game(base).unwrap().unwrap(), db.game(back).unwrap().unwrap());
+        assert_eq!((a.entries.len(), a.playtime_secs), (1, 1000));
+        assert_eq!((b.entries.len(), b.playtime_secs, b.idle_secs), (2, 900 + 600 + 300, 600));
+    }
+
+    #[test]
+    fn a_store_total_known_late_doesnt_count_hearths_time_twice() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Epic, &[entry(StoreId::Epic, "1", "Hades", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        // Hearth times 20 h (with 1 h idle) before Epic reports any total.
+        db.record_session(id, 0, 19 * 3600, SessionSource::Tracker).unwrap();
+        db.record_idle(id, 19 * 3600, 20 * 3600).unwrap();
+        // Epic's first total includes those 20 h, plus 5 h from before Hearth.
+        let mut e = entry(StoreId::Epic, "1", "Hades", true);
+        e.store_playtime_secs = Some(25 * 3600);
+        db.sync_store(StoreId::Epic, &[e], 0).unwrap();
+        assert_eq!(db.game(id).unwrap().unwrap().playtime_secs, 25 * 3600);
+        // Another hour Hearth timed that Epic hasn't caught up on yet.
+        db.record_session(id, 30 * 3600, 31 * 3600, SessionSource::Tracker).unwrap();
+        assert_eq!(db.game(id).unwrap().unwrap().playtime_secs, 26 * 3600);
+
+        // The same for a store copy found after Hearth timed a folder game.
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "x", "Celeste", true)], 0).unwrap();
+        let celeste = db.list_games(&LibraryQuery::default()).unwrap().into_iter().find(|g| g.title == "Celeste").unwrap().id;
+        db.record_session(celeste, 0, 3600, SessionSource::Tracker).unwrap();
+        let mut steam = entry(StoreId::Steam, "2", "Celeste", true);
+        steam.store_playtime_secs = Some(3 * 3600);
+        db.sync_store(StoreId::Steam, &[steam], 0).unwrap();
+        db.record_session(celeste, 4 * 3600, 5 * 3600, SessionSource::Tracker).unwrap();
+        assert_eq!(db.game(celeste).unwrap().unwrap().playtime_secs, 4 * 3600);
+    }
+
+    #[test]
+    fn removing_a_session_removes_the_idle_time_after_it() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "1", "Hades", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        let kept = db.record_session(id, 0, 600, SessionSource::Tracker).unwrap();
+        db.record_idle(id, 600, 900).unwrap();
+        let overnight = db.record_session(id, 1000, 1600, SessionSource::Tracker).unwrap();
+        db.record_idle(id, 1600, 40_000).unwrap();
+        db.delete_session(overnight).unwrap();
+        let g = db.game(id).unwrap().unwrap();
+        assert_eq!((g.playtime_secs, g.idle_secs), (900, 300));
+        assert_eq!(db.sessions().unwrap().iter().map(|s| s.id).collect::<Vec<_>>(), [kept]);
+    }
+
+    #[test]
+    fn a_failed_backup_leaves_the_one_before() {
+        let dir = std::env::temp_dir().join(format!("hearth-backup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dest = dir.join("library.hearthbackup");
+        let db = Db::open_in_memory().unwrap();
+        db.backup_to(&dest, &[("format", "1")]).unwrap();
+        assert!(Db::read_backup(&dest).is_ok());
+        // Something in the way of the new copy: the write fails.
+        std::fs::create_dir_all(dir.join("library.hearthbackup.tmp").join("x")).unwrap();
+        assert!(db.backup_to(&dest, &[("format", "1")]).is_err());
+        assert!(Db::read_backup(&dest).is_ok(), "the earlier backup is still there");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

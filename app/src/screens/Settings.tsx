@@ -745,14 +745,26 @@ function BackupSection() {
     try {
       const r = await api.backupRestore(path);
       // Ways to play run programs, and a backup file may not be yours: show
-      // what they'd run before they come back.
-      if (r.ways.length > 0) {
-        const list = r.ways.map((w) => "• " + w.name + ": " + [w.path, w.args].filter(Boolean).join(" ")).join("\n");
-        const keep = await confirm(
-          `This backup has ways to play that start these programs:\n\n${list}\n\nKeep them only if you added them yourself.`,
-          { title: "Ways to play in this backup", kind: "warning", okLabel: "Keep", cancelLabel: "Leave out" },
-        );
-        await api.restoreWays(keep);
+      // what they'd run before they come back. Game folders too: Hearth
+      // times and plays the programs it finds in them.
+      const folders = (r as { folders?: string[] }).folders ?? [];
+      if (r.ways.length > 0 || folders.length > 0) {
+        let keep = false;
+        if (r.ways.length > 0) {
+          const list = r.ways.map((w) => "• " + w.name + ": " + [w.path, w.args].filter(Boolean).join(" ")).join("\n");
+          keep = await confirm(
+            `This backup has ways to play that start these programs:\n\n${list}\n\nKeep them only if you added them yourself.`,
+            { title: "Ways to play in this backup", kind: "warning", okLabel: "Keep", cancelLabel: "Leave out" },
+          );
+        }
+        let addFolders = false;
+        if (folders.length > 0) {
+          addFolders = await confirm(
+            `This backup has game folders this PC doesn't use yet:\n\n${folders.map((f) => "• " + f).join("\n")}\n\nAdd them only if you added them yourself.`,
+            { title: "Game folders in this backup", kind: "warning", okLabel: "Add", cancelLabel: "Leave out" },
+          );
+        }
+        await api.restoreWays(keep, addFolders);
       }
       if (r.prefs) {
         try {

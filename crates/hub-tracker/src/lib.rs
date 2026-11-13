@@ -29,9 +29,15 @@ const IGNORED_PARTS: &[&str] = &[
 /// "setup_x64.exe" and "unins000.exe", but not "Redistrict.exe".
 const IGNORED_WORDS: &[&str] = &["unins", "uninstall", "installer", "setup", "redist"];
 
-fn is_helper(file: &str) -> bool {
+/// Uninstallers, crash reporters, redistributables: not the game itself.
+pub fn is_helper(file: &str) -> bool {
+    let stem = file.strip_suffix(".exe").unwrap_or(file);
     IGNORED_PARTS.iter().any(|i| file.contains(i))
         || IGNORED_WORDS.iter().any(|w| file.strip_prefix(w).is_some_and(|rest| !rest.starts_with(|c: char| c.is_alphabetic())))
+        // Store and anti-cheat installers name themselves at the end:
+        // "UbisoftConnectInstaller.exe", "EasyAntiCheat_EOS_Setup.exe".
+        || stem.ends_with("installer")
+        || stem.strip_suffix("setup").is_some_and(|rest| !rest.ends_with(|c: char| c.is_alphabetic()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,8 +141,12 @@ const INPUT_MARGIN_SECS: i64 = 2;
 
 #[derive(Debug, Default)]
 pub struct Tracker {
-    /// (normalized dir with trailing separator, game id), longest dir first.
-    dirs: Vec<(String, i64)>,
+    /// (normalized dir with trailing separator, game id, store entry id),
+    /// longest dir first.
+    dirs: Vec<(String, i64, Option<i64>)>,
+    /// The store entry each game last ran from: which version of a combined
+    /// game was played, so separating the versions gives it its sessions.
+    ran_from: HashMap<i64, i64>,
     active: HashMap<i64, Active>,
     /// Games still running but not being counted.
     paused: HashMap<i64, Paused>,
@@ -160,23 +170,62 @@ impl Tracker {
 
     /// Replace the known install folders (after every library sync).
     pub fn set_install_dirs(&mut self, dirs: impl IntoIterator<Item = (i64, String)>) {
+        self.set_install_entries(dirs.into_iter().map(|(id, d)| (id, None, d)));
+    }
+
+    /// The same, with the store entry each folder belongs to: (game id,
+    /// entry id, folder).
+    pub fn set_install_entries(&mut self, dirs: impl IntoIterator<Item = (i64, Option<i64>, String)>) {
         self.dirs = dirs
             .into_iter()
-            .filter(|(_, d)| d.len() > 3) // never a whole drive like "D:\"
-            .map(|(id, d)| (normalize(&d), id))
+            .filter(|(_, _, d)| d.len() > 3) // never a whole drive like "D:\"
+            .map(|(id, entry, d)| (normalize(&d), id, entry))
             .collect();
         // Nested folders: the most specific match wins.
-        self.dirs.sort_by_key(|(d, _)| std::cmp::Reverse(d.len()));
+        self.dirs.sort_by_key(|(d, _, _)| std::cmp::Reverse(d.len()));
     }
 
     /// Which game an executable belongs to, if any.
     pub fn game_for_exe(&self, exe: &Path) -> Option<i64> {
+        self.match_exe(exe).map(|(id, _)| id)
+    }
+
+    /// The game and store entry an executable belongs to.
+    fn match_exe(&self, exe: &Path) -> Option<(i64, Option<i64>)> {
         let path = exe.to_string_lossy().replace('/', "\\").to_lowercase();
         let file = path.rsplit('\\').next().unwrap_or("");
         if !file.ends_with(".exe") || is_helper(file) {
             return None;
         }
-        self.dirs.iter().find(|(d, _)| path.starts_with(d.as_str())).map(|(_, id)| *id)
+        self.dirs.iter().find(|(d, _, _)| path.starts_with(d.as_str())).map(|(_, id, entry)| (*id, *entry))
+    }
+
+    /// A game combined into another (`from` into `to`): its sitting carries
+    /// on under the other's id, so the time since its last save isn't
+    /// recorded against a game that's gone.
+    pub fn renumber(&mut self, from: i64, to: i64) {
+        // Both versions running at once is rare: `to`'s own sitting wins.
+        if let Some(a) = self.active.remove(&from) {
+            if !self.paused.contains_key(&to) {
+                self.active.entry(to).or_insert(a);
+            }
+        }
+        if let Some(p) = self.paused.remove(&from) {
+            if !self.active.contains_key(&to) {
+                self.paused.entry(to).or_insert(p);
+            }
+        }
+        if let Some(e) = self.ran_from.remove(&from) {
+            self.ran_from.entry(to).or_insert(e);
+        }
+        for id in self.muted.iter_mut().filter(|id| **id == from) {
+            *id = to;
+        }
+    }
+
+    /// The store entry a game last ran from, if known.
+    pub fn entry_of(&self, game_id: i64) -> Option<i64> {
+        self.ran_from.get(&game_id).copied()
     }
 
     /// Running sessions as (game id, started, last seen), for checkpoints.
@@ -197,7 +246,8 @@ impl Tracker {
     /// stays paused until input reaches it after `at`, or `resume`.
     pub fn pause(&mut self, id: i64, at: i64, reason: PauseReason) -> Vec<Event> {
         let Some(a) = self.active.remove(&id) else { return Vec::new() };
-        let end = at.clamp(a.started_at, a.last_seen);
+        // Not `clamp`: it panics if the clock went back and last_seen < started_at.
+        let end = at.min(a.last_seen).max(a.started_at);
         let counted = kept(end - a.started_at, a.before);
         let before = a.before + if counted { end - a.started_at } else { 0 };
         self.paused.insert(id, Paused { resume_after: at, since: end, last_seen: a.last_seen, before, reason, front_known: a.last_front.is_some(), front_since: None });
@@ -282,7 +332,14 @@ impl Tracker {
 
     /// Feed one snapshot of running executables taken at `now` (unix seconds).
     pub fn observe<'a>(&mut self, exes: impl IntoIterator<Item = &'a Path>, now: i64) -> Vec<Event> {
-        let mut seen: Vec<i64> = exes.into_iter().filter_map(|e| self.game_for_exe(e)).collect();
+        let mut seen: Vec<i64> = Vec::new();
+        let found: Vec<(i64, Option<i64>)> = exes.into_iter().filter_map(|e| self.match_exe(e)).collect();
+        for (id, entry) in found {
+            seen.push(id);
+            if let Some(entry) = entry {
+                self.ran_from.insert(id, entry);
+            }
+        }
         seen.sort_unstable();
         seen.dedup();
         self.muted.retain(|id| seen.contains(id));
@@ -294,12 +351,17 @@ impl Tracker {
         // and one still running starts a new session now.
         // The time already counted carries on into the new session, so
         // "Playing now" doesn't start again from zero after the PC wakes.
-        let stale: Vec<i64> = self.active.iter().filter(|(_, a)| now - a.last_seen > MAX_GAP_SECS).map(|(id, _)| *id).collect();
+        // The clock going back (a time sync) is a gap too: time can't be
+        // counted across it.
+        let gap = |last_seen: i64| now - last_seen > MAX_GAP_SECS || now < last_seen;
+        let stale: Vec<i64> = self.active.iter().filter(|(_, a)| gap(a.last_seen)).map(|(id, _)| *id).collect();
         // The same for a game paused while idle: the sleep isn't idle time.
         for (id, p) in self.paused.iter_mut() {
-            if now - p.last_seen > MAX_GAP_SECS {
+            if gap(p.last_seen) {
                 events.extend(idle(*id, p, p.last_seen));
                 p.since = now;
+                // Back in time, it would otherwise never count as closed.
+                p.last_seen = p.last_seen.min(now);
             }
         }
         let mut carried: HashMap<i64, i64> = HashMap::new();
@@ -456,6 +518,10 @@ mod tests {
         assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Setup.exe")), None);
         assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\setup_x64.exe")), None);
         assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Redist\vcredist_x64.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\UbisoftConnectInstaller.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\EpicOnlineServicesInstaller.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\EasyAntiCheat_EOS_Setup.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Game-Setup.exe")), None);
     }
 
     #[test]
@@ -463,6 +529,7 @@ mod tests {
         let t = tracker();
         assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Redistrict.exe")), Some(2));
         assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\SetupTheSun.exe")), Some(2));
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Sunsetup.exe")), Some(2));
     }
 
     #[test]
@@ -518,6 +585,44 @@ mod tests {
                 Event::Started { game_id: 2, at: woke },
             ]
         );
+    }
+
+    #[test]
+    fn the_clock_going_back_ends_the_session_without_a_panic() {
+        let mut t = tracker();
+        play(&mut t, 1000, 1600);
+        // A time sync puts the clock back 12 minutes, mid-game.
+        assert_eq!(
+            t.observe([rdr2().as_path()], 900),
+            [Event::Ended(Session { game_id: 2, started_at: 1000, ended_at: 1600 }), Event::Started { game_id: 2, at: 900 }]
+        );
+        assert_eq!(
+            t.pause(2, 1300, PauseReason::Manual),
+            [Event::Paused { game_id: 2, reason: PauseReason::Manual }]
+        );
+        // Paused, the clock goes back again and the game closes: it still counts as closed.
+        assert!(t.observe([rdr2().as_path()], 800).is_empty());
+        assert_eq!(t.observe([], 820), [Event::Closed { game_id: 2 }]);
+    }
+
+    #[test]
+    fn remembers_which_version_a_game_ran_from() {
+        let mut t = Tracker::new();
+        t.set_install_entries([(2, Some(20), r"D:\Games\GTA V".to_string()), (2, Some(21), r"D:\Games\GTA V Enhanced".to_string())]);
+        assert_eq!(t.entry_of(2), None);
+        t.observe([p(r"D:\Games\GTA V Enhanced\GTA5_Enhanced.exe").as_path()], 1000);
+        assert_eq!(t.entry_of(2), Some(21));
+    }
+
+    #[test]
+    fn a_game_combined_into_another_keeps_its_session() {
+        let mut t = tracker();
+        play(&mut t, 1000, 1600);
+        // RDR2 (2) is combined into game 7, whose folder it now is.
+        t.renumber(2, 7);
+        t.set_install_dirs([(7, r"D:\Games\Epic Games\RedDeadRedemption2".to_string())]);
+        assert!(t.observe([rdr2().as_path()], 1605).is_empty(), "no new session");
+        assert_eq!(t.flush(), [Event::Ended(Session { game_id: 7, started_at: 1000, ended_at: 1605 })]);
     }
 
     #[test]

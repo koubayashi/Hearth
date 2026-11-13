@@ -41,6 +41,7 @@ pub struct AutoBackup {
     status: Mutex<Status>,
     /// Set when something changed since the last backup.
     pending: Mutex<bool>,
+    running: Mutex<()>,
 }
 
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
@@ -105,7 +106,7 @@ pub async fn auto_backup_set(app: AppHandle, folder: Option<String>) -> CmdResul
 
 /// Local date and time for file names, "2026-10-25 15-30-05", so they sort.
 #[cfg(windows)]
-fn stamp() -> String {
+pub(crate) fn stamp() -> String {
     #[repr(C)]
     #[derive(Default)]
     struct SystemTime {
@@ -129,7 +130,7 @@ fn stamp() -> String {
 }
 
 #[cfg(not(windows))]
-fn stamp() -> String {
+pub(crate) fn stamp() -> String {
     now().to_string()
 }
 
@@ -138,18 +139,24 @@ fn run(app: &AppHandle) -> CmdResult<()> {
     let mut c = load(app);
     let Some(folder) = c.folder.clone() else { return Ok(()) };
     let auto = app.state::<AutoBackup>();
+    // One at a time (Settings and the watcher): they share the local copy.
+    let _one = lock(&auto.running);
     let result = (|| -> CmdResult<()> {
         let dir = PathBuf::from(&folder);
         if !dir.is_dir() {
             return Err(format!("{folder} isn't reachable right now. Hearth tries again later."));
         }
-        let file = dir.join(format!("{PREFIX}{}{EXT}", stamp()));
+        let file = free_name(&dir, &stamp());
         let prefs = prefs_path(app).and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_else(|| "{}".into());
         let folders = serde_json::to_string(&crate::folders::current(app)).map_err(err)?;
         let created = now().to_string();
+        // Written on this PC with the library locked, then copied to the
+        // folder without it: a slow or cloud folder doesn't hold up the
+        // tracker or the window.
+        let local = app.path().app_data_dir().map_err(err)?.join("auto-backup.hearthbackup");
         lock(&app.state::<AppState>().db)
             .backup_to(
-                &file,
+                &local,
                 &[
                     ("format", "1"),
                     ("created_at", &created),
@@ -159,6 +166,16 @@ fn run(app: &AppHandle) -> CmdResult<()> {
                 ],
             )
             .map_err(err)?;
+        // Moved into place once complete, so a half-copied file never
+        // looks like a backup.
+        let mut tmp = file.clone().into_os_string();
+        tmp.push(".tmp");
+        let copied = std::fs::copy(&local, &tmp).and_then(|_| std::fs::rename(&tmp, &file));
+        let _ = std::fs::remove_file(&local);
+        if let Err(e) = copied {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(err(e));
+        }
         prune(&dir);
         Ok(())
     })();
@@ -177,6 +194,18 @@ fn run(app: &AppHandle) -> CmdResult<()> {
     }
     let _ = app.emit("auto-backup", ());
     result
+}
+
+/// A backup file name for `stamp` that isn't taken: when clocks go back an
+/// hour, the same local time comes round twice.
+fn free_name(dir: &Path, stamp: &str) -> PathBuf {
+    let mut file = dir.join(format!("{PREFIX}{stamp}{EXT}"));
+    let mut n = 2;
+    while file.exists() {
+        file = dir.join(format!("{PREFIX}{stamp} ({n}){EXT}"));
+        n += 1;
+    }
+    file
 }
 
 /// Keeps the newest KEEP automatic backups (names sort by date). Backups the
@@ -253,6 +282,18 @@ mod tests {
         assert!(left.contains(&"Hearth backup 2026-10-01.hearthbackup".to_string()));
         assert!(!left.iter().any(|n| n.contains("2026-10-03 ")), "the oldest three automatic ones go");
         assert!(left.iter().any(|n| n.contains("2026-10-13 ")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_same_time_twice_never_replaces_a_backup() {
+        let dir = std::env::temp_dir().join(format!("hearth-names-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = free_name(&dir, "2026-10-25 02-30-00");
+        std::fs::write(&first, "x").unwrap();
+        let second = free_name(&dir, "2026-10-25 02-30-00");
+        assert_ne!(first, second);
+        assert!(second.to_string_lossy().ends_with(&format!("02-30-00 (2){EXT}")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

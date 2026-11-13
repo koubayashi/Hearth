@@ -95,7 +95,7 @@ pub fn refresh_dirs(app: &AppHandle) {
     let state = app.state::<AppState>();
     let dirs = lock(&state.db).install_dirs().unwrap_or_default();
     log(app, &format!("watching {} install folders", dirs.len()));
-    lock(&app.state::<Tracking>().tracker).set_install_dirs(dirs);
+    lock(&app.state::<Tracking>().tracker).set_install_entries(dirs);
 }
 
 /// Sessions that were still running when Hearth last stopped become real
@@ -124,9 +124,13 @@ pub fn recover(app: &AppHandle) {
         tracker.restore_paused(game, before, reason, now);
     }
     // Saved first, with the idle time starting now, so another crash can't
-    // record the idle time below a second time.
-    save_paused(app, &tracker);
+    // record the idle time below a second time. If it can't be saved, the
+    // old list still holds that idle time: it's left for next time.
+    let saved = save_paused(app, &tracker);
     drop(tracker);
+    if !saved {
+        return;
+    }
     // An away pause's idle time up to its last checkpoint (a quit already
     // recorded it, so none is left here).
     let db = lock(&state.db);
@@ -144,8 +148,9 @@ fn paused_path(app: &AppHandle) -> Option<std::path::PathBuf> {
 
 /// Called with the tracker locked, so an older list can never be written
 /// over a newer one. Away pauses keep their idle time not yet recorded
-/// (`since` to `seen`), so a crash loses at most a minute of it.
-fn save_paused(app: &AppHandle, tracker: &Tracker) {
+/// (`since` to `seen`), so a crash loses at most a minute of it. Returns
+/// whether paused.json holds the list now.
+fn save_paused(app: &AppHandle, tracker: &Tracker) -> bool {
     let idle = tracker.idle_so_far();
     let list: Vec<serde_json::Value> = tracker
         .paused_list()
@@ -162,13 +167,19 @@ fn save_paused(app: &AppHandle, tracker: &Tracker) {
     let text = serde_json::Value::Array(list).to_string();
     let tracking = app.state::<Tracking>();
     let mut last = lock(&tracking.paused_json);
-    if *last != text {
-        if let Some(p) = paused_path(app) {
-            if std::fs::write(p, &text).is_ok() {
-                *last = text;
-            }
-        }
+    if *last == text {
+        return true;
     }
+    let Some(p) = paused_path(app) else { return false };
+    // Written beside it and moved over it: a crash mid-write can't leave
+    // half a list, which would drop every pause.
+    let tmp = p.with_extension("json.tmp");
+    if std::fs::write(&tmp, &text).and_then(|_| std::fs::rename(&tmp, &p)).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return false;
+    }
+    *last = text;
+    true
 }
 
 fn load_paused(app: &AppHandle) -> Vec<PausedGame> {
@@ -289,14 +300,17 @@ fn step(app: &AppHandle, checkpoint: bool, f: impl FnOnce(&mut Tracker) -> Vec<E
 /// be recovered, and counted twice, after a crash).
 fn save(app: &AppHandle, tracker: &Tracker, events: &[Event]) -> bool {
     save_paused(app, tracker);
-    let spans = |idle: bool| -> Vec<(i64, i64, i64)> {
+    // Each with the version of the game it ran from, for separating
+    // combined versions later.
+    let spans = |idle: bool| -> Vec<hub_core::db::Span> {
         events
             .iter()
             .filter_map(|e| match e {
-                Event::Ended(s) if !idle => Some((s.game_id, s.started_at, s.ended_at)),
-                Event::Idle(s) if idle => Some((s.game_id, s.started_at, s.ended_at)),
+                Event::Ended(s) if !idle => Some(s),
+                Event::Idle(s) if idle => Some(s),
                 _ => None,
             })
+            .map(|s| (s.game_id, tracker.entry_of(s.game_id), s.started_at, s.ended_at))
             .collect()
     };
     lock(&app.state::<AppState>().db).save_tracking(&spans(false), &spans(true), &tracker.active()).is_ok()
@@ -333,7 +347,7 @@ pub fn flush(app: &AppHandle) {
 
 /// Restoring a backup swaps the library under the tracker, and game ids
 /// differ between libraries. What was timed so far is saved to the library
-/// being replaced (kept as before-restore), then the tracker starts over
+/// being replaced (before `swap` keeps a copy of it), then the tracker starts over
 /// with the restored library's games: one still running starts a new
 /// session, and a pause is dropped. The tracker stays locked throughout, so
 /// nothing is timed against the wrong library in between.
@@ -345,12 +359,24 @@ pub fn around_restore<T>(app: &AppHandle, swap: impl FnOnce() -> T) -> T {
     log_events(app, &events, saved);
     *tracker = Tracker::new();
     let out = swap();
-    tracker.set_install_dirs(lock(&app.state::<AppState>().db).install_dirs().unwrap_or_default());
+    tracker.set_install_entries(lock(&app.state::<AppState>().db).install_dirs().unwrap_or_default());
     save(app, &tracker, &[]);
     drop(tracker);
     idle_settings_changed(app);
     notify(app, false);
     out
+}
+
+/// Combining `other` into `keep` (`combine` does it in the library): with
+/// the tracker locked throughout, so nothing is saved against `other` once
+/// it's gone, and a game being timed carries on under `keep`.
+pub fn around_combine<T>(app: &AppHandle, keep: i64, other: i64, combine: impl FnOnce() -> crate::CmdResult<T>) -> crate::CmdResult<T> {
+    let tracking = app.state::<Tracking>();
+    let mut tracker = lock(&tracking.tracker);
+    let out = combine()?;
+    tracker.renumber(other, keep);
+    tracker.set_install_entries(lock(&app.state::<AppState>().db).install_dirs().unwrap_or_default());
+    Ok(out)
 }
 
 /// Writes the events to tracker.log; true if play or idle time was saved.
