@@ -101,7 +101,10 @@ impl EpicId {
     fn launcher_uri(&self, action: &str) -> String {
         format!(
             "com.epicgames.launcher://apps/{}%3A{}%3A{}?action={action}&silent=true",
-            self.namespace, self.catalog_item_id, self.app_name
+            // Encoded: the ids may come from a restored backup, and must not add parameters.
+            encode(&self.namespace),
+            encode(&self.catalog_item_id),
+            encode(&self.app_name)
         )
     }
 }
@@ -220,9 +223,12 @@ impl Epic {
         })
     }
 
+    /// Saves under the lock, as `renew` does, so a renewal finishing at the
+    /// same time can't leave memory and Credential Manager on different sessions.
     fn store(&self, s: Session) {
+        let mut current = self.session.locked();
         (self.on_session)(Some(&s));
-        *self.session.locked() = Some(s);
+        *current = Some(s);
     }
 
     /// Renews the session ahead of time so the refresh token never ages out
@@ -274,8 +280,14 @@ impl Epic {
     }
 
     async fn get<T: serde::de::DeserializeOwned>(&self, url: &str, s: &Session) -> anyhow::Result<T> {
-        let res = self.http.get(url).bearer_auth(&s.access_token).send().await?;
-        // A revoked token: start the silent re-sign-in, as GOG does.
+        let mut res = self.http.get(url).bearer_auth(&s.access_token).send().await?;
+        // Epic can drop an access token before its stated expiry: renew once
+        // and retry. A rejected renewal is SESSION_EXPIRED from `token`.
+        if res.status().as_u16() == 401 {
+            let fresh = self.renew(s).await?;
+            res = self.http.get(url).bearer_auth(&fresh.access_token).send().await?;
+        }
+        // Still refused with a fresh token: start the silent re-sign-in.
         if res.status().as_u16() == 401 {
             bail!(SESSION_EXPIRED);
         }
@@ -333,6 +345,10 @@ impl Epic {
         for chunk in missing.chunks(8) {
             let batch = futures::future::join_all(chunk.iter().map(|id| self.fetch_catalog(s, id))).await;
             fetched.extend(batch.into_iter().flatten());
+        }
+        // Offline or Epic down: nothing learned, so leave the file alone.
+        if fetched.is_empty() {
+            return;
         }
         let mut cat = self.catalog.locked();
         cat.extend(fetched);

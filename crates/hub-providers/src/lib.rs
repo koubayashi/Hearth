@@ -42,6 +42,12 @@ pub(crate) fn http_client(user_agent: &str) -> reqwest::Client {
         .expect("http client")
 }
 
+/// Whether `e` is a store's SESSION_EXPIRED, even when wrapped with context
+/// on its way up (only the outer message shows in `to_string`).
+pub fn is_session_expired(e: &anyhow::Error, expired: &str) -> bool {
+    e.chain().any(|c| c.to_string() == expired)
+}
+
 /// Artwork URLs a store can supply directly, before the metadata service exists.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Artwork {
@@ -125,6 +131,15 @@ mod tests {
             store_playtime_secs: playtime,
             store_last_played: None,
         }
+    }
+
+    #[test]
+    fn session_expired_is_found_under_context() {
+        use anyhow::Context;
+        let wrapped = Err::<(), _>(anyhow::anyhow!(epic::SESSION_EXPIRED)).context("reading your Epic library").unwrap_err();
+        assert!(is_session_expired(&wrapped, epic::SESSION_EXPIRED));
+        assert!(!is_session_expired(&wrapped, gog_web::SESSION_EXPIRED));
+        assert!(!is_session_expired(&anyhow::anyhow!("Epic returned 503"), epic::SESSION_EXPIRED));
     }
 
     #[test]

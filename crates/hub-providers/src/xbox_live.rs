@@ -297,9 +297,12 @@ impl XboxLive {
         (self.on_session)(None);
     }
 
+    /// Saves under the lock, as `replace` does, so a renewal finishing at the
+    /// same time can't leave memory and Credential Manager on different sessions.
     fn store(&self, s: Session) {
+        let mut current = self.session.locked();
         (self.on_session)(Some(&s));
-        *self.session.locked() = Some(s);
+        *current = Some(s);
     }
 
     /// Trades the one-time code for a session, then reads the gamertag.

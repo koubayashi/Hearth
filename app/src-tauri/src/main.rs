@@ -254,6 +254,9 @@ fn save_steam_auth(app: &AppHandle, auth: Option<SteamAuth>) {
     if let Err(e) = secrets::save("steam-auth", json.as_deref()) {
         tracking::log(app, &format!("steam: couldn't save the sign-in ({e})"));
     }
+    // The bare key older builds kept is carried over at startup: once the
+    // sign-in is saved here (or removed), it must not come back.
+    let _ = secrets::save("steam-api-key", None);
     app.state::<AppState>().steam.set_auth(auth);
     let _ = app.emit("accounts-changed", ());
 }
@@ -335,13 +338,16 @@ fn open_auth_window(
         // "Sign in with Google / Steam / Xbox…" opens the provider in a popup
         // that reports back to the page that opened it. Tauri blocks popups by
         // default, which made those buttons do nothing. Allow them as normal
-        // browser popups, for secure pages only.
-        .on_new_window(|url, _features| {
-            if url.scheme() == "https" {
-                tauri::webview::NewWindowResponse::Allow
-            } else {
-                tauri::webview::NewWindowResponse::Deny
+        // browser popups, but only on the store's own sign-in pages; any
+        // other link opens in the real browser, as in `on_navigation`.
+        .on_new_window(move |url, _features| {
+            if auth::allowed(store, &url) {
+                return tauri::webview::NewWindowResponse::Allow;
             }
+            if url.scheme() == "https" {
+                let _ = hub_launch::run(&hub_launch::LaunchAction::Uri { uri: url.to_string() });
+            }
+            tauri::webview::NewWindowResponse::Deny
         })
         .on_navigation(move |url| {
             if url.host_str() == Some("hearth.invalid") {
@@ -420,16 +426,25 @@ fn finish_steam_sign_in(app: AppHandle, token: String) {
     });
 }
 
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+
+/// Counts each silent sign-in, so a give-up timer only closes the hidden
+/// window of its own attempt, never a newer one.
+static STEAM_TRIES: AtomicU64 = AtomicU64::new(0);
+static EPIC_TRIES: AtomicU64 = AtomicU64::new(0);
+/// When Epic last signed in silently (unix seconds).
+static EPIC_SILENT_AT: AtomicI64 = AtomicI64::new(0);
+
 /// Session tokens last about a day. The sign-in window keeps Steam's cookies,
 /// so a hidden window can usually fetch a fresh token without asking.
 fn steam_refresh_silently(app: &AppHandle) {
+    let attempt = STEAM_TRIES.fetch_add(1, Ordering::SeqCst) + 1;
     let _ = open_auth_window(app, "steam-refresh", auth::Store::Steam, "Steam", steam::TOKEN_URL, steam::TOKEN_URL, false, |app, body| {
         close_window(&app, "steam-refresh");
         match steam::token_from_body(&body) {
-            Some(token) => {
-                save_steam_auth(&app, Some(SteamAuth::Session { token }));
-                sync_all(app);
-            }
+            // Checked before it's kept: a token Steam then refuses would
+            // otherwise sync, expire and open this window again, forever.
+            Some(token) => finish_steam_sign_in(app, token),
             None => {
                 let _ = app.emit("sync-error", steam::SESSION_EXPIRED);
             }
@@ -440,7 +455,8 @@ fn steam_refresh_silently(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-        if app.get_webview_window("steam-refresh").is_some() {
+        // A newer attempt owns the window now, and its own timer.
+        if STEAM_TRIES.load(Ordering::SeqCst) == attempt && app.get_webview_window("steam-refresh").is_some() {
             close_window(&app, "steam-refresh");
             let _ = app.emit("sync-error", steam::SESSION_EXPIRED);
         }
@@ -452,6 +468,15 @@ fn steam_refresh_silently(app: &AppHandle) {
 /// window usually gets a new code without asking; only if that fails is the
 /// user asked to sign in again.
 fn epic_sign_in_silently(app: &AppHandle) {
+    // Signed in silently minutes ago and already refused again: Epic is
+    // rejecting fresh sign-ins, so stop instead of looping sync, expire,
+    // sign in. A later sync tries again.
+    if app.get_webview_window("epic-refresh").is_none() && now() - EPIC_SILENT_AT.load(Ordering::SeqCst) < 10 * 60 {
+        tracking::log(app, "epic: refused again right after signing in silently; not retrying yet");
+        let _ = app.emit("sync-error", epic::SESSION_EXPIRED);
+        return;
+    }
+    let attempt = EPIC_TRIES.fetch_add(1, Ordering::SeqCst) + 1;
     let url = epic::login_url();
     let _ = open_auth_window(
         app,
@@ -466,6 +491,7 @@ fn epic_sign_in_silently(app: &AppHandle) {
             match epic::code_from_redirect_body(&body) {
                 Some(code) => {
                     tracking::log(&app, "epic: signed in again silently");
+                    EPIC_SILENT_AT.store(now(), Ordering::SeqCst);
                     finish_epic_sign_in(app, code)
                 }
                 None => give_up_epic(&app, "Epic's page had no sign-in code"),
@@ -476,7 +502,8 @@ fn epic_sign_in_silently(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(90)).await;
-        if app.get_webview_window("epic-refresh").is_some() {
+        // A newer attempt owns the window now, and its own timer.
+        if EPIC_TRIES.load(Ordering::SeqCst) == attempt && app.get_webview_window("epic-refresh").is_some() {
             close_window(&app, "epic-refresh");
             give_up_epic(&app, "Epic didn't sign in by itself within 90s (it wants you to sign in)");
         }
@@ -492,7 +519,7 @@ fn keep_epic_alive(app: AppHandle) {
             match epic.keep_alive().await {
                 Ok(Some(until)) => tracking::log(&app, &format!("epic: renewed sign-in (refresh token valid until {until})")),
                 Ok(None) => {}
-                Err(e) if e.to_string() == epic::SESSION_EXPIRED => epic_sign_in_silently(&app),
+                Err(e) if hub_providers::is_session_expired(&e, epic::SESSION_EXPIRED) => epic_sign_in_silently(&app),
                 // Offline: try again next round, keep the session.
                 Err(e) => tracking::log(&app, &format!("epic: couldn't renew yet ({e})")),
             }
@@ -668,19 +695,19 @@ pub(crate) fn sync_all(app: AppHandle) {
             });
             let owned = match provider.owned().await {
                 Ok(g) => g,
-                Err(e) if store == hub_core::StoreId::Steam && e.to_string() == steam::SESSION_EXPIRED => {
+                Err(e) if store == hub_core::StoreId::Steam && hub_providers::is_session_expired(&e, steam::SESSION_EXPIRED) => {
                     steam_refresh_silently(&app);
                     Vec::new()
                 }
-                Err(e) if store == hub_core::StoreId::Epic && e.to_string() == epic::SESSION_EXPIRED => {
+                Err(e) if store == hub_core::StoreId::Epic && hub_providers::is_session_expired(&e, epic::SESSION_EXPIRED) => {
                     epic_sign_in_silently(&app);
                     Vec::new()
                 }
-                Err(e) if store == hub_core::StoreId::Xbox && e.to_string() == hub_providers::xbox_live::SESSION_EXPIRED => {
+                Err(e) if store == hub_core::StoreId::Xbox && hub_providers::is_session_expired(&e, hub_providers::xbox_live::SESSION_EXPIRED) => {
                     xbox_account::give_up(&app);
                     Vec::new()
                 }
-                Err(e) if store == hub_core::StoreId::Gog && e.to_string() == hub_providers::gog_web::SESSION_EXPIRED => {
+                Err(e) if store == hub_core::StoreId::Gog && hub_providers::is_session_expired(&e, hub_providers::gog_web::SESSION_EXPIRED) => {
                     gog_account::give_up(&app);
                     Vec::new()
                 }

@@ -91,7 +91,7 @@ pub fn keep_alive(app: AppHandle) {
             if gog.signed_in() {
                 match gog.keep_alive().await {
                     Ok(()) => {}
-                    Err(e) if e.to_string() == gog_web::SESSION_EXPIRED => give_up(&app),
+                    Err(e) if hub_providers::is_session_expired(&e, gog_web::SESSION_EXPIRED) => give_up(&app),
                     // Offline: keep the sign-in and try again next round.
                     Err(e) => tracking::log(&app, &format!("gog: couldn't renew yet ({e})")),
                 }

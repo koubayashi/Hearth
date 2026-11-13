@@ -204,7 +204,13 @@ fn best_match(title: &str, items: &[SearchItem]) -> Option<u64> {
     if want.is_empty() {
         return None;
     }
-    items.iter().find(|i| base_title(&i.name) == want).map(|i| i.id)
+    // The exact title first: an edition listed higher up must not win over it.
+    let exact = normalize_title(title);
+    items
+        .iter()
+        .find(|i| normalize_title(&i.name) == exact)
+        .or_else(|| items.iter().find(|i| base_title(&i.name) == want))
+        .map(|i| i.id)
 }
 
 /// Words that name an edition rather than a different game.
@@ -479,5 +485,15 @@ mod tests {
         assert_eq!(best_match("DEATH STRANDING", &more), Some(1));
         // A subtitle that isn't an edition is part of the name.
         assert_eq!(best_match("The Witcher 3", &more), None);
+    }
+
+    #[test]
+    fn exact_title_beats_an_edition_listed_first() {
+        let items = vec![
+            SearchItem { id: 2, name: "Example Quest: Definitive Edition".into() },
+            SearchItem { id: 1, name: "Example Quest™".into() },
+        ];
+        assert_eq!(best_match("Example Quest", &items), Some(1));
+        assert_eq!(best_match("Example Quest Definitive Edition", &items), Some(2));
     }
 }

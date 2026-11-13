@@ -90,7 +90,7 @@ pub fn keep_alive(app: AppHandle) {
             if live.signed_in() {
                 match live.keep_alive().await {
                     Ok(()) => {}
-                    Err(e) if e.to_string() == xbox_live::SESSION_EXPIRED => give_up(&app),
+                    Err(e) if hub_providers::is_session_expired(&e, xbox_live::SESSION_EXPIRED) => give_up(&app),
                     // Offline: keep the sign-in and try again next round.
                     Err(e) => tracking::log(&app, &format!("xbox: couldn't renew yet ({e})")),
                 }

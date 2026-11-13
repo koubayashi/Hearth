@@ -287,16 +287,23 @@ impl LibraryProvider for Steam {
     }
 
     fn launch(&self, store_game_id: &str) -> LaunchAction {
-        LaunchAction::Uri { uri: format!("steam://rungameid/{store_game_id}") }
+        // Not an app id: open the Steam library, as Epic opens its store.
+        app_uri("rungameid", store_game_id).unwrap_or_else(|| LaunchAction::Uri { uri: "steam://open/games".into() })
     }
 
     fn install(&self, store_game_id: &str) -> Option<LaunchAction> {
-        Some(LaunchAction::Uri { uri: format!("steam://install/{store_game_id}") })
+        app_uri("install", store_game_id)
     }
 
     fn uninstall(&self, store_game_id: &str) -> Option<LaunchAction> {
-        Some(LaunchAction::Uri { uri: format!("steam://uninstall/{store_game_id}") })
+        app_uri("uninstall", store_game_id)
     }
+}
+
+/// Ids can come from a restored backup, so only a plain app id goes into a
+/// steam:// address: anything else could add its own commands to it.
+fn app_uri(action: &str, id: &str) -> Option<LaunchAction> {
+    (!id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())).then(|| LaunchAction::Uri { uri: format!("steam://{action}/{id}") })
 }
 
 fn parse_manifest(text: &str, steamapps: &Path) -> Option<GameEntry> {
@@ -408,6 +415,14 @@ fn steam_root() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_plain_app_ids_become_steam_addresses() {
+        assert_eq!(app_uri("rungameid", "1145350"), Some(LaunchAction::Uri { uri: "steam://rungameid/1145350".into() }));
+        assert_eq!(app_uri("install", "1145350/../../open/console"), None);
+        assert_eq!(app_uri("rungameid", "1 -dev"), None);
+        assert_eq!(app_uri("uninstall", ""), None);
+    }
 
     const MANIFEST: &str = r#""AppState"
     {

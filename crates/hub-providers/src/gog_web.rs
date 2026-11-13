@@ -174,9 +174,12 @@ impl GogWeb {
         (self.on_session)(None);
     }
 
+    /// Saves under the lock, as `replace` does, so a renewal finishing at the
+    /// same time can't leave memory and Credential Manager on different sessions.
     fn store(&self, s: Session) {
+        let mut current = self.session.locked();
         (self.on_session)(Some(&s));
-        *self.session.locked() = Some(s);
+        *current = Some(s);
     }
 
     pub fn product(&self, id: &str) -> Option<Product> {
@@ -225,10 +228,11 @@ impl GogWeb {
 
     /// A current access token, renewed when about to run out. A rejected
     /// renewal means the sign-in is gone (SESSION_EXPIRED); anything else
-    /// (offline) keeps it for next time.
-    async fn access(&self) -> anyhow::Result<Session> {
+    /// (offline) keeps it for next time. `rejected` is an access token GOG
+    /// just refused: it is renewed whatever its expiry says.
+    async fn access(&self, rejected: Option<&str>) -> anyhow::Result<Session> {
         let Some(s) = self.session.locked().clone() else { bail!("Not signed in to GOG") };
-        if s.expires_at_unix - now() > 120 {
+        if rejected != Some(s.access_token.as_str()) && s.expires_at_unix - now() > 120 {
             return Ok(s);
         }
         let _turn = self.renewing.lock().await;
@@ -257,7 +261,7 @@ impl GogWeb {
     }
 
     pub async fn keep_alive(&self) -> anyhow::Result<()> {
-        self.access().await.map(drop)
+        self.access(None).await.map(drop)
     }
 
     /// Ids of every product the account owns (games and DLC).
@@ -266,8 +270,15 @@ impl GogWeb {
         struct Owned {
             owned: Vec<u64>,
         }
-        let s = self.access().await?;
-        let res = self.http.get("https://embed.gog.com/user/data/games").bearer_auth(&s.access_token).send().await?;
+        const GAMES_URL: &str = "https://embed.gog.com/user/data/games";
+        let s = self.access(None).await?;
+        let mut res = self.http.get(GAMES_URL).bearer_auth(&s.access_token).send().await?;
+        // GOG can drop an access token before its stated expiry: renew once
+        // and retry before calling the sign-in gone.
+        if res.status().as_u16() == 401 {
+            let s = self.access(Some(&s.access_token)).await?;
+            res = self.http.get(GAMES_URL).bearer_auth(&s.access_token).send().await?;
+        }
         if res.status().as_u16() == 401 {
             bail!(SESSION_EXPIRED);
         }
@@ -314,8 +325,10 @@ impl GogWeb {
             let url = format!("https://gamesdb.gog.com/platforms/gog/external_releases/{id}");
             let game = match self.http.get(url).send().await {
                 Ok(r) if r.status().is_success() => r.json::<GamesDbRelease>().await.ok().and_then(|r| r.game),
-                Ok(_) => None,
-                Err(_) => continue,
+                // Only "not found" means there is no art; a busy or failing
+                // server is asked again next sync.
+                Ok(r) if r.status() == reqwest::StatusCode::NOT_FOUND => None,
+                _ => continue,
             };
             let mut c = self.catalog.locked();
             if let Some(p) = c.get_mut(&id) {
