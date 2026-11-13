@@ -41,6 +41,57 @@ version that has no section here.
 
 - The list view's "Playing now" time stayed where it was when the game was
   selected. It counts up now, and Play time includes the session running.
+- Combining two versions while one was being timed could stop Hearth
+  saving play for every game until the next refresh. The running session
+  now carries on under the combined game.
+- Restoring a backup: the copy of your library made first now has its own
+  dated name (the last three are kept), so restoring that copy to undo a
+  restore works. A game being timed is in that copy too.
+- Backing up over an earlier backup no longer deletes it before the new one
+  is written. Automatic backups write to the folder only after the library
+  is copied, so a slow network drive doesn't hold up Hearth.
+- A restored backup's game folders are added only after you confirm them,
+  like its ways to play.
+- **Open Hearth** in the tray menu could freeze Hearth when its window had
+  been closed.
+- Play now starts the store copy it names: the one played last, else the
+  first. Every Play button picks the same version.
+- Separating a version takes all of its copies, as the versions panel shows
+  them, and the time played since combining goes with it.
+- Signing in to a store after Hearth had timed its games no longer counts
+  those hours twice.
+- The Windows clock going back an hour could stop timing until Hearth
+  restarted.
+- Installers named like "…Installer.exe" or "…_Setup.exe" in a game's
+  folder are no longer timed as play.
+- Deleting a session from History also removes the idle time right after
+  it.
+- An expired Epic sign-in renews by itself again. GOG and Epic try a fresh
+  token once before signing you out.
+- Signing out of Steam stays signed out after a restart.
+- A GOG cover that failed to load once is tried again on the next refresh.
+- Store sign-in popups stay on the store's own sites; other links open in
+  your browser.
+- Uninstalling a folder game that holds another store's games or a watched
+  folder is refused.
+- Arguments for a shortcut (.lnk) way to play are refused instead of being
+  dropped without a word.
+- Folders with a comma in their name open correctly.
+- Art refreshes no longer run twice at once, and reloads during artwork
+  updates are far fewer.
+- Moving through games with a controller no longer sends a burst of store
+  lookups and folder scans.
+- A controller can leave a text field, and close the menu from the "New
+  collection" box.
+- The controller no longer acts in Hearth while another window has focus.
+- The Console view keeps the selected game when a shelf reorders.
+- A new cover shows even when an earlier one had failed to load.
+- Storage stops measuring when you leave it, and shows an error instead of
+  a blank page.
+- The tray menu opens even when part of it fails to load.
+- Opening a game from Stats scrolls the list view to it.
+- Stats and Storage covers use the same fallback as the library.
+- The built-in SQLite is updated to fix a security bug.
 
 ### Removed
 
