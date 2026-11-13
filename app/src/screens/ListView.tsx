@@ -36,6 +36,7 @@ const GROUP_H = 31;
 export function ListView({
   hiddenView,
   onLeaveHidden,
+  revealId,
   version,
   focused,
   playing,
@@ -47,6 +48,8 @@ export function ListView({
   hiddenView: boolean;
   /** Leaves the hidden view. */
   onLeaveHidden?: () => void;
+  /** A game to scroll to once the list loads (opened from Stats). */
+  revealId?: number | null;
   version: number;
   focused: Game | null;
   playing: NowPlaying[];
@@ -153,6 +156,14 @@ export function ListView({
       return selectedAt < 0 || shown.includes(selectedAt) ? shown : [...shown, selectedAt].sort((a, b) => a - b);
     },
   });
+  // A game opened from Stats may be far down the list: bring it to the
+  // middle once, when it first shows.
+  const revealed = useRef(false);
+  useEffect(() => {
+    if (revealed.current || !revealId || selectedAt < 0 || focused?.id !== revealId) return;
+    revealed.current = true;
+    v.scrollToIndex(selectedAt, { align: "center" });
+  }, [revealId, selectedAt, focused, v]);
 
   const count = games?.length ?? 0;
 

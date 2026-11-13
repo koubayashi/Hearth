@@ -157,7 +157,11 @@ export function Console({
     if (i >= 0 && i !== index) setIndex(i);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row]);
-  selectedId.current = game?.id ?? null;
+  // Noted after the effect above has read the previous one: noted during
+  // render, a reordered shelf would already name whatever moved into this spot.
+  useEffect(() => {
+    selectedId.current = game?.id ?? null;
+  });
 
   const tileFocus = () => rowRef.current?.querySelector<HTMLElement>(`[data-index="${at}"]`)?.focus({ preventScroll: true });
   // The first tile has focus on arrival, so a controller works at once.

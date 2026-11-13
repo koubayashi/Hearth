@@ -274,6 +274,7 @@ let current: SmartIndex = EMPTY;
 const listeners = new Set<() => void>();
 
 export async function loadSmart() {
+  follow();
   try {
     current = await api.smartIndex();
     listeners.forEach((l) => l());
@@ -284,7 +285,7 @@ export async function loadSmart() {
 
 export function useSmartIndex(): SmartIndex {
   return useSyncExternalStore(
-    (l) => (listeners.add(l), () => listeners.delete(l)),
+    (l) => (follow(), listeners.add(l), () => listeners.delete(l)),
     () => current,
   );
 }
@@ -309,16 +310,22 @@ export function useGameLinks(gameId: number | null, mode: "panel" | "all" = "pan
 // up" instead of showing zero.
 let looking = false;
 const lookingListeners = new Set<() => void>();
-// Each batch Wikidata answers shows at once.
-void api.onSmartChanged(() => void loadSmart());
-void api.onSmartStatus((on) => {
-  looking = on === true;
-  lookingListeners.forEach((l) => l());
-});
+// Each batch Wikidata answers shows at once. Followed from first use, not
+// on import: the tray window loads this module too and never shows shelves.
+let following = false;
+function follow() {
+  if (following) return;
+  following = true;
+  void api.onSmartChanged(() => void loadSmart());
+  void api.onSmartStatus((on) => {
+    looking = on === true;
+    lookingListeners.forEach((l) => l());
+  });
+}
 
 export function useSmartLooking(): boolean {
   return useSyncExternalStore(
-    (l) => (lookingListeners.add(l), () => lookingListeners.delete(l)),
+    (l) => (follow(), lookingListeners.add(l), () => lookingListeners.delete(l)),
     () => looking,
   );
 }

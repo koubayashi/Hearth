@@ -44,8 +44,13 @@ export function installSpatialNav(): () => void {
   const onKey = (e: KeyboardEvent) => {
     if (!e.key.startsWith("Arrow") || e.defaultPrevented) return;
     const target = e.target as HTMLElement;
-    if (target.matches("input, textarea, select")) return;
-    if (!target.closest("[data-nav]")) {
+    if (target.matches("textarea, select, input[type=range], input[type=number]")) return;
+    // Left and right move the caret in a text box; up and down leave it, so
+    // a controller can't get stuck there.
+    const input = target.matches("input");
+    if (input && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
+    const from = target.closest<HTMLElement>("[data-nav]") ?? (input ? target : null);
+    if (!from) {
       const first = candidates()[0];
       if (first) {
         first.focus();
@@ -53,7 +58,7 @@ export function installSpatialNav(): () => void {
       }
       return;
     }
-    if (moveFocus(target.closest<HTMLElement>("[data-nav]")!, e.key as Dir)) e.preventDefault();
+    if (moveFocus(from, e.key as Dir)) e.preventDefault();
   };
   window.addEventListener("keydown", onKey);
   return () => window.removeEventListener("keydown", onKey);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -12,7 +12,9 @@ export function TitleBar() {
 }
 
 function WindowButtons() {
-  const win = getCurrentWindow();
+  // One handle for the window's life: a new one each render would
+  // re-subscribe to resizes every time the app redraws.
+  const win = useMemo(getCurrentWindow, []);
   // Maximized shows "Restore down", as in every Windows app. Snapping,
   // double-clicking the top and Win+Up all change it, so follow resizes.
   // In full screen (F11) the same button leaves full screen.

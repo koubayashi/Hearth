@@ -4,7 +4,8 @@ import { loadSmart } from "./lib/smart";
 import { onOpenShelf, shelfKey, type Shelf } from "./lib/nav";
 import { api } from "./lib/api";
 import type { Game, GameStatus, NowPlaying, Via } from "./lib/types";
-import { chosenWay, storeName } from "./lib/ways";
+import { chosenWay, defaultWay, storeName } from "./lib/ways";
+import { playVersion, versionEntry } from "./lib/versions";
 import { Rail, type Route } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
 import { Toast, type ToastMsg } from "./components/Toast";
@@ -21,14 +22,32 @@ import { ListView } from "./screens/ListView";
 import { Console } from "./screens/Console";
 import { markSeen, useUpdate } from "./lib/updates";
 
+let unsavedPrefs: string | null = null;
+function savePrefs() {
+  if (unsavedPrefs === null) return;
+  api.savePrefsSnapshot(unsavedPrefs).catch(() => {});
+  unsavedPrefs = null;
+}
+
 export function App() {
   const [route, setRoute] = useState<Route>("library");
   // Automatic backups run in the background, window open or not: give them
   // the current appearance settings to include.
   const prefs = usePrefs();
+  // Once the settings rest: dragging the accent picker changes them dozens
+  // of times a second. A change still waiting is written on the way out.
   useEffect(() => {
-    api.savePrefsSnapshot(JSON.stringify(prefs)).catch(() => {});
+    unsavedPrefs = JSON.stringify(prefs);
+    const timer = setTimeout(savePrefs, 500);
+    return () => clearTimeout(timer);
   }, [prefs]);
+  useEffect(() => {
+    window.addEventListener("beforeunload", savePrefs);
+    return () => {
+      window.removeEventListener("beforeunload", savePrefs);
+      savePrefs();
+    };
+  }, []);
   const [focused, setFocused] = useState<Game | null>(null);
   const [version, setVersion] = useState(0);
   const [toast, setToast] = useState<ToastMsg | null>(null);
@@ -153,6 +172,10 @@ export function App() {
     refresh();
   };
   const primary = async (g: Game, via?: Via) => {
+    // Every Play button starts the version the card shows, not one Rust
+    // would have to guess.
+    const shown = !via && !defaultWay(g) ? playVersion(g) : null;
+    if (shown) via = { kind: "entry", id: versionEntry(shown).id };
     const store = storeName(g);
     const way = chosenWay(g, via);
     if (api.demo) {
@@ -234,6 +257,7 @@ export function App() {
               key={route}
               hiddenView={route === "hidden"}
               onLeaveHidden={leaveHidden}
+              revealId={route === "library" ? revealId : null}
               version={version}
               focused={focused}
               playing={playing}

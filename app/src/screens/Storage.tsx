@@ -5,10 +5,15 @@ import { formatBytes } from "../lib/format";
 import { driveRoot, groupByDrive, idleHint, installPath, type DriveSpace, type DriveUse, type StoredGame } from "../lib/storage";
 import type { Game } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Art } from "../components/Art";
 import { openUninstall } from "../components/Uninstall";
 
 /** Rows shown per drive before "Show all". */
 const FIRST_ROWS = 10;
+
+/** Sizes being measured. Kept outside the page so leaving and coming back
+ *  can't start a second pass beside the first. */
+let busy = false;
 
 /**
  * Installed games and the drives they're on, from saved sizes (nothing is
@@ -16,11 +21,23 @@ const FIRST_ROWS = 10;
  */
 export function useDriveUse(version: number) {
   const [games, setGames] = useState<Game[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [drives, setDrives] = useState<DriveSpace[] | null>(null);
   useSavedInfo();
 
   useEffect(() => {
-    api.listGames({ install: "all", stores: [], search: null, hidden_only: false }).then(setGames);
+    let live = true;
+    api
+      .listGames({ install: "all", stores: [], search: null, hidden_only: false })
+      .then((g) => {
+        if (!live) return;
+        setGames(g);
+        setLoadError(null);
+      })
+      .catch((e) => live && setLoadError(String(e)));
+    return () => {
+      live = false;
+    };
   }, [version]);
 
   // Hidden games still take space, so they count here too.
@@ -55,7 +72,7 @@ export function useDriveUse(version: number) {
   }));
   const use = drives ? groupByDrive(stored, drives) : null;
   const refreshDrives = () => api.storageDrives(roots).then(setDrives, () => {});
-  return { loaded: games !== null, onDisk, use, refreshDrives };
+  return { loaded: games !== null, loadError, onDisk, use, refreshDrives };
 }
 
 /**
@@ -72,23 +89,31 @@ export function Storage({
   onOpenGame: (g: Game) => void;
   say: (text: string) => void;
 }) {
-  const { loaded, onDisk, use, refreshDrives } = useDriveUse(version);
+  const { loaded, loadError, onDisk, use, refreshDrives } = useDriveUse(version);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const busy = useRef(false);
+  // Measuring stops when the page closes; the next visit picks up the rest.
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
 
   // Sizes are measured one game at a time, off the UI thread: the ones never
   // measured when the page opens, or every installed game on "Measure again".
   const measure = async (all: boolean) => {
-    if (busy.current) return;
+    if (busy) return;
     const todo = onDisk.filter((g) => g.installed && (all || savedInfo(g.id)?.install?.bytes == null));
     if (todo.length === 0) return;
-    busy.current = true;
+    busy = true;
     setProgress({ done: 0, total: todo.length });
-    for (let i = 0; i < todo.length; i++) {
+    for (let i = 0; i < todo.length && live.current; i++) {
       await measureInstall(todo[i].id, all).catch(() => null);
-      setProgress({ done: i + 1, total: todo.length });
+      if (live.current) setProgress({ done: i + 1, total: todo.length });
     }
-    busy.current = false;
+    busy = false;
+    if (!live.current) return;
     setProgress(null);
     // Free space moves too when games update or install.
     void refreshDrives();
@@ -100,7 +125,18 @@ export function Storage({
     void measure(false);
   }, [loaded]);
 
-  if (!use) return <div className="scroll" />;
+  if (!use) {
+    return (
+      <div className="scroll">
+        {loadError && (
+          <div className="empty" role="alert">
+            <h3>Couldn't load your games</h3>
+            {loadError}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const totalGames = use.reduce((n, d) => n + d.gameBytes, 0);
   const withGames = use.filter((d) => d.games.length > 0);
@@ -213,7 +249,7 @@ function Drive({ d, onOpenGame, say }: { d: DriveUse; onOpenGame: (g: Game) => v
             return (
               <li key={game.id}>
                 <button className="drive-game" data-nav onClick={() => onOpenGame(game)} title={`Show ${game.title} in the library`}>
-                  {game.cover ? <img src={game.cover} alt="" loading="lazy" /> : <span className="drive-art" />}
+                  {game.cover ? <Art src={game.cover} title="" /> : <span className="drive-art" />}
                   <span className="drive-name">
                     <b>{game.title}</b>
                     {hint && <small>{hint}</small>}

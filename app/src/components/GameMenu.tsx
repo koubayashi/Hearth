@@ -315,7 +315,10 @@ function CollectionsView({ game, back }: { game: Game; back: React.ReactNode }) 
           aria-label="New collection name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.stopPropagation()}
+          // Typing stays in the box; up, down and Escape still work the menu.
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "Escape") e.stopPropagation();
+          }}
         />
       </form>
     </>

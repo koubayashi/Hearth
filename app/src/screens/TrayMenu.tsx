@@ -27,20 +27,19 @@ export function TrayMenu() {
   const ref = useRef<HTMLDivElement>(null);
   const now = useNowSecs(playing.length > 0, 15_000);
 
+  // The menu shows even when a part fails to load, with what did: Open and
+  // Quit always have to be there.
   const load = useCallback(async () => {
-    const [g, p] = await Promise.all([api.listGames(ALL), api.nowPlaying()]);
-    setGames(g);
-    setPlaying(p);
+    const [g, p] = await Promise.allSettled([api.listGames(ALL), api.nowPlaying()]);
+    if (g.status === "fulfilled") setGames(g.value);
+    if (p.status === "fulfilled") setPlaying(p.value);
     setOpened((n) => n + 1);
   }, []);
 
+  // The library is read on each open, not on every change while hidden.
   useEffect(() => {
     void load();
-    const offs = [
-      api.onTrayOpen(() => void load()),
-      api.onNowPlaying((p) => setPlaying(p as NowPlaying[])),
-      api.onLibraryChanged(() => void api.listGames(ALL).then(setGames)),
-    ];
+    const offs = [api.onTrayOpen(() => void load()), api.onNowPlaying((p) => setPlaying(p as NowPlaying[]))];
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, [load]);
 

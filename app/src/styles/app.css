@@ -767,7 +767,8 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
   padding: var(--space-3); border-radius: var(--radius-panel); transition: background var(--dur-fast);
 }
 .podium-item:hover { background: var(--line); }
-.podium-item img, .podium-art { width: 84px; aspect-ratio: 2 / 3; flex: none; object-fit: cover; border-radius: var(--radius-art); background: var(--base-2); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32); }
+.podium-item img, .podium-item .art-fallback, .podium-art { width: 84px; aspect-ratio: 2 / 3; flex: none; object-fit: cover; border-radius: var(--radius-art); background: var(--base-2); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32); }
+.podium-item .art-fallback { height: auto; padding: 0; }
 .podium-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-bottom: 2px; }
 .podium-text .rank { font: 600 var(--text-xl) var(--font-display); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .podium-text b { font: 600 var(--text-md) var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -64,17 +64,23 @@ export function useGameInfo(game: Game | null, nonce: number) {
   useEffect(() => {
     if (id === null) return;
     let live = true;
-    Promise.all([
-      api.gameDetails(id).catch(() => cache.get(id)?.details ?? null),
-      installed ? api.installInfo(id, false).catch(() => cache.get(id)?.install ?? null) : Promise.resolve(null),
-    ]).then(([details, install]) => {
-      const old = cache.get(id);
-      cache.set(id, { details, install });
-      // Only redraw if something is new: usually it's what's already shown.
-      if (live && JSON.stringify(old) !== JSON.stringify({ details, install })) rerender();
-    });
+    // Only for a game the selection rests on: holding the D-pad through the
+    // library would otherwise ask Steam about every game passed and start a
+    // folder scan for each. The panel draws from the cache meanwhile.
+    const timer = setTimeout(() => {
+      Promise.all([
+        api.gameDetails(id).catch(() => cache.get(id)?.details ?? null),
+        installed ? api.installInfo(id, false).catch(() => cache.get(id)?.install ?? null) : Promise.resolve(null),
+      ]).then(([details, install]) => {
+        const old = cache.get(id);
+        cache.set(id, { details, install });
+        // Only redraw if something is new: usually it's what's already shown.
+        if (live && JSON.stringify(old) !== JSON.stringify({ details, install })) rerender();
+      });
+    }, 250);
     return () => {
       live = false;
+      clearTimeout(timer);
     };
   }, [id, installed, nonce]);
 

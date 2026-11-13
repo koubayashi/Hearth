@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseTitle, pairKey, playVersion, suggestCombines, versionsOf } from "./versions";
+import { baseTitle, pairKey, pickEntry, playVersion, suggestCombines, versionsOf } from "./versions";
 import type { Game, StoreEntry } from "./types";
 
 let nextId = 1;
@@ -42,6 +42,32 @@ describe("playVersion", () => {
     const none = game(1, "GTA V", [entry("GTA V"), entry("GTA V Enhanced")]);
     expect(playVersion(none)?.label).toBe("Enhanced");
     expect(playVersion(game(1, "Hades"))).toBeNull();
+  });
+  it("plays the first installed version on a tie, never-played included", () => {
+    const never = game(1, "GTA V", [entry("GTA V", { installed: true }), entry("GTA V Enhanced", { installed: true })]);
+    expect(playVersion(never)?.label).toBe("Original");
+    const tied = game(1, "GTA V", [entry("GTA V", { installed: true, last_played: 7 }), entry("GTA V Enhanced", { installed: true, last_played: 7 })]);
+    expect(playVersion(tied)?.label).toBe("Original");
+  });
+});
+
+describe("pickEntry", () => {
+  it("picks the installed entry played last, the first on a tie", () => {
+    const a = entry("Hades", { installed: true, last_played: 5 });
+    const b = entry("Hades", { installed: true, last_played: 9, store: "steam" });
+    const c = entry("Hades", { installed: true, last_played: 9, store: "gog" });
+    expect(pickEntry([a, b, c])).toBe(b);
+    const x = entry("Hades", { installed: true });
+    const y = entry("Hades", { installed: true, store: "steam" });
+    expect(pickEntry([x, y])).toBe(x);
+  });
+  it("skips offline and uninstalled entries, else picks one a store can install from", () => {
+    const off = entry("Hades", { installed: true, offline: true, last_played: 99 });
+    const on = entry("Hades", { installed: true });
+    expect(pickEntry([off, on])).toBe(on);
+    const manual = entry("Hades", { store: "manual" });
+    const steam = entry("Hades", { store: "steam" });
+    expect(pickEntry([manual, steam])).toBe(steam);
   });
 });
 

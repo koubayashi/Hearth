@@ -38,7 +38,8 @@
 }
 .drive-game:hover { background: var(--line); }
 .drive-game:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-.drive-game img, .drive-art { width: 28px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 3px; background: var(--base-2); }
+.drive-game img, .drive-game .art-fallback, .drive-art { width: 28px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 3px; background: var(--base-2); }
+.drive-game .art-fallback { height: auto; padding: 0; }
 .drive-name { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
 .drive-name b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drive-name small { flex: none; font-size: var(--text-xs); color: var(--ink-3); }

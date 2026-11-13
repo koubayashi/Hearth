@@ -44,6 +44,15 @@ export function startGamepadBridge(): () => void {
       if (y < -DEADZONE) down.add("ArrowUp");
       if (y > DEADZONE) down.add("ArrowDown");
     }
+    // The pad is shared with whatever has focus: a game on another screen
+    // mustn't also steer Hearth. A button still down when Hearth gets focus
+    // back waits to be let go, so pressing it in the game doesn't count here.
+    if (!document.hasFocus()) {
+      held.clear();
+      for (const key of down) held.set(key, Infinity);
+      raf = requestAnimationFrame(tick);
+      return;
+    }
     for (const key of down) {
       const next = held.get(key);
       if (next === undefined) {

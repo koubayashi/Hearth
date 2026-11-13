@@ -2,13 +2,13 @@
 
 import type { Game, LaunchOption, Via } from "./types";
 import { STORE_LABEL } from "./types";
+import { pickEntry } from "./versions";
 
 /** The way to play the Play button uses, or null for the store's own launch. */
 export const defaultWay = (g: Game): LaunchOption | null => g.launch_options.find((o) => o.is_default) ?? null;
 
 /** The entry Hearth launches through, else one a store can install from. */
-const launchEntry = (g: Game) =>
-  g.entries.find((e) => e.installed && !e.offline) ?? g.entries.find((e) => e.store !== "manual") ?? g.entries[0];
+const launchEntry = (g: Game) => pickEntry(g.entries);
 
 /** The store Hearth launches or installs through. */
 export const storeName = (g: Game) => STORE_LABEL[launchEntry(g)?.store ?? "manual"];

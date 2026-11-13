@@ -14,7 +14,9 @@ const fadeInIfLoading = (img: HTMLImageElement | null) => {
 };
 
 export function Art({ src, title, className }: { src: string | null; title: string; className?: string }) {
-  const [attempt, setAttempt] = useState(0);
+  // Failures count for the art they happened to: new art starts afresh.
+  const [failed, setFailed] = useState({ src, n: 0 });
+  const attempt = failed.src === src ? failed.n : 0;
   const urls = src ? [...new Set([src, legacy(src)])] : [];
   if (attempt >= urls.length) {
     return <div className={`art-fallback ${className ?? ""}`}>{title}</div>;
@@ -32,7 +34,7 @@ export function Art({ src, title, className }: { src: string | null; title: stri
         const img = e.currentTarget;
         if ("loading" in img.dataset) img.classList.add("art-in");
       }}
-      onError={() => setAttempt((a) => a + 1)}
+      onError={() => setFailed({ src, n: attempt + 1 })}
     />
   );
 }

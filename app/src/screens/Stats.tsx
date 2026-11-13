@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { computeStats, hours, type Stats as StatsData, type Week } from "../lib/stats";
 import { formatBytes, formatPlaytime } from "../lib/format";
 import { Icon } from "../components/Icon";
+import { Art } from "../components/Art";
 import { useDriveUse } from "./Storage";
 import { STATUSES, STORE_LABEL, type Game, type GameStatus, type PlaySession } from "../lib/types";
 import { StoreIcon } from "../components/StoreIcon";
@@ -83,7 +84,7 @@ export function Stats({
               {podium.map(({ game, secs }, i) => (
                 <li key={game.id}>
                   <button className="podium-item" data-nav onClick={() => onOpenGame(game)} title={`Show ${game.title} in the library`}>
-                    {game.cover ? <img src={game.cover} alt="" loading="lazy" /> : <span className="podium-art" />}
+                    {game.cover ? <Art src={game.cover} title="" /> : <span className="podium-art" />}
                     <span className="podium-text">
                       <span className="rank">{i + 1}</span>
                       <b>{game.title}</b>
@@ -209,7 +210,7 @@ function Headline({ s, onOpenGame }: { s: StatsData; onOpenGame: (g: Game) => vo
   const total = s.totalSecs === 0 ? "No playtime yet" : h === 0 ? "Under an hour" : `${h.toLocaleString()} ${h === 1 ? "hour" : "hours"}`;
   return (
     <header className={`stats-hero${art ? " has-art" : ""}`}>
-      {art && <img className="stats-hero-art" src={art} alt="" />}
+      {art && <Art className="stats-hero-art" src={art} title="" />}
       <div className="stats-hero-text">
         <p className="stats-hero-total">
           {total}

@@ -62,9 +62,17 @@ export function playVersion(g: Game): Version | null {
   return vs.find((v) => v.label !== "Original") ?? vs[0];
 }
 
+/** The entry Play starts among these: the installed one played last, the
+ *  first on a tie (Rust's launch picks the same); with none installed, one
+ *  a store can install from. */
+export function pickEntry(entries: StoreEntry[]): StoreEntry | undefined {
+  const installed = entries.filter((e) => e.installed && !e.offline);
+  if (installed.length > 0) return installed.reduce((a, b) => ((b.last_played ?? 0) > (a.last_played ?? 0) ? b : a));
+  return entries.find((e) => e.store !== "manual") ?? entries[0];
+}
+
 /** The store entry Hearth launches or installs a version through. */
-export const versionEntry = (v: Version) =>
-  v.entries.find((e) => e.installed && !e.offline) ?? v.entries.find((e) => e.store !== "manual") ?? v.entries[0];
+export const versionEntry = (v: Version) => pickEntry(v.entries)!;
 
 // Words that mark the same game rebuilt, not a new game. "Remake" isn't
 // here: a remake (Resident Evil 2, 2019) is a game of its own.
