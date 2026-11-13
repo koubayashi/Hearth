@@ -63,7 +63,9 @@ pub fn backup_restore(app: AppHandle, path: String) -> CmdResult<Restored> {
     let incoming = dir.join("library.db.incoming");
     std::fs::copy(&source, &incoming).map_err(err)?;
 
-    {
+    // A game being timed is saved to the library being replaced first: its
+    // id may belong to another game, or none, in the restored one.
+    crate::tracking::around_restore(&app, || -> CmdResult<()> {
         let mut db = lock(&state.db);
         // Close the library file before replacing it.
         *db = Db::open_in_memory().map_err(err)?;
@@ -79,16 +81,17 @@ pub fn backup_restore(app: AppHandle, path: String) -> CmdResult<Restored> {
                 let _ = restored.forget_backup_meta();
                 *db = restored;
                 *lock(&app.state::<PendingWays>().0) = ways;
+                Ok(())
             }
             Err(e) => {
                 // Put the library back as it was.
                 std::fs::copy(&safety, &live).map_err(err)?;
                 *db = Db::open(&live).map_err(err)?;
                 let _ = db.forget_backup_meta();
-                return Err(format!("Couldn't restore that backup ({e}). Your library is unchanged."));
+                Err(format!("Couldn't restore that backup ({e}). Your library is unchanged."))
             }
         }
-    }
+    })?;
 
     if let Some(list) = meta.get("game_folders").and_then(|j| serde_json::from_str::<Vec<String>>(j).ok()) {
         folders::replace(&app, list)?;

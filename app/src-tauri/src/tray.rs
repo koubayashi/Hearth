@@ -382,7 +382,7 @@ pub fn open_hearth(app: AppHandle) {
 
 #[tauri::command]
 pub fn quit_hearth(app: AppHandle) {
-    tracking::flush(&app);
+    // Timing stops on the way out (`RunEvent::Exit`), once.
     app.exit(0);
 }
 
@@ -397,9 +397,17 @@ pub fn set_playing(app: &AppHandle, playing: &[NowPlaying]) {
         [one] => format!("Hearth · timing {}", one.title),
         many => format!("Hearth · timing {} games", many.len()),
     };
-    let _ = tray.set_tooltip(Some(tip));
+    // Only redrawn when the tooltip or the pause mark changes.
+    static SHOWN: Mutex<Option<(String, bool)>> = Mutex::new(None);
+    let now = (tip, !paused.is_empty());
+    let mut shown = lock(&SHOWN);
+    if shown.as_ref() == Some(&now) {
+        return;
+    }
+    let _ = tray.set_tooltip(Some(now.0.clone()));
     let Some(icon) = app.default_window_icon() else { return };
-    let _ = tray.set_icon(Some(if paused.is_empty() { icon.clone() } else { with_pause_mark(icon) }));
+    let _ = tray.set_icon(Some(if now.1 { with_pause_mark(icon) } else { icon.clone() }));
+    *shown = Some(now);
 }
 
 /// The app icon with a small pause badge in its lower right corner.

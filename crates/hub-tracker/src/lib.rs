@@ -19,12 +19,20 @@ pub const MIN_SESSION_SECS: i64 = 30;
 /// asleep; the gap isn't counted.
 pub const MAX_GAP_SECS: i64 = 120;
 
-/// Helper processes that live in game folders but don't mean you're playing.
-const IGNORED_EXES: &[&str] = &[
-    "unins", "crashreport", "crashhandler", "crashpad", "bugsplat", "vcredist", "vc_redist",
-    "dxsetup", "dxwebsetup", "dotnetfx", "ue4prereq", "ueprereq", "easyanticheat_setup", "installer",
-    "setup.exe", "redist",
+/// Helper processes that live in game folders but don't mean you're playing:
+/// any exe whose name contains one of these...
+const IGNORED_PARTS: &[&str] = &[
+    "crashreport", "crashhandler", "crashpad", "bugsplat", "vcredist", "vc_redist", "dxsetup", "dxwebsetup",
+    "dotnetfx", "ue4prereq", "ueprereq", "easyanticheat_setup",
 ];
+/// ...or whose name starts with one of these as a whole word: "setup.exe",
+/// "setup_x64.exe" and "unins000.exe", but not "Redistrict.exe".
+const IGNORED_WORDS: &[&str] = &["unins", "uninstall", "installer", "setup", "redist"];
+
+fn is_helper(file: &str) -> bool {
+    IGNORED_PARTS.iter().any(|i| file.contains(i))
+        || IGNORED_WORDS.iter().any(|w| file.strip_prefix(w).is_some_and(|rest| !rest.starts_with(|c: char| c.is_alphabetic())))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Session {
@@ -165,7 +173,7 @@ impl Tracker {
     pub fn game_for_exe(&self, exe: &Path) -> Option<i64> {
         let path = exe.to_string_lossy().replace('/', "\\").to_lowercase();
         let file = path.rsplit('\\').next().unwrap_or("");
-        if !file.ends_with(".exe") || IGNORED_EXES.iter().any(|i| file.contains(i)) {
+        if !file.ends_with(".exe") || is_helper(file) {
             return None;
         }
         self.dirs.iter().find(|(d, _)| path.starts_with(d.as_str())).map(|(_, id)| *id)
@@ -174,10 +182,6 @@ impl Tracker {
     /// Running sessions as (game id, started, last seen), for checkpoints.
     pub fn active(&self) -> Vec<(i64, i64, i64)> {
         self.active.iter().map(|(id, a)| (*id, a.started_at, a.last_seen)).collect()
-    }
-
-    pub fn running(&self) -> Vec<(i64, i64)> {
-        self.active.iter().map(|(id, a)| (*id, a.started_at)).collect()
     }
 
     /// Every game being timed or paused.
@@ -194,7 +198,7 @@ impl Tracker {
     pub fn pause(&mut self, id: i64, at: i64, reason: PauseReason) -> Vec<Event> {
         let Some(a) = self.active.remove(&id) else { return Vec::new() };
         let end = at.clamp(a.started_at, a.last_seen);
-        let counted = end - a.started_at >= MIN_SESSION_SECS;
+        let counted = kept(end - a.started_at, a.before);
         let before = a.before + if counted { end - a.started_at } else { 0 };
         self.paused.insert(id, Paused { resume_after: at, since: end, last_seen: a.last_seen, before, reason, front_known: a.last_front.is_some(), front_since: None });
         let mut events = Vec::new();
@@ -383,12 +387,25 @@ impl Tracker {
         v
     }
 
+    /// Idle time of away pauses not recorded yet, as (game id, start, last
+    /// seen), saved with the checkpoint so a crash loses at most a minute.
+    pub fn idle_so_far(&self) -> Vec<(i64, i64, i64)> {
+        self.paused.iter().filter(|(_, p)| p.reason == PauseReason::Away).map(|(id, p)| (*id, p.since, p.last_seen)).collect()
+    }
+
     fn end(&mut self, id: i64) -> Option<Event> {
         let a = self.active.remove(&id)?;
         // The session ends when the game was last seen, not when we noticed.
         let s = Session { game_id: id, started_at: a.started_at, ended_at: a.last_seen };
-        (s.ended_at - s.started_at >= MIN_SESSION_SECS).then_some(Event::Ended(s))
+        kept(s.ended_at - s.started_at, a.before).then_some(Event::Ended(s))
     }
+}
+
+/// Whether a session of `secs` is play worth recording. A short one at the
+/// start is a launch hiccup; after a pause or a sleep the sitting has already
+/// counted time, so the few seconds since are play too.
+fn kept(secs: i64, before: i64) -> bool {
+    secs >= MIN_SESSION_SECS || (before > 0 && secs > 0)
 }
 
 /// The idle time of an away pause, from its start up to `until`. A pause you
@@ -435,6 +452,35 @@ mod tests {
         let t = tracker();
         assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\CrashReportClient.exe")), None);
         assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\unins000.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\UnityCrashHandler64.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Setup.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\setup_x64.exe")), None);
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Redist\vcredist_x64.exe")), None);
+    }
+
+    #[test]
+    fn a_game_named_like_a_helper_is_still_timed() {
+        let t = tracker();
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\Redistrict.exe")), Some(2));
+        assert_eq!(t.game_for_exe(&p(r"D:\Games\Epic Games\RedDeadRedemption2\SetupTheSun.exe")), Some(2));
+    }
+
+    #[test]
+    fn a_short_stretch_between_pauses_still_counts() {
+        let mut t = tracker();
+        play(&mut t, 1000, 2000);
+        t.pause(2, 2000, PauseReason::Manual);
+        t.resume(2, 2100);
+        play(&mut t, 2100, 2125);
+        assert_eq!(
+            t.pause(2, 2125, PauseReason::Manual),
+            [Event::Ended(Session { game_id: 2, started_at: 2100, ended_at: 2125 }), Event::Paused { game_id: 2, reason: PauseReason::Manual }]
+        );
+        assert_eq!(t.paused_list(), [(2, 1025, PauseReason::Manual)]);
+        // The same when it closes a few seconds after resuming.
+        t.resume(2, 2200);
+        play(&mut t, 2200, 2210);
+        assert_eq!(t.observe([], 2230), [Event::Ended(Session { game_id: 2, started_at: 2200, ended_at: 2210 })]);
     }
 
     #[test]
@@ -485,7 +531,7 @@ mod tests {
             t.observe([hitman.as_path()], now);
         }
         assert_eq!(t.flush(), [Event::Ended(Session { game_id: 1, started_at: 100, ended_at: 700 })]);
-        assert!(t.running().is_empty());
+        assert!(t.sittings().is_empty());
     }
 
     #[test]
@@ -497,7 +543,7 @@ mod tests {
         assert_eq!(t.stop(2), [Event::Ended(Session { game_id: 2, started_at: 1000, ended_at: 1100 })]);
         // The helper is still there: no new session.
         assert!(t.observe([helper.as_path()], 1105).is_empty());
-        assert!(t.running().is_empty());
+        assert!(t.sittings().is_empty());
         // Once it has closed, the next start is timed again.
         assert!(t.observe([], 1110).is_empty());
         assert_eq!(t.observe([helper.as_path()], 2000), [Event::Started { game_id: 2, at: 2000 }]);
@@ -679,7 +725,7 @@ mod tests {
         let mut t = tracker();
         play(&mut t, 1000, 2000);
         assert!(t.presence(look(5000, 2000, None), |_| false).is_empty());
-        assert_eq!(t.running(), [(2, 1000)]);
+        assert_eq!(t.sittings(), [Sitting { game_id: 2, started_at: Some(1000), before: 0, paused: None }]);
     }
 
     #[test]

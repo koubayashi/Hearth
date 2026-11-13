@@ -25,6 +25,11 @@ impl ProcessScanner {
             .filter_map(|p| p.exe().map(|e| e.to_path_buf()))
             .collect()
     }
+
+    /// Every process of the last scan as (pid, parent pid; 0 if none).
+    pub fn parents(&self) -> Vec<(u32, u32)> {
+        self.sys.processes().iter().map(|(pid, p)| (pid.as_u32(), p.parent().map_or(0, |q| q.as_u32()))).collect()
+    }
 }
 
 impl Default for ProcessScanner {

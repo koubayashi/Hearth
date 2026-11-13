@@ -72,6 +72,7 @@ pub fn save_prefs_snapshot(app: AppHandle, prefs: String) {
     if let Some(p) = prefs_path(&app) {
         let _ = std::fs::write(p, prefs);
     }
+    crate::tracking::idle_settings_changed(&app);
 }
 
 #[tauri::command]

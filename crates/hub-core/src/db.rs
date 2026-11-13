@@ -42,6 +42,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/013_smart_compilations.sql"),
     include_str!("../migrations/014_versions.sql"),
     include_str!("../migrations/015_idle.sql"),
+    include_str!("../migrations/016_idle_entry.sql"),
 ];
 
 pub struct Db {
@@ -62,9 +63,14 @@ impl Db {
         // backup) can't run functions from inside its own schema.
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA trusted_schema = OFF;")?;
         let version: usize = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        let mut conn = conn;
+        // Each step with its version number in one transaction: Hearth killed
+        // halfway leaves the library as it was, to upgrade again next time.
         for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
-            conn.execute_batch(sql)?;
-            conn.pragma_update(None, "user_version", i + 1)?;
+            let tx = conn.transaction()?;
+            tx.execute_batch(sql)?;
+            tx.pragma_update(None, "user_version", i + 1)?;
+            tx.commit()?;
         }
         Ok(Self { conn })
     }
@@ -216,7 +222,7 @@ impl Db {
                             store_last_played = COALESCE(?5,
                                 CASE WHEN store_playtime_secs IS NOT NULL AND ?4 > store_playtime_secs
                                      THEN ?6 ELSE store_last_played END),
-                            store_playtime_secs = ?4,
+                            store_playtime_secs = COALESCE(?4, store_playtime_secs),
                             store_baseline_secs = COALESCE(store_baseline_secs, ?4),
                             title = ?7
                          WHERE id = ?1",
@@ -323,7 +329,23 @@ impl Db {
 
     /// Replace the saved running sessions: (game id, started, last seen).
     pub fn checkpoint_active(&mut self, active: &[(i64, i64, i64)]) -> Result<()> {
+        self.save_tracking(&[], &[], active)
+    }
+
+    /// What the tracker just ended (tracker sessions and idle time, each as
+    /// game id, start, end) and its running sessions, saved together: a crash
+    /// can't leave an ended session in the checkpoint to be recovered twice.
+    pub fn save_tracking(&mut self, ended: &[(i64, i64, i64)], idle: &[(i64, i64, i64)], active: &[(i64, i64, i64)]) -> Result<()> {
         let tx = self.conn.transaction()?;
+        for (game, started, until) in ended {
+            tx.execute(
+                "INSERT INTO sessions (game_id, started_at, ended_at, source) VALUES (?1, ?2, ?3, 'tracker')",
+                params![game, started, until],
+            )?;
+        }
+        for (game, started, until) in idle {
+            tx.execute("INSERT INTO idle_time (game_id, started_at, ended_at) VALUES (?1, ?2, ?3)", params![game, started, until])?;
+        }
         tx.execute("DELETE FROM active_sessions", [])?;
         for (game, started, seen) in active {
             tx.execute(
@@ -690,10 +712,12 @@ impl Db {
         Ok(id)
     }
 
-    /// Drop chosen artwork so the store's (and SteamGridDB's) apply again.
+    /// Back to the store's artwork at once; SteamGridDB's picks apply again
+    /// on the next art refresh.
     pub fn reset_art(&self, game_id: i64) -> Result<()> {
         self.conn.execute(
-            "UPDATE games SET cover = NULL, hero = NULL, logo = NULL, art_source = NULL, sgdb_checked_at = NULL
+            "UPDATE games SET cover = store_cover, hero = store_hero, logo = NULL, art_source = NULL,
+                    sgdb_checked_at = NULL
               WHERE id = ?1",
             [game_id],
         )?;
@@ -711,12 +735,15 @@ impl Db {
     }
 
     /// Replace a game's artwork (the user picked its store page).
-    pub fn set_game_art(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<()> {
-        self.conn.execute(
-            "UPDATE games SET cover = ?2, hero = ?3, logo = ?4, store_cover = ?2, store_hero = ?3 WHERE id = ?1",
+    /// Returns whether anything actually changed.
+    pub fn set_game_art(&self, game_id: i64, cover: &str, hero: &str, logo: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "UPDATE games SET cover = ?2, hero = ?3, logo = ?4, store_cover = ?2, store_hero = ?3
+             WHERE id = ?1 AND (cover IS NOT ?2 OR hero IS NOT ?3 OR logo IS NOT ?4
+                                OR store_cover IS NOT ?2 OR store_hero IS NOT ?3)",
             params![game_id, cover, hero, logo],
         )?;
-        Ok(())
+        Ok(n > 0)
     }
 
     /// Rewrites saved art addresses that need changing. `fix(url, slot)`
@@ -937,13 +964,18 @@ impl Db {
             return Ok(());
         }
         let tx = self.conn.transaction()?;
-        // Sessions so far belong to the version that was there: the game's first entry.
+        // Sessions and idle time so far belong to the version that was there:
+        // the game's first entry.
         for g in [keep, other] {
-            tx.execute(
-                "UPDATE sessions SET entry_id = (SELECT MIN(id) FROM store_entries WHERE game_id = ?1)
-                 WHERE game_id = ?1 AND entry_id IS NULL",
-                [g],
-            )?;
+            for table in ["sessions", "idle_time"] {
+                tx.execute(
+                    &format!(
+                        "UPDATE {table} SET entry_id = (SELECT MIN(id) FROM store_entries WHERE game_id = ?1)
+                         WHERE game_id = ?1 AND entry_id IS NULL"
+                    ),
+                    [g],
+                )?;
+            }
         }
         tx.execute("UPDATE store_entries SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
         tx.execute("UPDATE sessions SET game_id = ?1 WHERE game_id = ?2", [keep, other])?;
@@ -1023,6 +1055,7 @@ impl Db {
         for id in &moving {
             tx.execute("UPDATE store_entries SET game_id = ?1 WHERE id = ?2", [new_id, *id])?;
             tx.execute("UPDATE sessions SET game_id = ?1 WHERE entry_id = ?2 AND game_id = ?3", [new_id, *id, game_id])?;
+            tx.execute("UPDATE idle_time SET game_id = ?1 WHERE entry_id = ?2 AND game_id = ?3", [new_id, *id, game_id])?;
         }
         tx.execute("DELETE FROM title_aliases WHERE norm_title = ?1", [&new_norm])?;
         // Taking out the version the game was named after: it takes the
@@ -1142,6 +1175,22 @@ impl Db {
 
     pub fn game(&self, game_id: i64) -> Result<Option<Game>> {
         Ok(self.load_games(Some(game_id))?.into_iter().next())
+    }
+
+    /// (visible, hidden) game counts, from one read of the library.
+    pub fn game_counts(&self) -> Result<(usize, usize)> {
+        let games = self.load_games(None)?;
+        let hidden = games.iter().filter(|g| g.hidden).count();
+        Ok((games.len() - hidden, hidden))
+    }
+
+    /// Runs `f` as one transaction: many small writes, one disk flush.
+    /// Rolled back if `f` fails.
+    pub fn in_transaction<T>(&self, f: impl FnOnce(&Self) -> Result<T>) -> Result<T> {
+        let tx = self.conn.unchecked_transaction()?;
+        let out = f(self)?;
+        tx.commit()?;
+        Ok(out)
     }
 
     pub fn list_games(&self, q: &LibraryQuery) -> Result<Vec<Game>> {
@@ -1460,6 +1509,7 @@ mod tests {
         let (base, enh) = (id("Grand Theft Auto V"), id("Grand Theft Auto V Enhanced"));
         db.record_session(base, 100, 1100, SessionSource::Hub).unwrap();
         db.record_session(enh, 2000, 2600, SessionSource::Hub).unwrap();
+        db.record_idle(enh, 2600, 2900).unwrap();
         db.set_status(base, Some(GameStatus::Completed)).unwrap();
         db.set_favorite(enh, true).unwrap();
         (db, base, enh)
@@ -1482,7 +1532,7 @@ mod tests {
         assert_eq!(games.len(), 1, "a sync doesn't split them again");
         let g = &games[0];
         assert_eq!((g.id, g.entries.len()), (base, 2));
-        assert_eq!(g.playtime_secs, 1600, "both versions' time");
+        assert_eq!(g.playtime_secs, 1900, "both versions' time, idle included");
         assert!(g.installed && g.favorite);
         assert_eq!(g.status, Some(GameStatus::Completed));
 
@@ -1501,8 +1551,8 @@ mod tests {
         let enh_entry = g.entries.iter().find(|e| e.store_game_id == "enh").unwrap().id;
         let back = db.separate_version(base, enh_entry).unwrap();
         let (a, b) = (db.game(base).unwrap().unwrap(), db.game(back).unwrap().unwrap());
-        assert_eq!((a.title.as_str(), a.playtime_secs), ("Grand Theft Auto V", 1000));
-        assert_eq!((b.title.as_str(), b.playtime_secs), ("Grand Theft Auto V Enhanced", 600));
+        assert_eq!((a.title.as_str(), a.playtime_secs, a.idle_secs), ("Grand Theft Auto V", 1000, 0));
+        assert_eq!((b.title.as_str(), b.playtime_secs, b.idle_secs), ("Grand Theft Auto V Enhanced", 900, 300), "idle time goes with it");
         assert!(db.separate_version(base, a.entries[0].id).is_err(), "a game keeps one version");
     }
 
@@ -1534,6 +1584,22 @@ mod tests {
         assert!(!db_game(&db, "Hades").installed);
         assert_eq!(db_game(&db, "Hades").playtime_secs, 7200);
         assert!(db_game(&db, "Celeste").installed && db_game(&db, "Balatro").installed);
+    }
+
+    #[test]
+    fn a_failed_store_list_keeps_the_store_total() {
+        let mut db = Db::open_in_memory().unwrap();
+        let mut played = entry(StoreId::Epic, "1", "Hades", true);
+        played.store_playtime_secs = Some(7200);
+        db.sync_store(StoreId::Epic, &[played.clone()], 0).unwrap();
+        // Epic's sign-in expired: the full sync has the installed game but no total.
+        db.sync_store(StoreId::Epic, &[entry(StoreId::Epic, "1", "Hades", true)], 100).unwrap();
+        assert_eq!(db_game(&db, "Hades").playtime_secs, 7200);
+        // Signed in again with more played: the date bump still happens.
+        played.store_playtime_secs = Some(9000);
+        db.sync_store(StoreId::Epic, &[played], 200).unwrap();
+        let g = db_game(&db, "Hades");
+        assert_eq!((g.playtime_secs, g.last_played), (9000, Some(200)));
     }
 
     fn db_game(db: &Db, title: &str) -> Game {
@@ -1862,6 +1928,18 @@ mod tests {
     }
 
     #[test]
+    fn an_ended_session_leaves_the_checkpoint_in_the_same_save() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "x", "Blackwood", true)], 0).unwrap();
+        let id = db.list_games(&LibraryQuery::default()).unwrap()[0].id;
+        db.checkpoint_active(&[(id, 1000, 1600)]).unwrap();
+        db.save_tracking(&[(id, 1000, 1700)], &[(id, 1700, 2300)], &[]).unwrap();
+        assert!(db.take_active().unwrap().is_empty(), "nothing left to recover twice");
+        let g = db.game(id).unwrap().unwrap();
+        assert_eq!((g.playtime_secs, g.idle_secs), (1300, 600), "idle is part of the time open");
+    }
+
+    #[test]
     fn hand_picked_art_is_never_replaced_automatically() {
         let mut db = Db::open_in_memory().unwrap();
         db.sync_store(StoreId::Steam, &[entry(StoreId::Steam, "620", "Portal 2", true)], 0).unwrap();
@@ -1931,6 +2009,8 @@ mod tests {
         assert_eq!(db.store_art(id).unwrap(), (Some("store-cover.jpg".into()), Some("store-hero.jpg".into())));
         db.reset_art(id).unwrap();
         assert_eq!(db.store_art(id).unwrap().0.as_deref(), Some("store-cover.jpg"), "a reset keeps it too");
+        let g = db.game(id).unwrap().unwrap();
+        assert_eq!((g.cover.as_deref(), g.hero.as_deref()), (Some("store-cover.jpg"), Some("store-hero.jpg")), "and shows it at once");
     }
 
     #[test]

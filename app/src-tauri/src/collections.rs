@@ -61,6 +61,7 @@ pub fn set_in_collection(app: AppHandle, collection: i64, game: i64, member: boo
 #[tauri::command]
 pub fn set_idle_mode(app: AppHandle, id: i64, mode: Option<IdleMode>) -> CmdResult<()> {
     lock(&app.state::<AppState>().db).set_idle_mode(id, mode).map_err(err)?;
+    crate::tracking::idle_settings_changed(&app);
     changed(&app);
     Ok(())
 }

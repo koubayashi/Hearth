@@ -20,9 +20,20 @@ const POLL: Duration = Duration::from_secs(5);
 /// Polls between checkpoints of running sessions (12 × 5s = a minute).
 const CHECKPOINT_EVERY: u32 = 12;
 
+/// Whether idle time is kept separate by default, and each game's own choice.
+type IdleSettings = (bool, Vec<(i64, IdleMode)>);
+/// A paused game: id, seconds counted before the pause, reason, and the idle
+/// time not yet recorded (since, last seen).
+type PausedGame = (i64, i64, PauseReason, Option<(i64, i64)>);
+
 #[derive(Default)]
 pub struct Tracking {
     pub tracker: Mutex<Tracker>,
+    /// The idle-time settings (Settings', then each game's own), read once
+    /// and again only after they change: see `idle_settings_changed`.
+    idle: Mutex<Option<IdleSettings>>,
+    /// What paused.json holds, so it's written only when that changes.
+    paused_json: Mutex<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -106,10 +117,23 @@ pub fn recover(app: &AppHandle) {
     // Games paused when Hearth stopped (a restart for an update, a quit, a
     // crash) stay paused: they resume once played again, or close.
     let now = now();
+    let paused = load_paused(app);
     let tracking = app.state::<Tracking>();
     let mut tracker = lock(&tracking.tracker);
-    for (game, before, reason) in load_paused(app) {
+    for &(game, before, reason, _) in &paused {
         tracker.restore_paused(game, before, reason, now);
+    }
+    // Saved first, with the idle time starting now, so another crash can't
+    // record the idle time below a second time.
+    save_paused(app, &tracker);
+    drop(tracker);
+    // An away pause's idle time up to its last checkpoint (a quit already
+    // recorded it, so none is left here).
+    let db = lock(&state.db);
+    for (game, _, reason, span) in paused {
+        if let Some((since, seen)) = span.filter(|(since, seen)| reason == PauseReason::Away && seen - since >= MIN_SESSION_SECS) {
+            let _ = db.record_idle(game, since, seen);
+        }
     }
 }
 
@@ -118,25 +142,44 @@ fn paused_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_data_dir().ok().map(|d| d.join("paused.json"))
 }
 
-fn save_paused(app: &AppHandle) {
-    let list: Vec<serde_json::Value> = lock(&app.state::<Tracking>().tracker)
+/// Called with the tracker locked, so an older list can never be written
+/// over a newer one. Away pauses keep their idle time not yet recorded
+/// (`since` to `seen`), so a crash loses at most a minute of it.
+fn save_paused(app: &AppHandle, tracker: &Tracker) {
+    let idle = tracker.idle_so_far();
+    let list: Vec<serde_json::Value> = tracker
         .paused_list()
         .into_iter()
-        .map(|(game, before, reason)| serde_json::json!({ "game": game, "before": before, "away": reason == PauseReason::Away }))
+        .map(|(game, before, reason)| {
+            let mut v = serde_json::json!({ "game": game, "before": before, "away": reason == PauseReason::Away });
+            if let Some(&(_, since, seen)) = idle.iter().find(|i| i.0 == game) {
+                v["since"] = since.into();
+                v["seen"] = seen.into();
+            }
+            v
+        })
         .collect();
-    if let Some(p) = paused_path(app) {
-        let _ = std::fs::write(p, serde_json::Value::Array(list).to_string());
+    let text = serde_json::Value::Array(list).to_string();
+    let tracking = app.state::<Tracking>();
+    let mut last = lock(&tracking.paused_json);
+    if *last != text {
+        if let Some(p) = paused_path(app) {
+            if std::fs::write(p, &text).is_ok() {
+                *last = text;
+            }
+        }
     }
 }
 
-fn load_paused(app: &AppHandle) -> Vec<(i64, i64, PauseReason)> {
+fn load_paused(app: &AppHandle) -> Vec<PausedGame> {
     let Some(text) = paused_path(app).and_then(|p| std::fs::read_to_string(p).ok()) else { return Vec::new() };
     let Ok(serde_json::Value::Array(items)) = serde_json::from_str(&text) else { return Vec::new() };
     items
         .iter()
         .filter_map(|v| {
             let reason = if v.get("away")?.as_bool()? { PauseReason::Away } else { PauseReason::Manual };
-            Some((v.get("game")?.as_i64()?, v.get("before")?.as_i64()?, reason))
+            let span = v.get("since").and_then(|s| s.as_i64()).zip(v.get("seen").and_then(|s| s.as_i64()));
+            Some((v.get("game")?.as_i64()?, v.get("before")?.as_i64()?, reason, span))
         })
         .collect()
 }
@@ -174,57 +217,89 @@ fn idle_separate(app: &AppHandle) -> bool {
     }
 }
 
+/// The idle-time setting, or a game's own choice, changed: read them again.
+pub fn idle_settings_changed(app: &AppHandle) {
+    *lock(&app.state::<Tracking>().idle) = None;
+}
+
 /// One look at who's at the PC, for games being timed or paused.
 /// `now` is the time of the process look just before, so a game counts as
 /// running at exactly the moment presence is judged.
-fn check_presence(app: &AppHandle, now: i64) -> Vec<Event> {
-    let busy = !lock(&app.state::<Tracking>().tracker).sittings().is_empty();
+fn check_presence(app: &AppHandle, now: i64, scanner: &ProcessScanner) {
+    let tracking = app.state::<Tracking>();
+    let busy = !lock(&tracking.tracker).sittings().is_empty();
     crate::presence::watch(busy);
     if !busy {
-        return Vec::new();
+        return;
     }
-    let global = idle_separate(app);
-    let own = lock(&app.state::<AppState>().db).idle_modes().unwrap_or_default();
+    let (global, own) = lock(&tracking.idle)
+        .get_or_insert_with(|| (idle_separate(app), lock(&app.state::<AppState>().db).idle_modes().unwrap_or_default()))
+        .clone();
     let separate = |id: i64| own.iter().find(|(g, _)| *g == id).map_or(global, |(_, m)| *m == IdleMode::Separate);
-    let front_exes = crate::presence::front_exes();
+    let front_exes = crate::presence::front_exes(&scanner.parents());
     let windows = crate::presence::windows();
     let last_input = crate::presence::last_input(now);
-    let tracking = app.state::<Tracking>();
-    let mut tracker = lock(&tracking.tracker);
-    // The window in front is a game's if its program, or the one that
-    // started it, lives in the game's folder.
-    let front = front_exes.iter().find_map(|e| tracker.game_for_exe(e));
-    let games = |exes: &[std::path::PathBuf]| {
-        let mut ids: Vec<i64> = exes.iter().filter_map(|e| tracker.game_for_exe(e)).collect();
-        ids.sort_unstable();
-        ids.dedup();
-        ids
-    };
-    let (elsewhere, windowed) = (games(&windows.elsewhere), games(&windows.windowed));
-    tracker.presence(Presence { now, last_input, front, elsewhere, windowed }, separate)
+    step(app, false, |tracker| {
+        // The window in front is a game's if its program, or the one that
+        // started it, lives in the game's folder.
+        let front = front_exes.iter().find_map(|e| tracker.game_for_exe(e));
+        let games = |exes: &[std::path::PathBuf]| {
+            let mut ids: Vec<i64> = exes.iter().filter_map(|e| tracker.game_for_exe(e)).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        };
+        let (elsewhere, windowed) = (games(&windows.elsewhere), games(&windows.windowed));
+        tracker.presence(Presence { now, last_input, front, elsewhere, windowed }, separate)
+    });
 }
 
 /// Pause from the tray or a game's panel: counting stops now, and starts
 /// again once you're back in the game (or press Resume).
 pub fn pause(app: &AppHandle, game_id: i64) {
-    let events = lock(&app.state::<Tracking>().tracker).pause(game_id, now(), PauseReason::Manual);
-    handle(app, events);
-    checkpoint(app);
+    step(app, true, |t| t.pause(game_id, now(), PauseReason::Manual));
 }
 
 pub fn resume(app: &AppHandle, game_id: i64) {
-    let events = lock(&app.state::<Tracking>().tracker).resume(game_id, now());
-    handle(app, events);
-    checkpoint(app);
+    step(app, true, |t| t.resume(game_id, now()));
 }
 
-/// Saves the running sessions. The tracker stays locked until they're
-/// written, so a pause can't slip in between and leave an ended session in
-/// the checkpoint (it would be recovered, and counted twice, after a crash).
-fn checkpoint(app: &AppHandle) {
+/// Makes one change to the tracker and saves its outcome before the tracker
+/// is unlocked, so nothing can slip in between (see `save`). With no
+/// events, saves only for a `checkpoint`.
+fn step(app: &AppHandle, checkpoint: bool, f: impl FnOnce(&mut Tracker) -> Vec<Event>) {
     let tracking = app.state::<Tracking>();
-    let tracker = lock(&tracking.tracker);
-    let _ = lock(&app.state::<AppState>().db).checkpoint_active(&tracker.active());
+    let mut tracker = lock(&tracking.tracker);
+    let events = f(&mut tracker);
+    if events.is_empty() && !checkpoint {
+        return;
+    }
+    let saved = save(app, &tracker, &events);
+    drop(tracker);
+    if !events.is_empty() {
+        let changed = log_events(app, &events, saved);
+        notify(app, changed);
+    }
+}
+
+/// Saves what the tracker just did, with it locked. Paused games go first:
+/// a crash right after loses a little idle time, never counts it twice.
+/// Then the ended sessions, idle time and running sessions in one database
+/// transaction, so an ended session can't stay in the checkpoint (it would
+/// be recovered, and counted twice, after a crash).
+fn save(app: &AppHandle, tracker: &Tracker, events: &[Event]) -> bool {
+    save_paused(app, tracker);
+    let spans = |idle: bool| -> Vec<(i64, i64, i64)> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Ended(s) if !idle => Some((s.game_id, s.started_at, s.ended_at)),
+                Event::Idle(s) if idle => Some((s.game_id, s.started_at, s.ended_at)),
+                _ => None,
+            })
+            .collect()
+    };
+    lock(&app.state::<AppState>().db).save_tracking(&spans(false), &spans(true), &tracker.active()).is_ok()
 }
 
 pub fn start(app: AppHandle) {
@@ -236,16 +311,9 @@ pub fn start(app: AppHandle) {
             loop {
                 let exes = scanner.exes();
                 let at = now();
-                let mut events = lock(&app.state::<Tracking>().tracker).observe(exes.iter().map(|p| p.as_path()), at);
-                events.extend(check_presence(&app, at));
-                let had_events = !events.is_empty();
-                if had_events {
-                    handle(&app, events);
-                }
                 polls = polls.wrapping_add(1);
-                if had_events || polls % CHECKPOINT_EVERY == 0 {
-                    checkpoint(&app);
-                }
+                step(&app, polls.is_multiple_of(CHECKPOINT_EVERY), |t| t.observe(exes.iter().map(|p| p.as_path()), at));
+                check_presence(&app, at, &scanner);
                 std::thread::sleep(POLL);
             }
         })
@@ -254,52 +322,69 @@ pub fn start(app: AppHandle) {
 
 /// The user stopped timing a game from the tray: its session ends now.
 pub fn stop(app: &AppHandle, game_id: i64) {
-    let events = lock(&app.state::<Tracking>().tracker).stop(game_id);
     log(app, &format!("stopped timing {} by hand", title(app, game_id)));
-    handle(app, events);
-    checkpoint(app);
+    step(app, true, |t| t.stop(game_id));
 }
 
 /// Close open sessions so quitting mid-game still counts the time played.
 pub fn flush(app: &AppHandle) {
-    let events = lock(&app.state::<Tracking>().tracker).flush();
-    handle(app, events);
-    checkpoint(app);
+    step(app, true, |t| t.flush());
 }
 
-fn handle(app: &AppHandle, events: Vec<Event>) {
+/// Restoring a backup swaps the library under the tracker, and game ids
+/// differ between libraries. What was timed so far is saved to the library
+/// being replaced (kept as before-restore), then the tracker starts over
+/// with the restored library's games: one still running starts a new
+/// session, and a pause is dropped. The tracker stays locked throughout, so
+/// nothing is timed against the wrong library in between.
+pub fn around_restore<T>(app: &AppHandle, swap: impl FnOnce() -> T) -> T {
+    let tracking = app.state::<Tracking>();
+    let mut tracker = lock(&tracking.tracker);
+    let events = tracker.flush();
+    let saved = save(app, &tracker, &events);
+    log_events(app, &events, saved);
+    *tracker = Tracker::new();
+    let out = swap();
+    tracker.set_install_dirs(lock(&app.state::<AppState>().db).install_dirs().unwrap_or_default());
+    save(app, &tracker, &[]);
+    drop(tracker);
+    idle_settings_changed(app);
+    notify(app, false);
+    out
+}
+
+/// Writes the events to tracker.log; true if play or idle time was saved.
+fn log_events(app: &AppHandle, events: &[Event], saved: bool) -> bool {
+    let note = if saved { "" } else { " (not saved)" };
     let mut changed = false;
     for e in events {
         match e {
-            Event::Started { game_id, .. } => log(app, &format!("started {}", title(app, game_id))),
+            Event::Started { game_id, .. } => log(app, &format!("started {}", title(app, *game_id))),
             Event::Ended(s) => {
-                let ok = lock(&app.state::<AppState>().db)
-                    .record_session(s.game_id, s.started_at, s.ended_at, SessionSource::Tracker)
-                    .is_ok();
-                log(
-                    app,
-                    &format!("ended {} after {}s{}", title(app, s.game_id), s.ended_at - s.started_at, if ok { "" } else { " (not saved)" }),
-                );
-                changed |= ok;
+                log(app, &format!("ended {} after {}s{note}", title(app, s.game_id), s.ended_at - s.started_at));
+                changed |= saved;
             }
             Event::Paused { game_id, reason } => {
-                let why = if reason == PauseReason::Away { "away" } else { "by hand" };
-                log(app, &format!("paused {} ({why})", title(app, game_id)));
+                let why = if *reason == PauseReason::Away { "away" } else { "by hand" };
+                log(app, &format!("paused {} ({why})", title(app, *game_id)));
             }
-            Event::Resumed { game_id, .. } => log(app, &format!("resumed {}", title(app, game_id))),
-            Event::Closed { game_id } => log(app, &format!("{} closed while paused", title(app, game_id))),
+            Event::Resumed { game_id, .. } => log(app, &format!("resumed {}", title(app, *game_id))),
+            Event::Closed { game_id } => log(app, &format!("{} closed while paused", title(app, *game_id))),
             Event::Idle(s) => {
-                let ok = lock(&app.state::<AppState>().db).record_idle(s.game_id, s.started_at, s.ended_at).is_ok();
-                log(app, &format!("{} idle for {}s{}", title(app, s.game_id), s.ended_at - s.started_at, if ok { "" } else { " (not saved)" }));
-                changed |= ok;
+                log(app, &format!("{} idle for {}s{note}", title(app, s.game_id), s.ended_at - s.started_at));
+                changed |= saved;
             }
         }
     }
-    save_paused(app);
+    changed
+}
+
+/// Tells the tray and the window what's being timed now.
+fn notify(app: &AppHandle, library_changed: bool) {
     let playing = now_playing(app);
     crate::tray::set_playing(app, &playing);
     let _ = app.emit("now-playing", &playing);
-    if changed {
+    if library_changed {
         let _ = app.emit("library-changed", ());
     }
 }

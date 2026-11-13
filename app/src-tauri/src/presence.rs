@@ -47,8 +47,9 @@ pub fn last_input(now: i64) -> i64 {
 /// The program of the window in front, then the programs that started it
 /// (a game's window may belong to javaw.exe or an emulator that a launcher
 /// in the game's folder started). Empty for Hearth's own windows.
+/// `parents`: every process as (pid, parent pid), from the tracker's scan.
 #[cfg(windows)]
-pub fn front_exes() -> Vec<PathBuf> {
+pub fn front_exes(parents: &[(u32, u32)]) -> Vec<PathBuf> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
     // SAFETY: the window handle is only passed back to Windows.
     let pid = unsafe {
@@ -63,7 +64,6 @@ pub fn front_exes() -> Vec<PathBuf> {
     if pid == 0 || pid == std::process::id() {
         return Vec::new();
     }
-    let parents = parents();
     let mut chain = vec![pid];
     while chain.len() < 4 {
         match parents.iter().find(|(p, _)| *p == *chain.last().unwrap()) {
@@ -75,35 +75,8 @@ pub fn front_exes() -> Vec<PathBuf> {
 }
 
 #[cfg(not(windows))]
-pub fn front_exes() -> Vec<PathBuf> {
+pub fn front_exes(_parents: &[(u32, u32)]) -> Vec<PathBuf> {
     Vec::new()
-}
-
-/// Every process as (pid, parent pid).
-#[cfg(windows)]
-fn parents() -> Vec<(u32, u32)> {
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS};
-    let mut out = Vec::new();
-    // SAFETY: the snapshot handle is checked and closed; the entry has its size set.
-    unsafe {
-        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if snap == INVALID_HANDLE_VALUE {
-            return out;
-        }
-        let mut e: PROCESSENTRY32W = std::mem::zeroed();
-        e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        if Process32FirstW(snap, &mut e) != 0 {
-            loop {
-                out.push((e.th32ProcessID, e.th32ParentProcessID));
-                if Process32NextW(snap, &mut e) == 0 {
-                    break;
-                }
-            }
-        }
-        CloseHandle(snap);
-    }
-    out
 }
 
 /// The programs with windows, for away detection.
@@ -204,7 +177,7 @@ fn exe_of(pid: u32) -> Option<PathBuf> {
 }
 
 /// Watches controllers on a thread of its own: four times a second while a
-/// game is timed, otherwise only a glance every few seconds. An empty slot is
+/// game is timed or paused, otherwise not at all. An empty slot is
 /// asked again only every 3 seconds (asking an empty slot is slow). A stick
 /// resting off-centre or drifting isn't input: only presses and real
 /// movement count.
@@ -218,6 +191,9 @@ pub fn start() {
             let mut retry: [Option<Instant>; 4] = [None; 4];
             loop {
                 if !WATCHING.load(Ordering::Relaxed) {
+                    // Forget how controllers looked: a button let go in the
+                    // meantime isn't input once watching starts again.
+                    last = [None; 4];
                     std::thread::sleep(Duration::from_secs(3));
                     continue;
                 }
