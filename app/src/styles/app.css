@@ -42,7 +42,11 @@ input { font: inherit; color: inherit; }
 .titlebar {
   position: fixed; top: 0; left: 0; right: 0; height: 36px; z-index: 20;
   display: flex; justify-content: flex-end;
+  /* Only its buttons take the mouse; dragging the top edge is TitleBar's
+     listener, so the toolbar under this strip stays clickable. */
+  pointer-events: none;
 }
+.titlebar .winbtn { pointer-events: auto; }
 .winbtn {
   all: unset; width: 46px; height: 36px; display: grid; place-items: center; color: var(--ink-2);
   transition: background var(--dur-fast), color var(--dur-fast);

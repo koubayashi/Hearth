@@ -31,13 +31,27 @@ function WindowButtons() {
   }, [win]);
   const label = full ? "Exit full screen" : maximized ? "Restore down" : "Maximize";
 
+  // The top edge moves the window, but only where nothing else is: the
+  // library toolbar shares it, and its buttons must get the mouse. (A strip
+  // laid over the page took their top half.)
+  useEffect(() => {
+    if (full) return;
+    const down = (e: MouseEvent) => {
+      if (e.button !== 0 || e.clientY >= 36) return;
+      if ((e.target as Element).closest("button, a, input, select, textarea, label, [role=button], [tabindex], [data-nav]")) return;
+      void (e.detail === 2 ? win.toggleMaximize() : win.startDragging());
+    };
+    document.addEventListener("mousedown", down);
+    return () => document.removeEventListener("mousedown", down);
+  }, [win, full]);
+
   const maxRef = useRef<HTMLButtonElement>(null);
   const [mouse, setMouse] = useState({ hover: false, pressed: false });
   // Snap Layouts don't apply to a full-screen window.
   useSnapLayouts(maxRef, setMouse, !full);
 
   return (
-    <div className="titlebar" data-tauri-drag-region>
+    <div className="titlebar">
       <button className="winbtn" aria-label="Minimize" title="Minimize" onClick={() => win.minimize()}>
         <Icon name="minimize" size={14} />
       </button>
