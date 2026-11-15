@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { SortKey } from "./arrange";
 import type { IdleMode } from "./types";
 
-export type Tone = "graphite" | "gallery" | "ember" | "spruce" | "rosewood" | "harbor" | "mono";
+export type Tone = "charcoal" | "graphite" | "gallery" | "ember" | "rosewood" | "harbor" | "mono";
 /** "system" follows Windows' app mode (Settings > Personalization > Colors). */
 export type Mode = "dark" | "light" | "system";
 /** How the library is laid out: a cover wall beside the poster, or a list of
@@ -51,10 +51,11 @@ export interface Prefs {
 
 /** Each tone's ground and accent in both modes, for the swatches (tokens.css has the full sets). */
 export const TONES: { id: Tone; label: string; dark: { base: string; accent: string }; light: { base: string; accent: string } }[] = [
+  // The default: the app icon's charcoal and vermilion.
+  { id: "charcoal", label: "Charcoal", dark: { base: "#111112", accent: "#ff6a48" }, light: { base: "#ecebe8", accent: "#c2381a" } },
   { id: "graphite", label: "Graphite", dark: { base: "#111214", accent: "#b9ccff" }, light: { base: "#e9ecf0", accent: "#2f5bd3" } },
   { id: "gallery", label: "Gallery", dark: { base: "#121b26", accent: "#f5d7a1" }, light: { base: "#e7ecf2", accent: "#8a5d14" } },
   { id: "ember", label: "Ember", dark: { base: "#17110e", accent: "#f2a65a" }, light: { base: "#f0e9e3", accent: "#b04e12" } },
-  { id: "spruce", label: "Spruce", dark: { base: "#0e1714", accent: "#a8e0c6" }, light: { base: "#e4ece8", accent: "#1c6e51" } },
   { id: "rosewood", label: "Rosewood", dark: { base: "#171114", accent: "#eba9b9" }, light: { base: "#efe7ea", accent: "#a3385a" } },
   { id: "harbor", label: "Harbor", dark: { base: "#0d1517", accent: "#8fd5de" }, light: { base: "#e3edef", accent: "#0f6f7c" } },
   { id: "mono", label: "Mono", dark: { base: "#121212", accent: "#ececec" }, light: { base: "#ebebeb", accent: "#1c1c1c" } },
@@ -67,7 +68,7 @@ export const shownMode = (p: Prefs): "dark" | "light" =>
   p.mode === "system" ? (systemDark?.matches === false ? "light" : "dark") : p.mode;
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "graphite", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", consoleTipSeen: false, dismissedCombines: [], idleTime: "separate" };
+const DEFAULTS: Prefs = { tone: "charcoal", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", consoleTipSeen: false, dismissedCombines: [], idleTime: "separate" };
 
 function load(): Prefs {
   try {
@@ -75,6 +76,8 @@ function load(): Prefs {
     // Before "Idle time" there was a "Don't count time away" switch.
     if (saved.idleTime === undefined && saved.pauseWhenAway === false) saved.idleTime = "count";
     delete saved.pauseWhenAway;
+    // A tone that was taken out (Spruce, later "Hearth") falls back to the default.
+    if (!TONES.some((t) => t.id === saved.tone)) delete saved.tone;
     return { ...DEFAULTS, ...saved };
   } catch {
     return DEFAULTS;
@@ -146,9 +149,11 @@ export function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/** Pick black or white text for a custom accent so the Play button stays legible. */
+/** Pick black or white text for a custom accent so the Play button stays
+ *  legible: whichever reads better on it (a fixed cut-off put white on
+ *  mid-bright colours like vermilion, at under 3:1). */
 export function inkFor(hex: string): string {
-  return luminance(hex) > 0.4 ? "#111214" : "#ffffff";
+  return contrast(hex, "#111214") >= contrast(hex, "#ffffff") ? "#111214" : "#ffffff";
 }
 
 /** Like `shownMode`, and re-renders when Windows switches under "Match Windows". */

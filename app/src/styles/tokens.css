@@ -47,7 +47,31 @@
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
   --accent: #b9ccff;
   --accent-ink: #0c1230;
+  /* A switched-on chip: accent text on a wash of the accent. Lighter on
+     paper grounds, where accent text needs the contrast. */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  /* Controls: a faint fill under the pointer, a clearly stronger one when
+     switched on. Mixed from the ink, so every tone and mode gets its own. */
+  --hovered: color-mix(in srgb, var(--ink) 5%, transparent);
+  --selected: color-mix(in srgb, var(--ink) 15%, transparent);
   color-scheme: dark;
+}
+
+/* Charcoal (the default): the app icon's colours. Neutral chrome so game
+   art carries the colour, with one vermilion spark from the flame's heart. */
+[data-tone="charcoal"] {
+  --base: #111112;
+  --base-2: #19191b;
+  --glass: rgba(28, 28, 30, 0.55);
+  --glass-strong: rgba(22, 22, 24, 0.82);
+  --line: rgba(242, 240, 237, 0.1);
+  --line-strong: rgba(242, 240, 237, 0.18);
+  --ink: #f2f0ed;
+  --ink-2: #ada9a4;
+  --ink-3: #87837e;
+  --tint: rgba(17, 17, 18, 0.55);
+  --accent: #ff6a48;
+  --accent-ink: #220800;
 }
 
 [data-tone="gallery"] {
@@ -78,21 +102,6 @@
   --tint: rgba(23, 17, 14, 0.55);
   --accent: #f2a65a;
   --accent-ink: #2a1405;
-}
-
-[data-tone="spruce"] {
-  --base: #0e1714;
-  --base-2: #14211d;
-  --glass: rgba(20, 36, 31, 0.55);
-  --glass-strong: rgba(15, 28, 24, 0.82);
-  --line: rgba(232, 244, 238, 0.1);
-  --line-strong: rgba(232, 244, 238, 0.18);
-  --ink: #ecf4f0;
-  --ink-2: #a3bdb2;
-  --ink-3: #7a968a;
-  --tint: rgba(14, 23, 20, 0.55);
-  --accent: #a8e0c6;
-  --accent-ink: #06231a;
 }
 
 [data-tone="rosewood"] {
@@ -158,7 +167,20 @@
   --shadow: 0 14px 30px rgba(20, 30, 45, 0.16);
   --accent: #2f5bd3;
   --accent-ink: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
   color-scheme: light;
+}
+
+[data-mode="light"][data-tone="charcoal"] {
+  --base: #ecebe8;
+  --base-2: #f6f5f3;
+  --line: rgba(30, 26, 22, 0.1);
+  --line-strong: rgba(30, 26, 22, 0.18);
+  --ink: #1b1917;
+  --ink-2: #55504b;
+  --ink-3: #65605a;
+  --tint: rgba(236, 235, 232, 0.4);
+  --accent: #c2381a;
 }
 
 [data-mode="light"][data-tone="gallery"] {
@@ -184,18 +206,6 @@
   --tint: rgba(240, 233, 227, 0.4);
   --shadow: 0 14px 30px rgba(45, 28, 18, 0.16);
   --accent: #b04e12;
-}
-
-[data-mode="light"][data-tone="spruce"] {
-  --base: #e4ece8;
-  --base-2: #f0f5f2;
-  --line: rgba(17, 32, 26, 0.1);
-  --line-strong: rgba(17, 32, 26, 0.18);
-  --ink: #11201a;
-  --ink-2: #44594f;
-  --ink-3: #566c62;
-  --tint: rgba(228, 236, 232, 0.4);
-  --accent: #1c6e51;
 }
 
 [data-mode="light"][data-tone="rosewood"] {
