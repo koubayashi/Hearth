@@ -52,7 +52,8 @@ function SteamRow({ accounts }: { accounts: Accounts | null }) {
         </div>
         {connected ? (
           <button className="btn" data-nav onClick={() => api.steamSignOut()}>
-            Disconnect
+            {/* A key isn't a sign-in: there's nothing to sign out of. */}
+            {accounts?.steam_auth === "api_key" ? "Remove key" : "Sign out"}
           </button>
         ) : (
           <button className="btn btn-primary" data-nav disabled={api.demo} onClick={() => api.steamSignIn()}>

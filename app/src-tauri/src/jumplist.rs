@@ -260,9 +260,14 @@ fn write(items: &[Item], console_icon: &Path) -> windows::core::Result<()> {
                 list.AppendCategory(&HSTRING::from("Recent"), &games.cast::<IObjectArray>()?)?;
             }
 
-            let tasks: IObjectCollection = CoCreateInstance(&EnumerableObjectCollection, None, CLSCTX_INPROC_SERVER)?;
-            tasks.AddObject(&link("Console", CONSOLE_ARG, console_icon)?)?;
-            list.AddUserTasks(&tasks.cast::<IObjectArray>()?)?;
+            // A category of our own, not AddUserTasks: Windows titles that one
+            // "Tasks" and it can't be renamed. Unlike tasks, it can be removed
+            // from the list, and then must stay off like a game.
+            if !gone.iter().any(|a| a == CONSOLE_ARG) {
+                let views: IObjectCollection = CoCreateInstance(&EnumerableObjectCollection, None, CLSCTX_INPROC_SERVER)?;
+                views.AddObject(&link("Console", CONSOLE_ARG, console_icon)?)?;
+                list.AppendCategory(&HSTRING::from("Views"), &views.cast::<IObjectArray>()?)?;
+            }
             list.CommitList()
         })();
         if com.is_ok() {
