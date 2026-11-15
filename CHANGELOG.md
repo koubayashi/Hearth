@@ -12,7 +12,8 @@ version that has no section here.
   game you're playing at the top with its art and its time, your recent
   games with their covers, **Open Hearth** and **Quit Hearth**, and the
   update first when one is ready. Arrow keys move, Enter picks, Esc or a
-  click elsewhere closes it. Left-click still opens Hearth.
+  click elsewhere closes it. Left-click still opens Hearth. It's light or
+  dark like your taskbar (Windows mode), in Hearth's tone.
 - **Pause timing.** Pause a game from the tray, its panel or the Console
   view, and the time stops while the game stays open. It picks up again
   by itself as soon as you're back in the game and press anything; there's
@@ -33,6 +34,15 @@ version that has no section here.
   so it can't be mistaken for a game running now.
 - A stopwatch marks the time being counted now, in the tray, the game's
   panel and the Console view, so it can't be taken for a total.
+- **Clear all filters at once.** A **Clear** button with a count shows in
+  the library toolbar while anything is filtered (search included), and in
+  Sort and filter and the "No games match" page. Filters that are on now
+  stand out clearly from one the mouse is over; a sort order alone no
+  longer lights up Sort and filter.
+- **A new icon and a new default look.** The flame is bigger and sits on
+  charcoal, with a vermilion heart. The new **Charcoal** tone matches it and
+  is the default for new installs: neutral, so your game art carries the
+  colour, with vermilion for the highlight. Graphite is still there.
 - **Taskbar jump list.** Right-click Hearth's taskbar button: your five
   most recent games, each with its own icon, start straight from there,
   and **Console** opens Hearth in the Console view.
