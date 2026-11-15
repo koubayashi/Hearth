@@ -63,9 +63,17 @@ export const TONES: { id: Tone; label: string; dark: { base: string; accent: str
 
 const systemDark = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
 
+/** The tray menu sits on the taskbar, so it takes Windows mode (the taskbar's)
+ *  over Hearth's own mode, like Windows' own flyouts; the tone stays Hearth's. */
+let taskbarMode: "dark" | "light" | null = null;
+export function followTaskbar(light: boolean) {
+  taskbarMode = light ? "light" : "dark";
+  recolor(() => applyPrefs(current));
+}
+
 /** Dark or light as shown now: "system" resolved against Windows. */
 export const shownMode = (p: Prefs): "dark" | "light" =>
-  p.mode === "system" ? (systemDark?.matches === false ? "light" : "dark") : p.mode;
+  taskbarMode ?? (p.mode === "system" ? (systemDark?.matches === false ? "light" : "dark") : p.mode);
 
 const KEY = "hearth.prefs";
 const DEFAULTS: Prefs = { tone: "charcoal", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", consoleTipSeen: false, dismissedCombines: [], idleTime: "separate" };

@@ -223,6 +223,10 @@ export const mockBackend = {
   async trayMenuFit(_height: number, _show: boolean) {},
   async trayMenuHide() {},
   async openHearth() {},
+  async taskbarLight() {
+    return false;
+  },
+  onTaskbarTheme: noop,
   async takeJumpRequest() {
     return { console: false, error: null as string | null };
   },

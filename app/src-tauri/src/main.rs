@@ -1010,6 +1010,7 @@ fn main() {
             tray::open_hearth,
             tray::quit_hearth,
             jumplist::take_jump_request,
+            jumplist::taskbar_light,
             steam_set_api_key,
             steam_sign_in,
             steam_sign_out,

@@ -45,6 +45,8 @@ const backend = isTauri()
       trayMenuFit: (height: number, show: boolean) => invoke<void>("tray_menu_fit", { height, show }),
       trayMenuHide: () => invoke<void>("tray_menu_hide"),
       openHearth: () => invoke<void>("open_hearth"),
+      taskbarLight: () => invoke<boolean>("taskbar_light"),
+      onTaskbarTheme: on("taskbar-theme"),
       takeJumpRequest: () => invoke<{ console: boolean; error: string | null }>("take_jump_request"),
       quitHearth: () => invoke<void>("quit_hearth"),
       onTrayOpen: on("tray-open"),

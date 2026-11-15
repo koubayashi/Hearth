@@ -76,6 +76,30 @@ pub fn watch(app: &AppHandle) {
     schedule(app.clone(), Duration::ZERO);
     let handle = app.clone();
     app.listen_any("library-changed", move |_| schedule(handle.clone(), Duration::from_secs(3)));
+    #[cfg(windows)]
+    {
+        let app = app.clone();
+        std::thread::spawn(move || watch_theme(app));
+    }
+}
+
+/// Switching Windows between light and dark redraws the Console icon here
+/// and the tray icon in the new colours. Waits on the theme's registry key,
+/// so it costs nothing until it changes.
+#[cfg(windows)]
+fn watch_theme(app: AppHandle) {
+    use windows::core::w;
+    use windows::Win32::System::Registry::{RegNotifyChangeKeyValue, RegOpenKeyExW, HKEY, HKEY_CURRENT_USER, KEY_NOTIFY, REG_NOTIFY_CHANGE_LAST_SET};
+    let mut key = HKEY::default();
+    let path = w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+    if unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, path, None, KEY_NOTIFY, &mut key) }.is_err() {
+        return;
+    }
+    while unsafe { RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, None, false) }.is_ok() {
+        refresh(&app);
+        crate::tray::set_playing(&app, &tracking::now_playing(&app));
+        let _ = app.emit("taskbar-theme", light_taskbar());
+    }
 }
 
 #[derive(PartialEq, Clone)]
@@ -167,9 +191,15 @@ fn console_icon(app: &AppHandle, light: bool) -> Option<PathBuf> {
     Some(path)
 }
 
+/// For the tray menu, which takes the taskbar's mode (prefs.ts).
+#[tauri::command]
+pub fn taskbar_light() -> bool {
+    light_taskbar()
+}
+
 /// Windows' own theme (the taskbar's), not the apps' one.
 #[cfg(windows)]
-fn light_taskbar() -> bool {
+pub(crate) fn light_taskbar() -> bool {
     use windows::core::w;
     use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
     let mut value = 0u32;
@@ -278,7 +308,7 @@ fn write(items: &[Item], console_icon: &Path) -> windows::core::Result<()> {
 }
 
 #[cfg(not(windows))]
-fn light_taskbar() -> bool {
+pub(crate) fn light_taskbar() -> bool {
     false
 }
 

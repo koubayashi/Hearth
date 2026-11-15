@@ -71,9 +71,20 @@ pub fn style_main(window: &tauri::WebviewWindow) {
     let _ = window;
 }
 
+/// The tray's own icon: the app icon's flame without its tile, so it fills
+/// the square like other tray icons do (tray-dark.svg, tray-light.svg). Cream
+/// on a dark taskbar, charcoal on a light one.
+fn tray_icon() -> Image<'static> {
+    if crate::jumplist::light_taskbar() {
+        tauri::include_image!("icons/tray-light.png")
+    } else {
+        tauri::include_image!("icons/tray-dark.png")
+    }
+}
+
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
-        .icon(app.default_window_icon().cloned().expect("app icon"))
+        .icon(tray_icon())
         .tooltip("Hearth")
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -176,11 +187,12 @@ pub fn tray_menu_fit(app: AppHandle, height: f64, show: bool) {
     let Some((px, py)) = *lock(&AT) else { return };
     let Some(monitor) = app.monitor_from_point(px, py).ok().flatten().or_else(|| app.primary_monitor().ok().flatten()) else { return };
     let scale = monitor.scale_factor();
-    let (left, top) = (f64::from(monitor.position().x), f64::from(monitor.position().y));
-    let (right, bottom) = (left + f64::from(monitor.size().width), top + f64::from(monitor.size().height));
-    // Never taller than the space above (or beside) the taskbar.
-    let room = f64::from(monitor.work_area().size.height);
-    let (mw, mh) = (MENU_WIDTH * scale, (height * scale).min(room));
+    // Kept inside the work area, as Windows' menus are: clicked on the taskbar
+    // itself (not in the hidden-icons panel), the pointer is over the taskbar.
+    let area = monitor.work_area();
+    let (left, top) = (f64::from(area.position.x), f64::from(area.position.y));
+    let (right, bottom) = (left + f64::from(area.size.width), top + f64::from(area.size.height));
+    let (mw, mh) = (MENU_WIDTH * scale, (height * scale).min(bottom - top));
     let x = if px + mw <= right { px } else { px - mw };
     let y = if py - mh >= top { py - mh } else { py };
     let (x, y) = (x.clamp(left, (right - mw).max(left)), y.clamp(top, (bottom - mh).max(top)));
@@ -399,9 +411,9 @@ pub fn set_playing(app: &AppHandle, playing: &[NowPlaying]) {
         [one] => format!("Hearth · timing {}", one.title),
         many => format!("Hearth · timing {} games", many.len()),
     };
-    // Only redrawn when the tooltip or the pause mark changes.
-    static SHOWN: Mutex<Option<(String, bool)>> = Mutex::new(None);
-    let now = (tip, !paused.is_empty());
+    // Only redrawn when the tooltip, the pause mark or the taskbar's theme changes.
+    static SHOWN: Mutex<Option<(String, bool, bool)>> = Mutex::new(None);
+    let now = (tip, !paused.is_empty(), crate::jumplist::light_taskbar());
     {
         let mut shown = lock(&SHOWN);
         if shown.as_ref() == Some(&now) {
@@ -412,8 +424,8 @@ pub fn set_playing(app: &AppHandle, playing: &[NowPlaying]) {
     // Set with the lock released: from another thread these wait on the main
     // thread, which may itself be waiting on this lock.
     let _ = tray.set_tooltip(Some(now.0));
-    let Some(icon) = app.default_window_icon() else { return };
-    let _ = tray.set_icon(Some(if now.1 { with_pause_mark(icon) } else { icon.clone() }));
+    let icon = tray_icon();
+    let _ = tray.set_icon(Some(if now.1 { with_pause_mark(&icon) } else { icon }));
 }
 
 /// The app icon with a small pause badge in its lower right corner.

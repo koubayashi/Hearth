@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { api } from "./lib/api";
-import { applyPrefs } from "./lib/prefs";
+import { applyPrefs, followTaskbar } from "./lib/prefs";
 import { startGamepadBridge } from "./lib/gamepad";
 import { installSpatialNav } from "./lib/spatial";
 import { installFullscreenKey } from "./lib/fullscreen";
@@ -32,6 +32,8 @@ window.addEventListener("contextmenu", (e) => {
 const trayMenu = new URLSearchParams(location.search).has("tray");
 if (trayMenu) {
   document.documentElement.classList.add("tray-window");
+  void api.taskbarLight().then(followTaskbar).catch(() => {});
+  void api.onTaskbarTheme((light) => followTaskbar(light === true));
 } else {
   installSpatialNav();
   startGamepadBridge();
