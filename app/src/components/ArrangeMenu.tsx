@@ -18,6 +18,8 @@ export function ArrangeMenu({
   hiddenCount,
   onSort,
   onNarrow,
+  filterCount = 0,
+  onClearFilters,
   onShowHidden,
   onClose,
 }: {
@@ -29,6 +31,10 @@ export function ArrangeMenu({
   hiddenCount: number;
   onSort: (s: SortKey) => void;
   onNarrow: (n: Narrow) => void;
+  /** Every filter on in the view (toolbar ones too), and the one action
+   *  that clears them all, as the toolbar's Clear does. */
+  filterCount?: number;
+  onClearFilters?: () => void;
   /** Absent where hidden games can't be opened from (the hidden view itself). */
   onShowHidden?: () => void;
   onClose: () => void;
@@ -111,11 +117,21 @@ export function ArrangeMenu({
           )}
         </>
       )}
-      {(narrow.favorites || narrow.genres.length > 0) && (
-        <button role="menuitem" onClick={() => onNarrow({ favorites: false, genres: [] })}>
-          <Icon name="close" size={15} />
-          Clear filters
-        </button>
+      {onClearFilters && filterCount > 0 && (
+        <>
+          <hr />
+          <button
+            role="menuitem"
+            onClick={() => {
+              onClearFilters();
+              onClose();
+            }}
+          >
+            <Icon name="close" size={15} />
+            Clear all filters
+            <span className="count-badge">{filterCount}</span>
+          </button>
+        </>
       )}
       {onShowHidden && (
         <>

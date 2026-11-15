@@ -161,7 +161,16 @@ export function Library({
     [all],
   );
 
-  const filtered = install !== "all" || stores.length > 0 || search !== "" || narrow.favorites || narrow.genres.length > 0;
+  // Every filter on, counted for the Clear button; the sort isn't one.
+  const filterCount =
+    (install !== "all" ? 1 : 0) + stores.length + (search !== "" ? 1 : 0) + (narrow.favorites ? 1 : 0) + narrow.genres.length;
+  const filtered = filterCount > 0;
+  const clearFilters = () => {
+    setInstall("all");
+    setStores([]);
+    setSearch("");
+    setNarrow(NO_NARROW);
+  };
   const genres = useMemo(() => (arrangeAt ? genresOf(all, info) : []), [arrangeAt, all, infoTick]);
 
   // Something should always be in the light: default to the most recent game.
@@ -325,9 +334,28 @@ export function Library({
           </button>
         ))}
         </div>
+        {filtered && (
+          <button
+            className="chip clear-filters"
+            data-nav
+            title={`Clear ${filterCount === 1 ? "1 filter" : `${filterCount} filters`}`}
+            aria-label={`Clear ${filterCount === 1 ? "1 filter" : `${filterCount} filters`}`}
+            onClick={(e) => {
+              // The button goes once nothing is filtered: keep the focus in
+              // the toolbar for a controller or the keyboard.
+              const all = e.currentTarget.parentElement?.querySelector<HTMLElement>(".seg button");
+              clearFilters();
+              all?.focus();
+            }}
+          >
+            <Icon name="close" size={14} />
+            <span className="label">Clear</span>
+            <span className="count-badge">{filterCount}</span>
+          </button>
+        )}
         <span className="spacer" />
         <button
-          className={`chip arrange${narrow.genres.length > 0 || sort !== "title" ? " active" : ""}`}
+          className={`chip arrange${narrow.genres.length > 0 ? " active" : ""}`}
           data-nav
           title="Sort and filter"
           aria-haspopup="menu"
@@ -353,6 +381,8 @@ export function Library({
             hiddenCount={hiddenCount}
             onSort={(s) => setPrefs({ librarySort: s })}
             onNarrow={setNarrow}
+            filterCount={filterCount}
+            onClearFilters={clearFilters}
             onShowHidden={hiddenView ? undefined : onShowHidden}
             onClose={() => setArrangeAt(null)}
           />
@@ -406,7 +436,12 @@ export function Library({
               ) : filtered ? (
                 <>
                   <h3>No games match</h3>
-                  Try a different search, or clear the filters above.
+                  Try a different search, or clear the filters.
+                  <button className="btn" data-nav onClick={clearFilters}>
+                    <Icon name="close" size={14} />
+                    Clear filters
+                    <span className="count-badge">{filterCount}</span>
+                  </button>
                 </>
               ) : (
                 <>
