@@ -134,13 +134,15 @@ const FONTS: Record<Face, string> = {
 };
 
 /** The title set like a game's logo: one or two lines, fitted to `w`. */
-function titleText(look: Look, x: number, y: number, w: number, anchor: "middle" | "start", fill = "#fff"): string {
+function titleText(look: Look, x: number, y: number, w: number, anchor: "middle" | "start", maxH = Infinity, fill = "#fff"): string {
   const upper = look.face === "wide";
   const text = upper ? look.title.toUpperCase() : look.title;
   const words = text.split(" ");
   const lines = text.length > 13 && words.length > 1 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [text];
   const longest = Math.max(...lines.map((l) => l.length));
-  const size = Math.min(w / (longest * (upper ? 0.62 : 0.52)), w * 0.2);
+  // Average glyph width per font size, a little generous so nothing clips.
+  const perChar = { wide: 0.68, serif: 0.62, sans: 0.58 }[look.face];
+  const size = Math.min(w / (longest * perChar), w * 0.2, maxH / (lines.length * 1.05));
   const weight = look.face === "serif" ? 700 : 800;
   const spacing = upper ? size * 0.06 : look.face === "sans" ? -size * 0.02 : 0;
   const style = look.face === "serif" ? " font-style='italic'" : "";
@@ -158,6 +160,6 @@ export function showcaseArt(i: number): { title: string; cover: string; hero: st
     `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 900'>${scene(look, 600, 900, i + 1)}` +
     `<defs>${shade}</defs><rect width='600' height='900' fill='url(#b)'/>${titleText(look, 300, 820, 500, "middle")}</svg>`;
   const hero = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1920 620' preserveAspectRatio='xMidYMid slice'>${scene(look, 1920, 620, i + 101)}</svg>`;
-  const logo = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 260'>${titleText(look, 0, 220, 880, "start")}</svg>`;
+  const logo = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 260'>${titleText(look, 0, 220, 880, "start", 230)}</svg>`;
   return { title: look.title, cover: uri(cover), hero: uri(hero), logo: uri(logo) };
 }

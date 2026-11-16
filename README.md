@@ -27,10 +27,7 @@
 
 Hearth gathers your games from every store into one library, starts each one through its own store, and sits in the tray timing what you play, however you launch it. No accounts, no themes to break, no clutter: big art, quick search, and a full-screen Console mode for the controller.
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/library-light.webp">
-  <img src="docs/screenshots/library.webp" alt="Hearth's library: a wall of covers beside the selected game's panel, with its playtime, a Pause button for the game being timed, and Jump back in on top">
-</picture>
+<img src="docs/screenshots/library.webp" alt="Hearth's library: a wall of covers beside the selected game's panel, with its playtime, a Pause button for the game being timed, and Jump back in on top">
 
 <p align="center"><sub>The games in these screenshots are invented, drawn for Hearth's demo library.</sub></p>
 
@@ -71,13 +68,17 @@ Hearth needs Windows 10 or 11 (64-bit) and Microsoft WebView2, which already shi
 
 - **Collections**, plus shelves that fill themselves: Favourites, In progress, Backlog, Completed, and browse by series, developer or publisher.
 - **Sort and filter** by store, genre, install state, size, last played or most played. Search starts as you type.
-- **Two layouts:** a cover wall, or a list beside a detail page with the game's art.
 - **Artwork** from the stores and, with a free key, SteamGridDB. Pick a different cover for any game.
 - **Ways to play:** start a game through a mod loader, an offline server or a tool, with its own arguments.
 - **Storage:** what each installed game takes on disk, and uninstalling through its store (or to the Recycle Bin for folder games).
 
+A cover wall or a list beside the game's art, in seven tones, dark or light:
+
 <p align="center">
-  <img src="docs/screenshots/list.webp" alt="The list layout: titles grouped by install state beside the selected game's detail page" width="900">
+  <img src="docs/screenshots/list-harbor.webp" alt="The list layout in the Harbor tone: titles grouped by install state beside Salt & Sail's detail page" width="49%">
+  <img src="docs/screenshots/list-rosewood.webp" alt="The list layout in the Rosewood tone, with Harvest Hollow selected" width="49%">
+  <img src="docs/screenshots/grid-ember.webp" alt="The cover wall in the Ember tone, with Lanternlight: Ascent in the game panel" width="49%">
+  <img src="docs/screenshots/grid-gallery.webp" alt="The cover wall in the Gallery tone, with Deep Blue Diner in the game panel" width="49%">
 </p>
 
 ### Console mode, for the couch
@@ -87,22 +88,28 @@ Press **Start** on a controller, from anywhere in Hearth, and it becomes a full-
 The whole app works with a controller, the keyboard or the mouse.
 
 <p align="center">
-  <img src="docs/screenshots/console.webp" alt="Console mode: a row of large covers with shelves above and the selected game's art filling the screen" width="900">
+  <img src="docs/screenshots/console-harbor.webp" alt="Console mode in the Harbor tone: shelves along the top, a row of large covers, and the selected game's art filling the screen" width="900">
 </p>
 
 ### Part of Windows
 
 - **Lives in the tray.** Close the window and Hearth keeps timing. Right-click the tray icon for what's playing now (with Pause and Stop), your recent games, and Open or Quit.
 - **Taskbar jump list.** Right-click Hearth on the taskbar to start one of your last five games, or open Console mode.
-- **Starts with Windows** if you want, straight to the tray.
-- **Looks like Windows 11:** Mica, Snap Layouts, light or dark (or follow Windows), and seven tones with your own highlight colour.
-- **Backups** of your library, playtime and settings, by hand or automatically to a folder you choose.
+- **Looks like Windows 11:** Mica, Snap Layouts, and light or dark that can follow Windows.
 
 <p align="center">
-  <img src="docs/screenshots/tray.webp" alt="The tray menu: the game being timed with Pause and Stop, recent games, Open Hearth and Quit Hearth" width="300">
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/settings.webp" alt="Settings: the stores Hearth is signed in to, and game folders" width="560">
+  <img src="docs/screenshots/tray.webp" alt="The tray menu: the game being timed with Pause and Stop, recent games, Open Hearth and Quit Hearth" width="320">
 </p>
+
+### Make it yours
+
+Everything lives in **Settings**, and every option has a sensible default:
+
+- **Stores and folders:** sign in to or out of each store, and add the folders where your other games live.
+- **Playtime:** keep idle time apart or count it as play, and start Hearth with Windows, straight to the tray.
+- **Appearance:** seven tones, dark, light or Windows' mode, your own highlight colour, cover size, store icons on covers, Metacritic scores, and the "Jump back in" row.
+- **Library:** your hidden games, the name Hearth greets you with, art from SteamGridDB, and Console mode full screen or windowed.
+- **Backup and updates:** back up and restore your library, playtime and settings, by hand or automatically to a folder; see what each update changed.
 
 ## Your data stays on your PC
 
