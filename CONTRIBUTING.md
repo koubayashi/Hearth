@@ -56,7 +56,7 @@ Database changes are numbered migrations in `crates/hub-core/migrations/`. Add a
 Run all of these, and make sure they pass:
 
 ```bash
-cargo test --workspace --exclude hearth   # from the repo root
+cargo test --workspace                    # from the repo root (build the app first: cd app && npm run build)
 cd app
 npx tsc -b
 npm test

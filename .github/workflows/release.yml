@@ -1,14 +1,19 @@
 # Builds the Windows installer when a version tag (v0.2.0, ...) is pushed and
 # publishes it as a GitHub release, with the signed latest.json that installed
 # copies of Hearth check for updates.
+#
+# Run it by hand (Actions > Release > Run workflow) for a dry run: it builds,
+# tests and checks the release notes of the version in Cargo.toml, and
+# publishes nothing.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 # Actions are pinned to commits, not tags: they run in the job that later holds
 # the updater signing key, and a moved tag could hand it to someone who could
@@ -16,7 +21,10 @@ permissions:
 # tag's commit: git ls-remote https://github.com/<owner>/<repo> <tag>
 
 jobs:
-  windows:
+  # Everything that runs other people's code (every dependency's build script,
+  # the frontend tooling, the tests) runs here, with no secrets and a
+  # read-only token.
+  build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -33,22 +41,27 @@ jobs:
         with:
           toolchain: stable
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-
       - run: npm ci
         working-directory: app
 
-      # The tag is the version: write it into Cargo.toml and package.json so
-      # the installer and latest.json can't disagree with the release name.
-      - name: Version from tag
+      # A tag is the version: write it into Cargo.toml and package.json so the
+      # installer and latest.json can't disagree with the release name. A dry
+      # run uses the version already in Cargo.toml.
+      - name: Version
+        id: version
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
-          (Get-Content Cargo.toml -Raw) -replace '(?m)(\[workspace\.package\]\r?\nversion = )"[^"]*"', "`$1`"$version`"" | Set-Content Cargo.toml -NoNewline
-          if (-not (Select-String -Path Cargo.toml -Pattern "^version = `"$version`"" -Quiet)) { throw "Could not set the version in Cargo.toml" }
-          Push-Location app
-          npm version $version --no-git-tag-version --allow-same-version
-          Pop-Location
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $version = $env:GITHUB_REF_NAME.TrimStart("v")
+            (Get-Content Cargo.toml -Raw) -replace '(?m)(\[workspace\.package\]\r?\nversion = )"[^"]*"', "`$1`"$version`"" | Set-Content Cargo.toml -NoNewline
+            if (-not (Select-String -Path Cargo.toml -Pattern "^version = `"$version`"" -Quiet)) { throw "Could not set the version in Cargo.toml" }
+            Push-Location app
+            npm version $version --no-git-tag-version --allow-same-version
+            Pop-Location
+          } else {
+            $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       # The app crate embeds the built frontend, so build it before testing.
       - run: npm run build
@@ -63,35 +76,63 @@ jobs:
       # "## 0.3.0" to the next "## ". No section, no release: a version
       # shouldn't go out without saying what changed.
       - name: Release notes from CHANGELOG.md
-        id: notes
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
           $lines = Get-Content CHANGELOG.md
-          $start = [Array]::IndexOf($lines, "## $version")
-          if ($start -lt 0) { throw "CHANGELOG.md has no '## $version' section" }
+          $start = [Array]::IndexOf($lines, "## $env:VERSION")
+          if ($start -lt 0) { throw "CHANGELOG.md has no '## $env:VERSION' section" }
           $body = @()
           foreach ($line in $lines[($start + 1)..($lines.Count - 1)]) {
             if ($line -match '^## ') { break }
             $body += $line
           }
           $text = ($body -join "`n").Trim()
-          if (-not $text) { throw "The '## $version' section of CHANGELOG.md is empty" }
-          $delimiter = "NOTES_" + [guid]::NewGuid().ToString("N")
-          "body<<$delimiter`n$text`n$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          if (-not $text) { throw "The '## $env:VERSION' section of CHANGELOG.md is empty" }
+          New-Item -ItemType Directory -Force out | Out-Null
+          $text | Set-Content out/notes.md -Encoding utf8NoBOM
 
-      # Built without the signing key: the build runs every dependency's build
-      # script and the frontend tooling, none of which needs it. Without the key
-      # Tauri refuses to make updater artifacts, so they're off here; for NSIS
-      # the update is the installer itself, signed in the next step.
+      # Without the key Tauri refuses to make updater artifacts, so they're
+      # off here; for NSIS the update is the installer itself, signed in the
+      # publish job.
       - name: Build the installer
         working-directory: app
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content "$env:RUNNER_TEMP/no-updater.json"
           npx tauri build --config "$env:RUNNER_TEMP/no-updater.json"
+          $setup = "../target/release/bundle/nsis/Hearth_${env:VERSION}_x64-setup.exe"
+          if (-not (Test-Path $setup)) { throw "No installer at $setup" }
+          Copy-Item $setup ../out/
 
-      # The only step that sees the key.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release
+          path: out/
+          if-no-files-found: error
+
+  # A fresh runner that never ran the build: it installs only the pinned
+  # Tauri CLI (no install scripts), signs, and publishes. The only job that
+  # sees the signing key or can write to the repo.
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: out
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
       - name: Sign the update
         shell: pwsh
         env:
@@ -99,34 +140,36 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
-          $setup = "target/release/bundle/nsis/Hearth_${version}_x64-setup.exe"
+          $setup = "out/Hearth_${version}_x64-setup.exe"
           if (-not (Test-Path $setup)) { throw "No installer at $setup" }
-          Push-Location app
-          npx tauri signer sign --app-version $version "../$setup"
-          Pop-Location
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/cli" | Out-Null
+          npm install --prefix "$env:RUNNER_TEMP/cli" --ignore-scripts --no-save --no-audit --no-fund "@tauri-apps/cli@2.12.4"
+          & "$env:RUNNER_TEMP/cli/node_modules/.bin/tauri.cmd" signer sign --app-version $version $setup
           if (-not (Test-Path "$setup.sig")) { throw "The installer wasn't signed" }
 
       # latest.json as tauri-action wrote it: the installer's address and
-      # signature, which installed copies check before updating.
+      # signature, which installed copies check before updating. A tag with a
+      # "-" (v0.5.0-rc1) is a pre-release: installed copies, which read the
+      # latest full release, never see it.
       - name: Publish the release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NOTES: ${{ steps.notes.outputs.body }}
         run: |
           $tag = $env:GITHUB_REF_NAME
           $version = $tag.TrimStart("v")
           $name = "Hearth_${version}_x64-setup.exe"
-          $setup = "target/release/bundle/nsis/$name"
+          $setup = "out/$name"
+          $notes = Get-Content out/notes.md -Raw
           $update = [ordered]@{
             signature = (Get-Content "$setup.sig" -Raw).Trim()
             url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$name"
           }
           [ordered]@{
             version = $version
-            notes = $env:NOTES
+            notes = $notes.Trim()
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = [ordered]@{ "windows-x86_64" = $update; "windows-x86_64-nsis" = $update }
-          } | ConvertTo-Json -Depth 4 | Set-Content latest.json -Encoding utf8NoBOM
-          $env:NOTES | Set-Content notes.md -Encoding utf8NoBOM
-          gh release create $tag $setup "$setup.sig" latest.json --repo $env:GITHUB_REPOSITORY --title "Hearth $tag" --notes-file notes.md
+          } | ConvertTo-Json -Depth 4 | Set-Content out/latest.json -Encoding utf8NoBOM
+          $pre = if ($version.Contains("-")) { @("--prerelease") } else { @() }
+          gh release create $tag $setup "$setup.sig" out/latest.json --repo $env:GITHUB_REPOSITORY --title "Hearth $tag" --notes-file out/notes.md @pre
