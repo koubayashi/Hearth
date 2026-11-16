@@ -21,6 +21,8 @@ use crate::{lock, now, tracking, CmdResult};
 
 const FIRST_CHECK: Duration = Duration::from_secs(60);
 const CHECK_EVERY: Duration = Duration::from_secs(12 * 3600);
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 /// Download progress goes to the interface at most this often.
 const PROGRESS_EVERY: Duration = Duration::from_millis(250);
 
@@ -193,8 +195,12 @@ async fn check(app: &AppHandle) {
 
 async fn fetch(app: &AppHandle) -> tauri_plugin_updater::Result<()> {
     let state = app.state::<Updates>();
-    let found = app.updater()?.check().await?;
-    let Some(update) = found else {
+    // Without timeouts a request that hangs (sleep, a Wi-Fi switch) leaves
+    // the phase at Checking or Downloading, and no check runs again until
+    // a restart. The check's timeout carries to the download, which is
+    // given longer: it covers the whole installer.
+    let found = app.updater_builder().timeout(CHECK_TIMEOUT).build()?.check().await?;
+    let Some(mut update) = found else {
         set(app, |s| {
             s.phase = Phase::Idle;
             s.version = None;
@@ -222,6 +228,7 @@ async fn fetch(app: &AppHandle) -> tauri_plugin_updater::Result<()> {
         s.last_checked = Some(now());
         s.error = None;
     });
+    update.timeout = Some(DOWNLOAD_TIMEOUT);
     let mut done = 0u64;
     let mut last = Instant::now();
     let bytes = update
@@ -271,7 +278,14 @@ pub fn install(app: &AppHandle) -> CmdResult<()> {
         s.error = None;
     });
     tracking::flush(app);
+    let marker = restart_marker(app);
+    if let Some(m) = &marker {
+        let _ = std::fs::write(m, "");
+    }
     if let Err(e) = update.install(&bytes) {
+        if let Some(m) = &marker {
+            let _ = std::fs::remove_file(m);
+        }
         let reason = format!("Couldn't install it: {e}");
         *lock(&state.ready) = Some((update, bytes));
         set(app, |s| {
@@ -281,6 +295,17 @@ pub fn install(app: &AppHandle) -> CmdResult<()> {
         return Err(reason);
     }
     app.restart();
+}
+
+fn restart_marker(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("restarting-for-update"))
+}
+
+/// True once, at the first start after `install`: the installer passes the
+/// old command line on (a jump-list game, or `--minimized`), and it should
+/// be ignored then, opening Hearth as a plain start does.
+pub fn restarted_for_update(app: &AppHandle) -> bool {
+    restart_marker(app).is_some_and(|m| std::fs::remove_file(m).is_ok())
 }
 
 /// The section of CHANGELOG.md for one version: everything under its

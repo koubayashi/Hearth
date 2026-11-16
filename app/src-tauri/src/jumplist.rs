@@ -312,6 +312,20 @@ pub(crate) fn light_taskbar() -> bool {
     false
 }
 
+/// The installer stamps Hearth's shortcuts with the bundle identifier as
+/// their app id. Unless the process uses the same one, Windows files the
+/// jump list under another id, and a taskbar button started from the Start
+/// menu or a pin shows none of it. Must run before any window exists.
+#[cfg(windows)]
+pub fn set_app_id() {
+    use windows::core::w;
+    use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+    let _ = unsafe { SetCurrentProcessExplicitAppUserModelID(w!("dev.hearth.app")) };
+}
+
+#[cfg(not(windows))]
+pub fn set_app_id() {}
+
 #[cfg(not(windows))]
 fn write(_: &[Item], _: &Path) -> Result<(), String> {
     Ok(())
