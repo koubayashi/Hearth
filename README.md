@@ -72,13 +72,13 @@ Hearth needs Windows 10 or 11 (64-bit) and Microsoft WebView2, which already shi
 - **Ways to play:** start a game through a mod loader, an offline server or a tool, with its own arguments.
 - **Storage:** what each installed game takes on disk, and uninstalling through its store (or to the Recycle Bin for folder games).
 
-A cover wall or a list beside the game's art, in seven tones, dark or light:
+A cover wall or a list beside the game's art, dark or light, in any of seven tones or your own highlight colour:
 
 <p align="center">
-  <img src="docs/screenshots/list-harbor.webp" alt="The list layout in the Harbor tone: titles grouped by install state beside Salt & Sail's detail page" width="49%">
-  <img src="docs/screenshots/list-rosewood.webp" alt="The list layout in the Rosewood tone, with Harvest Hollow selected" width="49%">
-  <img src="docs/screenshots/grid-ember.webp" alt="The cover wall in the Ember tone, with Lanternlight: Ascent in the game panel" width="49%">
-  <img src="docs/screenshots/grid-gallery.webp" alt="The cover wall in the Gallery tone, with Deep Blue Diner in the game panel" width="49%">
+  <img src="docs/screenshots/list-harbor.webp" alt="The list layout in dark mode with the Harbor tone: titles grouped by install state beside Salt & Sail's detail page" width="49%">
+  <img src="docs/screenshots/list-rosewood.webp" alt="The list layout in light mode with the Rosewood tone, Harvest Hollow selected" width="49%">
+  <img src="docs/screenshots/grid-ember.webp" alt="The cover wall in light mode with the Ember tone, Lanternlight: Ascent in the game panel" width="49%">
+  <img src="docs/screenshots/grid-gallery.webp" alt="The cover wall in dark mode with the Gallery tone, with Deep Blue Diner in the game panel" width="49%">
 </p>
 
 ### Console mode, for the couch
