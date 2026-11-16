@@ -1036,7 +1036,7 @@ impl Db {
                 status = COALESCE(status, (SELECT status FROM games WHERE id = ?2)),
                 save_paths_json = COALESCE(save_paths_json, (SELECT save_paths_json FROM games WHERE id = ?2)),
                 save_played_secs = COALESCE(save_played_secs, (SELECT save_played_secs FROM games WHERE id = ?2)),
-                save_seen_at = MAX(COALESCE(save_seen_at, 0), COALESCE((SELECT save_seen_at FROM games WHERE id = ?2), 0)),
+                save_seen_at = NULLIF(MAX(COALESCE(save_seen_at, 0), COALESCE((SELECT save_seen_at FROM games WHERE id = ?2), 0)), 0),
                 added_at = MIN(added_at, (SELECT added_at FROM games WHERE id = ?2)),
                 install_size = NULL
              WHERE id = ?1",
@@ -1616,6 +1616,21 @@ mod tests {
             .unwrap();
         let games = db.list_games(&LibraryQuery::default()).unwrap();
         assert_eq!((games.len(), games[0].entries.len()), (1, 3));
+    }
+
+    #[test]
+    fn combining_two_unplayed_games_leaves_them_unplayed() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(
+            StoreId::Epic,
+            &[entry(StoreId::Epic, "legacy", "Grand Theft Auto V", false), entry(StoreId::Epic, "enh", "Grand Theft Auto V Enhanced", false)],
+            0,
+        )
+        .unwrap();
+        let games = db.list_games(&LibraryQuery::default()).unwrap();
+        db.combine_games(games[0].id, games[1].id).unwrap();
+        let g = db.game(games[0].id).unwrap().unwrap();
+        assert_eq!(g.last_played, None, "not played in 1970");
     }
 
     #[test]

@@ -25,9 +25,7 @@ pub fn combine_games(app: AppHandle, keep: i64, other: i64) -> CmdResult<()> {
 #[tauri::command]
 pub fn separate_version(app: AppHandle, game_id: i64, entry_id: i64) -> CmdResult<i64> {
     let state = app.state::<AppState>();
-    let id = lock(&state.db).separate_version(game_id, entry_id).map_err(err)?;
-    // Its folder is the new game's now: what runs from it is timed for that.
-    crate::tracking::refresh_dirs(&app);
+    let id = crate::tracking::around_separate(&app, game_id, || lock(&state.db).separate_version(game_id, entry_id).map_err(err))?;
     crate::tracking::log(&app, &format!("versions: separated entry {entry_id} of game {game_id}"));
     changed(&app);
     // The separated game starts without art; fetch it now rather than at

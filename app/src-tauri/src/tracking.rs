@@ -379,6 +379,24 @@ pub fn around_combine<T>(app: &AppHandle, keep: i64, other: i64, combine: impl F
     Ok(out)
 }
 
+/// Taking a version out of `game_id` (`separate` does it in the library and
+/// returns the new game). If that version is the one running or paused, its
+/// sitting moves to the new game with it, pause included. Its folder is the
+/// new game's now, so what runs from it is timed for that.
+pub fn around_separate(app: &AppHandle, game_id: i64, separate: impl FnOnce() -> crate::CmdResult<i64>) -> crate::CmdResult<i64> {
+    let tracking = app.state::<Tracking>();
+    let mut tracker = lock(&tracking.tracker);
+    let new_id = separate()?;
+    let dirs = lock(&app.state::<AppState>().db).install_dirs().unwrap_or_default();
+    if let Some(entry) = tracker.entry_of(game_id) {
+        if dirs.iter().any(|(game, e, _)| *game == new_id && *e == Some(entry)) {
+            tracker.renumber(game_id, new_id);
+        }
+    }
+    tracker.set_install_entries(dirs);
+    Ok(new_id)
+}
+
 /// Writes the events to tracker.log; true if play or idle time was saved.
 fn log_events(app: &AppHandle, events: &[Event], saved: bool) -> bool {
     let note = if saved { "" } else { " (not saved)" };

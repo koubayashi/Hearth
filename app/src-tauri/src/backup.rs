@@ -53,6 +53,22 @@ pub struct Restored {
 /// Copies of the library kept from before a restore; older ones are removed.
 const KEEP_BEFORE_RESTORE: usize = 3;
 
+const LIBRARY_FILES: [&str; 3] = ["library.db", "library.db-wal", "library.db-shm"];
+
+/// Moves the library set aside during a restore (`library.db.old`) back in
+/// place. Also run at startup: Hearth closed mid-restore with no library
+/// file gets its own back instead of starting empty. False if there was
+/// nothing to put back.
+pub fn put_back_aside(dir: &std::path::Path) -> bool {
+    if dir.join("library.db").exists() || !dir.join("library.db.old").exists() {
+        return false;
+    }
+    LIBRARY_FILES.iter().fold(true, |ok, name| {
+        let old = dir.join(format!("{name}.old"));
+        ok && (!old.exists() || std::fs::rename(&old, dir.join(name)).is_ok())
+    })
+}
+
 #[tauri::command]
 pub fn backup_restore(app: AppHandle, path: String) -> CmdResult<Restored> {
     let source = PathBuf::from(&path);
@@ -79,10 +95,12 @@ pub fn backup_restore(app: AppHandle, path: String) -> CmdResult<Restored> {
             let _ = std::fs::remove_file(&incoming);
             return Err(err(e));
         }
-        // Close the library file before replacing it.
+        // Close the library file before replacing it. It's moved aside, not
+        // deleted, until the restored one opens: any failure puts it back.
         *db = Db::open_in_memory().map_err(err)?;
-        for name in ["library.db", "library.db-wal", "library.db-shm"] {
-            let _ = std::fs::remove_file(dir.join(name));
+        for name in LIBRARY_FILES {
+            let _ = std::fs::remove_file(dir.join(format!("{name}.old")));
+            let _ = std::fs::rename(dir.join(name), dir.join(format!("{name}.old")));
         }
         let opened = std::fs::rename(&incoming, &live).map_err(err).and_then(|_| Db::open(&live).map_err(err));
         match opened.and_then(|restored| {
@@ -93,12 +111,21 @@ pub fn backup_restore(app: AppHandle, path: String) -> CmdResult<Restored> {
                 let _ = restored.forget_backup_meta();
                 *db = restored;
                 *lock(&app.state::<PendingWays>().ways) = ways;
+                for name in LIBRARY_FILES {
+                    let _ = std::fs::remove_file(dir.join(format!("{name}.old")));
+                }
                 Ok(())
             }
             Err(e) => {
-                // Put the library back as it was.
+                // Put the library back as it was: the files moved aside, or
+                // failing that the copy made above.
                 let _ = std::fs::remove_file(&incoming);
-                std::fs::copy(&safety, &live).map_err(err)?;
+                for name in LIBRARY_FILES {
+                    let _ = std::fs::remove_file(dir.join(name));
+                }
+                if !put_back_aside(&dir) {
+                    std::fs::copy(&safety, &live).map_err(err)?;
+                }
                 *db = Db::open(&live).map_err(err)?;
                 let _ = db.forget_backup_meta();
                 Err(format!("Couldn't restore that backup ({e}). Your library is unchanged."))
@@ -185,4 +212,26 @@ pub fn restore_ways(app: AppHandle, keep: bool, folders: Option<bool>) -> CmdRes
         crate::tracking::log(&app, &format!("backup: {} {} restored game folders", if add { "added" } else { "left out" }, extra.len()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_library_left_aside_by_an_interrupted_restore_comes_back() {
+        let dir = std::env::temp_dir().join(format!("hearth-aside-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("library.db.old"), "mine").unwrap();
+        std::fs::write(dir.join("library.db-wal.old"), "wal").unwrap();
+        assert!(put_back_aside(&dir));
+        assert_eq!(std::fs::read_to_string(dir.join("library.db")).unwrap(), "mine");
+        assert!(dir.join("library.db-wal").exists() && !dir.join("library.db.old").exists());
+        // A library in place is never replaced.
+        std::fs::write(dir.join("library.db.old"), "older").unwrap();
+        assert!(!put_back_aside(&dir));
+        assert_eq!(std::fs::read_to_string(dir.join("library.db")).unwrap(), "mine");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

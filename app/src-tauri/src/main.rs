@@ -829,6 +829,7 @@ pub(crate) fn sync_all(app: AppHandle) {
 }
 
 fn main() {
+    jumplist::set_app_id();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -850,6 +851,7 @@ fn main() {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             errors::install_panic_hook(dir.clone());
+            backup::put_back_aside(&dir);
             let db = Db::open(&dir.join("library.db"))?;
             // Re-check games that had no store match after an update (the
             // matcher may have improved); otherwise a miss waits its week.
@@ -957,7 +959,13 @@ fn main() {
             // interface, until the user opens Hearth.
             // Started from the jump list with a game: it starts, Hearth stays
             // in the tray.
-            let args: Vec<String> = std::env::args().collect();
+            // After an update the installer starts Hearth again with the old
+            // command line: a jump-list game would start again by itself.
+            let args: Vec<String> = if updates::restarted_for_update(app.handle()) {
+                Vec::new()
+            } else {
+                std::env::args_os().map(|a| a.to_string_lossy().into_owned()).collect()
+            };
             if args.iter().any(|a| a == "--minimized") || !jumplist::handle_args(app.handle(), &args) {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.destroy();
