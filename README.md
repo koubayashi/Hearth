@@ -149,4 +149,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing anything. It covers conv
 
 ## License
 
-GPL-3.0-or-later
+[GPL-3.0-or-later](LICENSE). You can use, change and share Hearth. Anything you share that's built on it must stay open source under the same license.
