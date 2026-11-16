@@ -4,7 +4,10 @@ What changed in each Hearth release, newest first. Each version's section
 becomes its GitHub release notes, so the release build won't publish a
 version that has no section here.
 
-## Unreleased
+## 0.4.0
+
+Hearth's own tray menu, pausing a game's timing, idle time kept apart from
+play, a taskbar jump list, and a new icon and look.
 
 ### New
 
@@ -42,13 +45,32 @@ version that has no section here.
 - **A new icon and a new default look.** The flame is bigger and sits on
   charcoal, with a vermilion heart. The new **Charcoal** tone matches it and
   is the default for new installs: neutral, so your game art carries the
-  colour, with vermilion for the highlight. Graphite is still there.
+  colour, with vermilion for the highlight. If you used Hearth before,
+  your tone stays, and Hearth offers Charcoal once.
 - **Taskbar jump list.** Right-click Hearth's taskbar button: your five
   most recent games, each with its own icon, start straight from there,
   and **Console** opens Hearth in the Console view.
 
 ### Fixed
 
+- Combining two games you'd never played made them "last played" in 1970,
+  and put them in your recent games.
+- Separating a version while you played it kept the time, and a pause, on
+  the game it left. They go with the version now.
+- A restore that failed partway could leave Hearth with an empty library,
+  or none at the next start. Your library is now set aside, not deleted,
+  until the backup has opened, and comes back if anything goes wrong.
+- After an update, Hearth opens as usual, instead of starting the way it
+  last started (hidden in the tray, or a game from the jump list again).
+- An update check cut off by sleep or a Wi-Fi switch stopped all later
+  checks until Hearth restarted.
+- Dialogs and menus keep the keyboard and the controller inside them:
+  arrows, the D-pad and Tab no longer move to the page behind, and Esc
+  still closes them.
+- A controller can move the Cover size and colour sliders, and leave them.
+- Restoring a backup with a tone that's since been removed left no tone
+  chosen, and a backup made in the Console view switched you into it.
+- Focus moving with the keyboard or a controller follows Reduce motion.
 - The list view's "Playing now" time stayed where it was when the game was
   selected. It counts up now, and Play time includes the session running.
 - Combining two versions while one was being timed could stop Hearth
