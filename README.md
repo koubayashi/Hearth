@@ -1,28 +1,50 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Hearth: every game you own, in one place" width="840">
+  <img src="app/src-tauri/app-icon.svg" width="112" alt="Hearth logo: a flame on a charcoal tile">
 </p>
 
-# Hearth
-
-A fast, simple game library for Windows. Every game you own on Steam, Epic, Xbox / Game Pass and GOG, plus games from any folder, in one place, with your real playtime.
-
-Hearth launches each game through its own store and stays in the tray to time what you play, however you start it.
+<h1 align="center">Hearth</h1>
 
 <p align="center">
-  <img src="docs/screenshots/library.webp" alt="The library: a wall of covers beside the selected game's panel, with Jump back in on top" width="900">
+  Every game you own, in one place: <b>Steam</b>, <b>Epic</b>, <b>Xbox / Game Pass</b>, <b>GOG</b> and any folder.<br>
+  A fast, simple game library for Windows, with your real playtime. Written in Rust + Tauri.
 </p>
 
-> The games in these screenshots are invented, drawn for Hearth's demo library.
+<p align="center">
+  <a href="https://github.com/koubayashi/Hearth/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/koubayashi/Hearth?color=ff6a48"></a>
+  <a href="https://github.com/koubayashi/Hearth/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/koubayashi/Hearth/total?color=ff6a48"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4">
+  <a href="LICENSE"><img alt="GPL-3.0 license" src="https://img.shields.io/badge/license-GPL--3.0-green"></a>
+  <img alt="Built with Tauri 2" src="https://img.shields.io/badge/built%20with-Tauri%202-24c8db">
+</p>
 
-## Download
+<p align="center">
+  <a href="#get-started">Get started</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="#console-mode-for-the-couch">Console mode</a> ·
+  <a href="#your-data-stays-on-your-pc">Privacy</a> ·
+  <a href="#build-it-yourself">Build it</a>
+</p>
 
-1. Download `Hearth_x.y.z_x64-setup.exe` from the [latest release](https://github.com/koubayashi/Hearth/releases/latest).
-2. Run it. It installs for your Windows account only, so no admin rights are needed.
-3. Windows SmartScreen may warn about an unknown publisher, because the installer isn't code-signed yet. Choose **More info**, then **Run anyway**.
+Hearth gathers your games from every store into one library, starts each one through its own store, and sits in the tray timing what you play, however you launch it. No accounts, no themes to break, no clutter: big art, quick search, and a full-screen Console mode for the controller.
 
-Hearth needs Windows 10 or 11 (64-bit) and WebView2, which Windows 11 already has.
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/library-light.webp">
+  <img src="docs/screenshots/library.webp" alt="Hearth's library: a wall of covers beside the selected game's panel, with its playtime, a Pause button for the game being timed, and Jump back in on top">
+</picture>
 
-**Updates install themselves.** Hearth checks GitHub twice a day, downloads a new version quietly, and shows a dot on Settings when it's ready. It never restarts on its own while you play.
+<p align="center"><sub>The games in these screenshots are invented, drawn for Hearth's demo library.</sub></p>
+
+## Get started
+
+1. **Download** `Hearth_<version>_x64-setup.exe` from the [latest release](https://github.com/koubayashi/Hearth/releases/latest) and run it. It installs for your Windows account only: no admin rights.
+2. **Sign in to your stores** in **Settings › Stores**: Steam, Epic, Xbox and GOG, each on its own sign-in page. Games installed on this PC show up even before you sign in.
+3. **Play.** Pick a game and press **Play**, or start it any way you like. Hearth keeps timing from the tray after you close its window.
+
+Hearth needs Windows 10 or 11 (64-bit) and Microsoft WebView2, which already ships with Windows 11.
+
+**Microsoft SmartScreen warning.** The installer isn't code-signed (a certificate costs money every year), so Windows may show *"Windows protected your PC"* the first time. Click **More info** → **Run anyway**. Or build it yourself from source (below).
+
+**Updates install themselves.** Hearth checks GitHub twice a day and downloads a new version quietly. A dot on Settings says when it's ready, and it restarts only when you say so, never in the middle of a game.
 
 ## What it does
 
