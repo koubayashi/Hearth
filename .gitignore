@@ -37,3 +37,4 @@ FIX_LIST.md
 
 # Local test tools (the fake game for away detection)
 /tools/probe/
+app/.vitest/

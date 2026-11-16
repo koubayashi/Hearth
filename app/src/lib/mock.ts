@@ -1,5 +1,6 @@
 import type { LaunchOption, LaunchOptionInput, Via } from "./types";
 import type { Accounts, ArtKind, ArtOption, Collection, Game, GameStatus, GameDetails, IdleMode, InstallInfo, LibraryQuery, NowPlaying, PlaySession, SmartIndex, SmartRole, StoreHit, StoreId, UpdateStatus } from "./types";
+import { showcaseArt } from "./showcase";
 
 // ?sgdb in the URL shows Settings as if a key were saved, to design that state.
 const demoSgdb = typeof location !== "undefined" && location.search.includes("sgdb");
@@ -146,6 +147,16 @@ const games: Game[] = allSeeds.map(([title, appid, store, installed, hours, days
   ],
 }));
 
+// ?showcase: invented games with drawn artwork, for the README's screenshots.
+const showcase = typeof location !== "undefined" && location.search.includes("showcase");
+if (showcase) {
+  games.forEach((g, i) => {
+    const old = g.title;
+    Object.assign(g, showcaseArt(i), { description: null });
+    for (const e of g.entries) e.install_dir = e.install_dir?.replace(old, g.title) ?? null;
+  });
+}
+
 const collections: Collection[] = [{ id: 1, name: "Co-op night", count: 0 }];
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
@@ -254,6 +265,20 @@ export const mockBackend = {
   async gameDetails(id: number): Promise<GameDetails | null> {
     const g = games.find((g) => g.id === id);
     if (!g) return null;
+    if (showcase) {
+      return {
+        steam_app_id: 0,
+        release_date: "Sep 25, 2025",
+        developers: ["Lowfield Studio"],
+        publishers: ["Lowfield Studio"],
+        genres: ["Adventure", "Indie", "RPG"],
+        features: ["Single-player", "Full controller support", "Cloud saves"],
+        metacritic: null,
+        metacritic_url: null,
+        recommendations: 12000,
+        summary: "An invented game from Hearth's demo library. Your own games show their store's description here.",
+      };
+    }
     return {
       steam_app_id: Number(g.entries[0]?.store_game_id ?? 0),
       release_date: "Sep 25, 2025",
