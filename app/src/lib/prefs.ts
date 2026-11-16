@@ -47,6 +47,8 @@ export interface Prefs {
   /** Idle time (the game open while you're away): counted as play, or kept
    *  separate. Read by the tracker from prefs.json. */
   idleTime: IdleMode;
+  /** Tell someone who used Hearth before 0.4 about the Charcoal tone, once. */
+  charcoalNews: boolean;
 }
 
 /** Each tone's ground and accent in both modes, for the swatches (tokens.css has the full sets). */
@@ -76,21 +78,33 @@ export const shownMode = (p: Prefs): "dark" | "light" =>
   taskbarMode ?? (p.mode === "system" ? (systemDark?.matches === false ? "light" : "dark") : p.mode);
 
 const KEY = "hearth.prefs";
-const DEFAULTS: Prefs = { tone: "charcoal", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", consoleTipSeen: false, dismissedCombines: [], idleTime: "separate" };
+const DEFAULTS: Prefs = { tone: "charcoal", mode: "dark", customAccent: null, showRecent: true, showStoreIcons: true, coverSize: 150, showScores: false, blurPosterArt: true, lastBackupAt: null, libraryView: "covers", consoleMode: false, consoleFullscreen: true, consoleHints: true, nameSource: "auto", customName: "", librarySort: "title", consoleTipSeen: false, dismissedCombines: [], idleTime: "separate", charcoalNews: false };
+
+/** Settings as saved, made safe to use: removed options dropped or carried
+ *  over. Also for the settings in a restored backup, which may be older. */
+export function sanitize(saved: Record<string, unknown>): Partial<Prefs> {
+  saved = { ...saved };
+  // Before "Idle time" there was a "Don't count time away" switch.
+  if (saved.idleTime === undefined && saved.pauseWhenAway === false) saved.idleTime = "count";
+  delete saved.pauseWhenAway;
+  // A tone that was taken out (Spruce, later "Hearth") falls back to the default.
+  if (!TONES.some((t) => t.id === saved.tone)) delete saved.tone;
+  return saved as Partial<Prefs>;
+}
 
 function load(): Prefs {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
-    // Before "Idle time" there was a "Don't count time away" switch.
-    if (saved.idleTime === undefined && saved.pauseWhenAway === false) saved.idleTime = "count";
-    delete saved.pauseWhenAway;
-    // A tone that was taken out (Spruce, later "Hearth") falls back to the default.
-    if (!TONES.some((t) => t.id === saved.tone)) delete saved.tone;
+    const raw = localStorage.getItem(KEY);
+    const saved = sanitize(JSON.parse(raw ?? "{}"));
+    // Saved by a Hearth from before Charcoal: it keeps its tone (all saves
+    // hold one; Graphite was the default) and hears about Charcoal once.
+    if (raw && saved.charcoalNews === undefined) saved.charcoalNews = true;
     return { ...DEFAULTS, ...saved };
   } catch {
     return DEFAULTS;
   }
 }
+
 
 let current = load();
 const listeners = new Set<() => void>();

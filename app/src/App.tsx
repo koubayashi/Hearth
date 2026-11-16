@@ -165,6 +165,22 @@ export function App() {
     });
   }, [updatedTo]);
 
+  // Someone who used Hearth before Charcoal keeps their tone, and hears
+  // about the new one once, after the "Updated to" news, until closed.
+  const charcoalNews = prefs.charcoalNews && !updatedTo && !toast;
+  useEffect(() => {
+    if (!charcoalNews) return;
+    const seen = () => setPrefs({ charcoalNews: false });
+    if (prefs.tone === "charcoal") return seen();
+    setToast({
+      id: Date.now(),
+      text: "New look: Charcoal, to match the new icon. Your tone stays until you choose.",
+      persist: true,
+      onDismiss: seen,
+      action: { label: "Try Charcoal", run: () => setPrefs({ tone: "charcoal" }) },
+    });
+  }, [charcoalNews]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     api.gameCounts().then(setCounts);
     // Every game's panel details, ready before a game is selected.

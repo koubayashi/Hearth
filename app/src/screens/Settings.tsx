@@ -5,7 +5,7 @@ import { useStartWithWindows } from "../lib/autostart";
 import { confirm, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
 import type { Accounts } from "../lib/types";
-import { TONES, contrast, setPrefs, usePrefs, useShownMode, type NameSource } from "../lib/prefs";
+import { TONES, contrast, sanitize, setPrefs, usePrefs, useShownMode, type NameSource } from "../lib/prefs";
 import { pickName, useAccounts } from "../lib/gamertag";
 import { isFullscreen, setFullscreen } from "../lib/fullscreen";
 import { formatLastPlayed, inSentence } from "../lib/format";
@@ -769,7 +769,10 @@ function BackupSection() {
       }
       if (r.prefs) {
         try {
-          setPrefs(JSON.parse(r.prefs));
+          // An older backup may hold a tone that's gone; it doesn't move you
+          // into the Console view or repeat news you've seen.
+          const { consoleMode: _c, charcoalNews: _n, ...restored } = sanitize(JSON.parse(r.prefs));
+          setPrefs(restored);
         } catch {
           // Settings are a bonus; the library itself is restored.
         }

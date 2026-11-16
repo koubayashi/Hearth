@@ -33,3 +33,11 @@ describe("highlight presets", () => {
     }
   });
 });
+
+describe("saved settings", () => {
+  it("drop a tone that was taken out and carry the old away switch over", async () => {
+    const { sanitize } = await import("./prefs");
+    expect(sanitize({ tone: "spruce", pauseWhenAway: false })).toEqual({ idleTime: "count" });
+    expect(sanitize({ tone: "graphite" })).toEqual({ tone: "graphite" });
+  });
+});

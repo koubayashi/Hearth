@@ -3,21 +3,34 @@
 
 type Dir = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 
-function candidates(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")).filter(
+const FOCUSABLE = "[data-nav], button:not(:disabled), input:not(:disabled), select, textarea, a[href], [tabindex]:not([tabindex='-1'])";
+
+/** The open menu or dialog, the last one opened: focus stays inside it. */
+function openLayer(): HTMLElement | null {
+  const layers = document.querySelectorAll<HTMLElement>('[role="menu"], [role="dialog"]');
+  return layers.length ? layers[layers.length - 1] : null;
+}
+
+function candidates(layer: HTMLElement | null): HTMLElement[] {
+  const all = layer ? layer.querySelectorAll<HTMLElement>(FOCUSABLE) : document.querySelectorAll<HTMLElement>("[data-nav]");
+  return Array.from(all).filter(
     // Laid out, and not inside an inert area (the library behind Settings).
     (el) => el.offsetParent !== null && !el.closest("[inert]"),
   );
 }
 
-export function moveFocus(from: HTMLElement, dir: Dir): boolean {
+function reducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+export function moveFocus(from: HTMLElement, dir: Dir, layer: HTMLElement | null = openLayer()): boolean {
   const a = from.getBoundingClientRect();
   const ax = a.left + a.width / 2;
   const ay = a.top + a.height / 2;
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
 
-  for (const el of candidates()) {
+  for (const el of candidates(layer)) {
     if (el === from) continue;
     const b = el.getBoundingClientRect();
     const bx = b.left + b.width / 2;
@@ -36,29 +49,55 @@ export function moveFocus(from: HTMLElement, dir: Dir): boolean {
   }
   if (!best) return false;
   best.focus({ preventScroll: true });
-  best.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  best.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
   return true;
 }
 
 export function installSpatialNav(): () => void {
   const onKey = (e: KeyboardEvent) => {
-    if (!e.key.startsWith("Arrow") || e.defaultPrevented) return;
+    const layer = openLayer();
     const target = e.target as HTMLElement;
-    if (target.matches("textarea, select, input[type=range], input[type=number]")) return;
+    // Tab cycles inside an open menu or dialog instead of leaving it.
+    if (e.key === "Tab" && layer) {
+      const items = candidates(layer);
+      if (!items.length) return;
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : (i + 1) % items.length;
+      items[next].focus();
+      e.preventDefault();
+      return;
+    }
+    if (!e.key.startsWith("Arrow") || e.defaultPrevented) return;
+    const sideways = e.key === "ArrowLeft" || e.key === "ArrowRight";
+    if (target.matches("textarea, select, input[type=number]")) return;
+    // A slider takes left and right; up and down leave it. The controller's
+    // keys are synthetic and don't move a slider by themselves.
+    if (target.matches("input[type=range]") && sideways) {
+      if (!e.isTrusted) {
+        const range = target as HTMLInputElement;
+        if (e.key === "ArrowRight") range.stepUp();
+        else range.stepDown();
+        range.dispatchEvent(new Event("input", { bubbles: true }));
+        e.preventDefault();
+      }
+      return;
+    }
     // Left and right move the caret in a text box; up and down leave it, so
     // a controller can't get stuck there.
-    const input = target.matches("input");
-    if (input && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
-    const from = target.closest<HTMLElement>("[data-nav]") ?? (input ? target : null);
-    if (!from) {
-      const first = candidates()[0];
+    const input = target.matches("input:not([type=range])");
+    if (input && sideways) return;
+    const from = layer?.contains(target) ? target : target.closest<HTMLElement>("[data-nav]") ?? (input ? target : null);
+    // Nothing focused yet, or focus is behind the open menu or dialog.
+    if (!from || (layer && !layer.contains(from))) {
+      const first = candidates(layer)[0];
       if (first) {
         first.focus();
         e.preventDefault();
       }
       return;
     }
-    if (moveFocus(from, e.key as Dir)) e.preventDefault();
+    // Inside a menu or dialog an arrow with nowhere to go stays put.
+    if (moveFocus(from, e.key as Dir, layer) || layer) e.preventDefault();
   };
   window.addEventListener("keydown", onKey);
   return () => window.removeEventListener("keydown", onKey);
