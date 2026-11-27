@@ -70,6 +70,19 @@ const NOT_GAME_DIRS: &[&str] = &[
     "battleye", "crashreporter",
 ];
 
+/// Folders an engine keeps its executables in, inside the game's own folder
+/// (Unreal 3's "Binaries", "bin\x64"). Never a game's name or install folder.
+const ENGINE_DIRS: &[&str] = &["binaries", "bin", "bin64", "bin32", "win64", "win32", "x64", "x86"];
+
+/// Where those executables sit below the game's folder, most specific first.
+const ENGINE_EXE_DIRS: &[&str] = &[
+    "Binaries/Win64", "Binaries/Win32", "Binaries", "bin/x64", "bin/win64", "bin64", "bin", "x64",
+];
+
+fn is_engine_dir(p: &Path) -> bool {
+    ENGINE_DIRS.contains(&lower_name(p).as_str())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoundGame {
     pub title: String,
@@ -112,7 +125,8 @@ impl Folders {
     }
 
     fn visit(&self, dir: &Path, depth: usize, out: &mut Vec<FoundGame>) {
-        if is_store_library(dir) || self.skip.iter().any(|s| same(s, dir)) {
+        // An engine folder belongs to the game above it, which already looked inside.
+        if is_store_library(dir) || is_engine_dir(dir) || self.skip.iter().any(|s| same(s, dir)) {
             return;
         }
         if let Some(exe) = main_exe(dir) {
@@ -192,30 +206,42 @@ pub fn main_exe(dir: &Path) -> Option<PathBuf> {
         return top.first().cloned().or(unreal);
     }
 
-    match top.len() {
-        0 => None,
-        1 => top.into_iter().next(),
-        _ => {
-            // Several: a launcher if the game ships one (it picks DX mode etc.),
-            // else the one named most like the folder, else the biggest.
-            if let Some(l) = top.iter().find(|e| stem(e).contains("launcher")) {
-                return Some(l.clone());
-            }
-            let folder = squash(&lower_name(dir));
-            let size = |e: &PathBuf| e.metadata().map(|m| m.len()).unwrap_or(0);
-            let named: Vec<&PathBuf> = top
-                .iter()
-                .filter(|e| {
-                    let s = squash(&stem(e));
-                    !s.is_empty() && (folder.contains(&s) || s.contains(&folder))
-                })
-                .collect();
-            if let Some(best) = named.into_iter().max_by_key(|e| size(e)) {
-                return Some(best.clone());
-            }
-            top.into_iter().max_by_key(size)
-        }
+    if !top.is_empty() {
+        return pick(dir, top);
     }
+    // Nothing on top (an uninstaller at most): the engine's own folder,
+    // like Unreal 3's "Batman - Arkham Asylum\Binaries\BmLauncher.exe".
+    // Only when the folder holds the engine folder itself, so a folder of
+    // games is never mistaken for one.
+    ENGINE_EXE_DIRS.iter().find_map(|rel| {
+        let exes = exes_in(&dir.join(rel));
+        (!exes.is_empty()).then(|| pick(dir, exes)).flatten()
+    })
+}
+
+/// The main one of a game's executables: a launcher if the game ships one
+/// (it picks DX mode etc.), else the one named most like the game's folder,
+/// else the biggest.
+fn pick(dir: &Path, exes: Vec<PathBuf>) -> Option<PathBuf> {
+    if exes.len() == 1 {
+        return exes.into_iter().next();
+    }
+    if let Some(l) = exes.iter().find(|e| stem(e).contains("launcher")) {
+        return Some(l.clone());
+    }
+    let folder = squash(&lower_name(dir));
+    let size = |e: &PathBuf| e.metadata().map(|m| m.len()).unwrap_or(0);
+    let named: Vec<&PathBuf> = exes
+        .iter()
+        .filter(|e| {
+            let s = squash(&stem(e));
+            !s.is_empty() && (folder.contains(&s) || s.contains(&folder))
+        })
+        .collect();
+    if let Some(best) = named.into_iter().max_by_key(|e| size(e)) {
+        return Some(best.clone());
+    }
+    exes.into_iter().max_by_key(size)
 }
 
 fn file_stem(p: &Path) -> String {
@@ -357,6 +383,30 @@ mod tests {
                 ("Clair Obscur Expedition 33".into(), "Expedition33_Steam.exe".into()),
             ]
         );
+    }
+
+    #[test]
+    fn engine_folders_belong_to_the_game_above_them() {
+        let t = Tree::new("engine");
+        // Unreal 3, as installed: only the uninstaller on top.
+        t.file("Batman/Batman - Arkham Asylum/unins000.exe", 100)
+            .file("Batman/Batman - Arkham Asylum/_Redist/dxwebsetup.exe", 100)
+            .file("Batman/Batman - Arkham Asylum/Binaries/BmLauncher.exe", 200)
+            .file("Batman/Batman - Arkham Asylum/Binaries/ShippingPC-BmGame.exe", 900)
+            .file("Batman/Batman - Arkham Asylum/Binaries/UE3ShaderCompileWorker.exe", 50)
+            .dir("Batman/Batman - Arkham Asylum/BmGame/CookedPC");
+        // The same engine one level deeper.
+        t.file("Batman Arkham Knight/Binaries/Win64/BatmanAK.exe", 900);
+
+        let found = Folders::new(vec![t.0.clone()]).scan();
+        assert_eq!(
+            names(&found),
+            [
+                ("Batman - Arkham Asylum".into(), "BmLauncher.exe".into()),
+                ("Batman Arkham Knight".into(), "BatmanAK.exe".into()),
+            ]
+        );
+        assert_eq!(found[0].dir, t.0.join("Batman").join("Batman - Arkham Asylum"));
     }
 
     #[test]
