@@ -44,7 +44,10 @@ export function GameMenu({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
-  const [view, setView] = useState<"main" | "collections" | "open" | "play">(start);
+  const [view, setView] = useState<"main" | "collections" | "open" | "play" | "rename" | "remove">(start);
+  const [name, setName] = useState(game.title);
+  // Found in a game folder, listed by no store: only these can be renamed or removed.
+  const folderOnly = game.entries.length > 0 && game.entries.every((e) => e.store === "manual");
 
   // Keep the menu on screen near the pointer.
   useLayoutEffect(() => {
@@ -56,7 +59,7 @@ export function GameMenu({
       x: Math.max(8, Math.min(want.x, window.innerWidth - r.width - 8)),
       y: Math.max(8, Math.min(want.y, window.innerHeight - r.height - 8)),
     });
-    el.querySelector<HTMLElement>("button, input")?.focus();
+    (el.querySelector<HTMLElement>("[data-autofocus]") ?? el.querySelector<HTMLElement>("button, input"))?.focus();
   }, [x, y, anchor, view]);
 
   useEffect(() => {
@@ -98,6 +101,18 @@ export function GameMenu({
       <Icon name="chevronRight" size={15} className="sub-arrow" />
     </button>
   );
+  // Opens a step inside the menu instead of closing it.
+  const step = (icon: IconName, label: string, to: "rename" | "remove") => (
+    <button role="menuitem" onClick={() => setView(to)}>
+      <Icon name={icon} />
+      {label}
+    </button>
+  );
+  const rename = () => {
+    const t = name.trim();
+    if (t && t !== game.title) api.renameGame(game.id, t);
+    onClose();
+  };
   const back = (
     <button role="menuitem" onClick={() => setView("main")}>
       <Icon name="chevronLeft" />
@@ -138,6 +153,44 @@ export function GameMenu({
           {game.installed && item("folder", "Open install folder", () => api.openInstallFolder(game.id))}
           {item("search", "Find on Steam store…", () => onPanel("match"))}
         </>
+      ) : view === "rename" ? (
+        <>
+          {back}
+          <hr />
+          <form
+            className="menu-new"
+            onSubmit={(e) => {
+              e.preventDefault();
+              rename();
+            }}
+          >
+            <input
+              data-autofocus
+              className="text-input"
+              aria-label="Game name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              // Typing stays in the box; up, down and Escape still work the menu.
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "Escape") e.stopPropagation();
+              }}
+            />
+          </form>
+          <p className="menu-note">Art and details are looked up again by this name. Art you picked yourself stays.</p>
+        </>
+      ) : view === "remove" ? (
+        <>
+          {back}
+          <hr />
+          <p className="menu-note">
+            {game.title} and its play history leave Hearth for good. Its folder isn't touched; if the game is still there,
+            it stays hidden.
+          </p>
+          <button role="menuitem" className="menu-danger" onClick={run(() => api.removeGame(game.id))}>
+            Remove from library
+          </button>
+        </>
       ) : (
         <>
           {game.offline_drive ? (
@@ -176,6 +229,7 @@ export function GameMenu({
           </div>
           <hr />
           {sub("collections", "Add to collection", "collections")}
+          {folderOnly && step("pencil", "Rename…", "rename")}
           {item("library", "Change artwork…", () => onPanel("artwork"))}
           {item("collections", "Series and studios…", () => onPanel("smart"))}
           {item("stats", "Play history…", () => onPanel("history"))}
@@ -185,6 +239,8 @@ export function GameMenu({
           {sub("external", "Store and files", "open")}
           <hr />
           {item(game.hidden ? "eye" : "hidden", game.hidden ? "Show in library" : "Hide from library", () => onToggleHidden(game))}
+          {/* Hidden first, so a stray click in the library can't erase a game's history. */}
+          {game.hidden && folderOnly && step("trash", "Remove from library…", "remove")}
           {game.installed && item("trash", "Uninstall…", () => openUninstall(game))}
         </>
       )}

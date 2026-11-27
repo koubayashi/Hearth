@@ -16,6 +16,8 @@ const backend = isTauri()
       gameCounts: () => invoke<{ library: number; hidden: number }>("game_counts"),
       getGame: (id: number) => invoke<Game | null>("get_game", { id }),
       setHidden: (id: number, hidden: boolean) => invoke<void>("set_hidden", { id, hidden }),
+      renameGame: (id: number, title: string) => invoke<void>("rename_game", { id, title }),
+      removeGame: (id: number) => invoke<void>("remove_game", { id }),
       setFavorite: (id: number, favorite: boolean) =>
         invoke<void>("set_favorite", { id, favorite }),
       launch: (id: number, via?: Via) => invoke<void>("launch_game", { id, via: via ?? null }),

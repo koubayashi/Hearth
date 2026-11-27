@@ -350,6 +350,68 @@ impl Db {
         Ok(())
     }
 
+    /// Whether every entry of a game is a folder game (no store lists it).
+    fn folder_only(tx: &rusqlite::Connection, game_id: i64) -> Result<bool> {
+        Ok(tx.query_row(
+            "SELECT COUNT(*) > 0 AND SUM(store != 'manual') = 0 FROM store_entries WHERE game_id = ?1",
+            [game_id],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// The user names a folder game (its folder had the wrong name). What was
+    /// found by the old name is forgotten, so it's looked up again by the new
+    /// one; art the user picked stays. Store games keep their store's name.
+    pub fn rename_game(&mut self, game_id: i64, title: &str) -> Result<()> {
+        let title = title.trim();
+        if title.is_empty() {
+            return Err(DbError::Invalid("A game needs a name".into()));
+        }
+        let tx = self.conn.transaction()?;
+        if !Self::folder_only(&tx, game_id)? {
+            return Err(DbError::Invalid("Only games from your game folders can be renamed".into()));
+        }
+        tx.execute(
+            "UPDATE games SET title = ?2, norm_title = ?3,
+                    details_json = NULL, details_checked_at = NULL, description = NULL,
+                    wd_item = NULL, wd_checked_at = NULL, sgdb_checked_at = NULL,
+                    save_paths_json = NULL, save_checked_at = NULL,
+                    store_cover = NULL, store_hero = NULL,
+                    cover = CASE WHEN art_source = 'user' THEN cover END,
+                    hero = CASE WHEN art_source = 'user' THEN hero END,
+                    logo = CASE WHEN art_source = 'user' THEN logo END,
+                    art_source = CASE WHEN art_source = 'user' THEN 'user' END
+              WHERE id = ?1",
+            params![game_id, title, normalize_title(title)],
+        )?;
+        tx.execute("DELETE FROM game_links WHERE game_id = ?1 AND source = 'wikidata'", [game_id])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Removes a hidden folder game and everything Hearth recorded for it.
+    /// It stays hidden, so if its folder is still there it can't come back
+    /// into the library on the next scan.
+    pub fn remove_game(&mut self, game_id: i64) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        if !Self::folder_only(&tx, game_id)? {
+            return Err(DbError::Invalid("Only games from your game folders can be removed; hide store games".into()));
+        }
+        let hidden: bool = tx.query_row(
+            "SELECT COUNT(*) > 0 AND SUM(h.store IS NULL) = 0 FROM store_entries e
+               LEFT JOIN hidden h ON h.store = e.store AND h.store_game_id = e.store_game_id
+              WHERE e.game_id = ?1",
+            [game_id],
+            |r| r.get(0),
+        )?;
+        if !hidden {
+            return Err(DbError::Invalid("Hide the game first; only hidden games can be removed".into()));
+        }
+        tx.execute("DELETE FROM games WHERE id = ?1", [game_id])?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Replace the saved running sessions: (game id, started, last seen).
     pub fn checkpoint_active(&mut self, active: &[(i64, i64, i64)]) -> Result<()> {
         self.save_tracking(&[], &[], active)
@@ -1724,6 +1786,41 @@ mod tests {
 
         db.set_game_hidden(id, false).unwrap();
         assert_eq!(db.list_games(&LibraryQuery::default()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn folder_games_can_be_renamed_and_removed_once_hidden() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "bm", "Binaries", true)], 0).unwrap();
+        db.sync_store(StoreId::Epic, &[entry(StoreId::Epic, "x", "Some Freebie", false)], 0).unwrap();
+        let id_of = |db: &Db, t: &str| db.list_games(&LibraryQuery::default()).unwrap().into_iter().find(|g| g.title == t).map(|g| g.id);
+        let (folder, store) = (id_of(&db, "Binaries").unwrap(), id_of(&db, "Some Freebie").unwrap());
+
+        // Renamed: the wrong match's art goes, so it's found again by the new name.
+        db.set_art(folder, "hero", "https://wrong/hero.jpg", "sgdb").unwrap();
+        db.rename_game(folder, "  Batman: Arkham Asylum ").unwrap();
+        let g = db.game(folder).unwrap().unwrap();
+        assert_eq!((g.title.as_str(), g.hero.as_deref()), ("Batman: Arkham Asylum", None));
+        // Art the user picked survives a rename.
+        db.set_art(folder, "cover", "https://mine/cover.jpg", "user").unwrap();
+        db.rename_game(folder, "Batman Arkham Asylum").unwrap();
+        assert_eq!(db.game(folder).unwrap().unwrap().cover.as_deref(), Some("https://mine/cover.jpg"));
+        assert!(db.rename_game(folder, "  ").is_err());
+        assert!(db.rename_game(store, "Mine").is_err(), "store games keep the store's name");
+        // A scan keeps the user's name.
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "bm", "Binaries", true)], 5).unwrap();
+        assert!(id_of(&db, "Batman Arkham Asylum").is_some());
+
+        // Removing: only once hidden, never a store game.
+        assert!(db.remove_game(folder).is_err(), "not hidden yet");
+        db.set_game_hidden(folder, true).unwrap();
+        db.set_game_hidden(store, true).unwrap();
+        assert!(db.remove_game(store).is_err(), "store games are only hidden");
+        db.remove_game(folder).unwrap();
+        assert!(db.game(folder).unwrap().is_none());
+        // Its folder is still there: it comes back hidden, not in the library.
+        db.sync_store(StoreId::Manual, &[entry(StoreId::Manual, "bm", "Binaries", true)], 10).unwrap();
+        assert!(db.list_games(&LibraryQuery::default()).unwrap().is_empty());
     }
 
     #[test]

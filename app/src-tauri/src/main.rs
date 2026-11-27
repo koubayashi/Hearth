@@ -108,6 +108,28 @@ fn set_hidden(state: State<AppState>, id: i64, hidden: bool) -> CmdResult<()> {
     lock(&state.db).set_game_hidden(id, hidden).map_err(err)
 }
 
+/// Names a folder game, then looks up its details and art by the new name.
+#[tauri::command]
+fn rename_game(app: AppHandle, id: i64, title: String) -> CmdResult<()> {
+    lock(&app.state::<AppState>().db).rename_game(id, &title).map_err(err)?;
+    let _ = app.emit("library-changed", ());
+    tauri::async_runtime::spawn(async move {
+        let _ = details::fetch(&app, id).await;
+        refresh_art(&app).await;
+        let _ = app.emit("library-changed", ());
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn remove_game(app: AppHandle, id: i64) -> CmdResult<()> {
+    let title = lock(&app.state::<AppState>().db).game(id).map_err(err)?.map(|g| g.title).unwrap_or_default();
+    lock(&app.state::<AppState>().db).remove_game(id).map_err(err)?;
+    tracking::log(&app, &format!("removed from library: {title}"));
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
 #[tauri::command]
 fn set_favorite(state: State<AppState>, id: i64, favorite: bool) -> CmdResult<()> {
     lock(&state.db).set_favorite(id, favorite).map_err(err)
@@ -981,6 +1003,8 @@ fn main() {
             game_counts,
             get_game,
             set_hidden,
+            rename_game,
+            remove_game,
             set_favorite,
             launch_game,
             ways::save_launch_option,

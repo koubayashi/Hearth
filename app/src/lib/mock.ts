@@ -530,6 +530,14 @@ export const mockBackend = {
     const g = games.find((g) => g.id === id);
     if (g) g.hidden = hidden;
   },
+  async renameGame(id: number, title: string) {
+    const g = games.find((g) => g.id === id);
+    if (g) g.title = title.trim();
+  },
+  async removeGame(id: number) {
+    const i = games.findIndex((g) => g.id === id);
+    if (i >= 0) games.splice(i, 1);
+  },
   async setFavorite(id: number, favorite: boolean) {
     const g = games.find((g) => g.id === id);
     if (g) g.favorite = favorite;

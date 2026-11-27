@@ -727,6 +727,12 @@ h2 small { font: 400 var(--text-sm) var(--font-text); color: var(--ink-3); }
 [aria-checked="true"] > .radio-dot::after { transform: scale(1); }
 .menu-new { padding: 4px; }
 .menu-new .text-input { width: 100%; box-sizing: border-box; }
+/* A sentence inside a menu step: what the step will do, before it's done. */
+.menu-note { margin: 4px 10px 8px; max-width: 34ch; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-2); }
+/* White on red stays readable on light and dark glass alike. */
+.menu button.menu-danger { justify-content: center; background: #c4413a; color: #fff; font-weight: 600; }
+.menu button.menu-danger:hover, .menu button.menu-danger:focus-visible { background: #d14a42; }
+.menu button.menu-danger:active { transform: scale(0.98); }
 .status-chip { display: inline-flex; align-items: center; gap: 2px; }
 .status-chip .status-dot { width: 14px; }
 
