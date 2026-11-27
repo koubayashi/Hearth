@@ -367,11 +367,12 @@ impl LibraryProvider for Epic {
     async fn installed(&self) -> anyhow::Result<Vec<GameEntry>> {
         let Ok(dir) = std::fs::read_dir(&self.manifests) else { return Ok(Vec::new()) };
         let played = self.last_played();
+        let riot = riot_metadata();
         Ok(dir
             .flatten()
             .filter(|f| f.path().extension().is_some_and(|e| e == "item"))
             .filter_map(|f| std::fs::read_to_string(f.path()).ok())
-            .filter_map(|t| parse_manifest(&t))
+            .filter_map(|t| parse_manifest(&t, &riot))
             .map(|mut g| {
                 g.store_last_played = played.get(&g.store_game_id).copied();
                 g
@@ -466,9 +467,31 @@ struct Manifest {
     app_categories: Vec<String>,
     #[serde(default)]
     main_game_app_name: String,
+    #[serde(default)]
+    launch_command: String,
 }
 
-fn parse_manifest(text: &str) -> Option<GameEntry> {
+/// Riot's own record of its games, where it says the game really is.
+fn riot_metadata() -> PathBuf {
+    let data = std::env::var_os("ProgramData").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"));
+    data.join("Riot Games").join("Metadata")
+}
+
+/// Riot games on Epic (Valorant, League) get only a small Live.exe in
+/// Epic's folder, which hands over to the Riot Client; the game itself is
+/// wherever Riot installed it. Its product_settings.yaml says where.
+/// RiotClientInstalls.json is not used: it keeps old folders long after.
+fn riot_install(launch_command: &str, metadata: &Path) -> Option<String> {
+    let arg = |name: &str| {
+        launch_command.split_whitespace().find_map(|a| a.strip_prefix(name)).filter(|v| !v.is_empty() && !v.contains(['/', '\\', '.']))
+    };
+    let product = format!("{}.{}", arg("--launch-product=")?, arg("--launch-patchline=").unwrap_or("live"));
+    let yaml = std::fs::read_to_string(metadata.join(&product).join(format!("{product}.product_settings.yaml"))).ok()?;
+    let path = yaml.lines().find_map(|l| l.trim().strip_prefix("product_install_full_path:"))?.trim().trim_matches('"');
+    Path::new(path).is_dir().then(|| path.replace('/', "\\"))
+}
+
+fn parse_manifest(text: &str, riot: &Path) -> Option<GameEntry> {
     let m: Manifest = serde_json::from_str(text).ok()?;
     // DLC manifests point at their main game; plugins and tools aren't "games".
     let is_dlc = !m.main_game_app_name.is_empty() && m.main_game_app_name != m.app_name;
@@ -481,7 +504,7 @@ fn parse_manifest(text: &str) -> Option<GameEntry> {
         store_game_id: id.encode(),
         title: m.display_name,
         installed: !m.b_is_incomplete_install,
-        install_dir: m.install_location,
+        install_dir: riot_install(&m.launch_command, riot).or(m.install_location),
         store_playtime_secs: None,
         store_last_played: None,
     })
@@ -590,7 +613,7 @@ mod tests {
 
     #[test]
     fn parses_installed_manifest_and_launch_uri() {
-        let g = parse_manifest(MANIFEST).unwrap();
+        let g = parse_manifest(MANIFEST, Path::new("nowhere")).unwrap();
         assert_eq!(g.title, "Red Dead Redemption 2");
         assert!(g.installed);
         assert_eq!(g.install_dir.as_deref(), Some(r"D:\Games\Epic Games\RedDeadRedemption2"));
@@ -603,11 +626,40 @@ mod tests {
     }
 
     #[test]
+    fn riot_games_live_where_riot_put_them() {
+        let meta = std::env::temp_dir().join(format!("hearth-riot-{}", std::process::id()));
+        let game = meta.join("VALORANT").join("live");
+        std::fs::create_dir_all(meta.join("valorant.live")).unwrap();
+        std::fs::create_dir_all(&game).unwrap();
+        let yaml = format!(
+            "patching_policy: \"manual\"\nproduct_install_full_path: \"{}\"\nproduct_install_root: \"x\"\n",
+            game.to_string_lossy().replace('\\', "/")
+        );
+        std::fs::write(meta.join("valorant.live").join("valorant.live.product_settings.yaml"), yaml).unwrap();
+        // As Epic writes it: its own folder holds only Live.exe.
+        let valorant = r#"{"DisplayName": "VALORANT", "AppName": "602eb4abc8764c87b7f2607a1ef8c18e",
+            "CatalogNamespace": "ns", "CatalogItemId": "cat",
+            "InstallLocation": "D:\\Games\\Epic Games\\VALORANT", "LaunchExecutable": "Live.exe",
+            "LaunchCommand": "--launch-product=valorant --launch-patchline=live --thirdparty",
+            "AppCategories": ["games", "applications"]}"#;
+        let dir = parse_manifest(valorant, &meta).unwrap().install_dir;
+        // Riot's record gone or pointing nowhere: Epic's folder, as before.
+        let fallback = parse_manifest(valorant, Path::new("nowhere")).unwrap().install_dir;
+        let escape = parse_manifest(&valorant.replace("valorant --", "../valorant --"), &meta).unwrap().install_dir;
+        let _ = std::fs::remove_dir_all(&meta);
+        assert_eq!(dir.as_deref(), Some(game.to_string_lossy().as_ref()));
+        assert_eq!(fallback.as_deref(), Some(r"D:\Games\Epic Games\VALORANT"));
+        assert_eq!(escape, fallback);
+        // Not a Riot game: untouched.
+        assert_eq!(parse_manifest(MANIFEST, &meta).unwrap().install_dir.as_deref(), Some(r"D:\Games\Epic Games\RedDeadRedemption2"));
+    }
+
+    #[test]
     fn skips_dlc_and_non_games() {
         let dlc = MANIFEST.replace(r#""MainGameAppName": """#, r#""MainGameAppName": "Other""#);
-        assert!(parse_manifest(&dlc).is_none());
+        assert!(parse_manifest(&dlc, Path::new("nowhere")).is_none());
         let tool = MANIFEST.replace(r#""public", "games", "applications""#, r#""public", "applications""#);
-        assert!(parse_manifest(&tool).is_none());
+        assert!(parse_manifest(&tool, Path::new("nowhere")).is_none());
     }
 
     #[test]
