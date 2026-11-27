@@ -4,10 +4,11 @@ What changed in each Hearth release, newest first. Each version's section
 becomes its GitHub release notes, so the release build won't publish a
 version that has no section here.
 
-## 0.4.1
+## 0.4.2
 
 Riot games from Epic are timed, folder games are named after the right
 folder, and a folder game can be renamed, or removed once it's hidden.
+This release replaces 0.4.1, which was withdrawn the day it came out.
 
 ### New
 
@@ -28,7 +29,9 @@ folder, and a folder game can be renamed, or removed once it's hidden.
   only a small starter for them; the game itself is wherever the Riot
   Client put it, often another drive. Hearth now reads that place from
   Riot's own records, so playing counts, and the game's size, drive and
-  folder are the real ones.
+  folder are the real ones. Folders Epic installed are always left to
+  Epic by the game-folder scan, so the starter never shows up as a game
+  of its own.
 - **Folder games whose program sits in an engine folder are named
   correctly.** Batman: Arkham Asylum showed up as "Binaries", with another
   game's art and description, because its program is in
@@ -39,6 +42,11 @@ folder, and a folder game can be renamed, or removed once it's hidden.
 ### Removed
 
 - Nothing.
+
+## 0.4.1
+
+Withdrawn the day it came out: Epic's starter for Valorant could be found
+as a second game. Everything in it is in 0.4.2.
 
 ## 0.4.0
 
