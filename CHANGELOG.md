@@ -4,6 +4,42 @@ What changed in each Hearth release, newest first. Each version's section
 becomes its GitHub release notes, so the release build won't publish a
 version that has no section here.
 
+## 0.4.1
+
+Riot games from Epic are timed, folder games are named after the right
+folder, and a folder game can be renamed, or removed once it's hidden.
+
+### New
+
+- **Rename a game from your game folders.** Right-click it, **Rename…**,
+  type the name and press Enter. Its art, description and release date are
+  looked up again by the new name, so a folder called "Call of Duty -
+  Modern Warfare 2 CR" can find its art once it has the full name. Art you
+  picked yourself stays. Store games keep their store's name.
+- **Remove a folder game from your library.** Hide it first; then its menu
+  has **Remove from library…**, which says what goes (the game and its
+  play history in Hearth) before you confirm. The folder on disk isn't
+  touched; if the game is still there, it stays hidden. Store games can
+  only be hidden, since the store would list them again.
+
+### Fixed
+
+- **Valorant (and other Riot games) from Epic are timed.** Epic installs
+  only a small starter for them; the game itself is wherever the Riot
+  Client put it, often another drive. Hearth now reads that place from
+  Riot's own records, so playing counts, and the game's size, drive and
+  folder are the real ones.
+- **Folder games whose program sits in an engine folder are named
+  correctly.** Batman: Arkham Asylum showed up as "Binaries", with another
+  game's art and description, because its program is in
+  `Binaries\`. Hearth now names the game after its own folder and counts
+  the whole folder's size. A game already added under the wrong name keeps
+  it: rename it.
+
+### Removed
+
+- Nothing.
+
 ## 0.4.0
 
 Hearth's own tray menu, pausing a game's timing, idle time kept apart from
