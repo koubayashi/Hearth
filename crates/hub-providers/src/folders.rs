@@ -172,9 +172,12 @@ fn same(a: &Path, b: &Path) -> bool {
     n(a) == n(b)
 }
 
-/// A Steam library or the Epic Games folder: those stores list their games.
+/// A Steam library, or a game Epic installed (each has an .egstore folder):
+/// those stores list their games. Epic's folder for a Riot game holds only a
+/// starter, Live.exe, and isn't where Hearth places that game, so it must be
+/// recognised here, not by its install folder.
 fn is_store_library(dir: &Path) -> bool {
-    dir.join("steamapps").is_dir() || lower_name(dir) == "steamapps"
+    dir.join("steamapps").is_dir() || lower_name(dir) == "steamapps" || dir.join(".egstore").is_dir()
 }
 
 fn exes_in(dir: &Path) -> Vec<PathBuf> {
@@ -370,6 +373,8 @@ mod tests {
         // Store libraries are left to their stores.
         t.file("SteamLibrary/steamapps/common/HITMAN 3/HITMAN3.exe", 100);
         t.file("Epic Games/RedDeadRedemption2/PlayRDR2.exe", 100);
+        // Epic's starter for a Riot game, whose real folder is elsewhere.
+        t.file("Epic Games/VALORANT/Live.exe", 100).dir("Epic Games/VALORANT/.egstore");
         // A folder with no game at all.
         t.file("Saves/readme.txt", 10);
 
